@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, watch } from "vue";
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import api from "../api";
 
 import { $dt } from "@primeuix/themes";
 import WaveSurfer from "wavesurfer.js";
@@ -9,9 +10,9 @@ import Timer from "wavesurfer.js/dist/timer.js";
 import Hover from "wavesurfer.js/dist/plugins/hover.esm.js";
 
 import { Entry, PlayerState } from "../types";
-import { PlaybackTimer } from "../lib/playback_timer";
+import { PlaybackTimer } from "../utils/playback_timer";
 
-const props = defineProps<{
+const { entry } = defineProps<{
   entry?: Entry;
 }>();
 const emit = defineEmits<{
@@ -66,7 +67,7 @@ onUnmounted(() => {
 async function requestWaveform() {
   console.debug("requestWaveform");
 
-  const waveformDataLength = await invoke<number>("prepare_waveform");
+  const waveformDataLength = await api.prepareWaveform();
   waveformData = new Float32Array(waveformDataLength);
   waveformLength = 0;
 
@@ -77,9 +78,7 @@ async function requestWaveform() {
   // Create a new channel
   waveformChannel = new Channel<ArrayBuffer>();
   waveformChannel.onmessage = onReceiveWaveformData;
-  invoke<number>("request_waveform", {
-    channel: waveformChannel,
-  });
+  api.requestWaveform(waveformChannel);
 }
 
 function onReceiveWaveformData(srcData: ArrayBuffer) {
@@ -96,11 +95,10 @@ function onReceiveWaveformData(srcData: ArrayBuffer) {
   waveformData.set(float32array, waveformLength);
   waveformLength += float32array.length;
 
-  wavesurfer.load("", [waveformData], props.entry?.duration || 0);
+  wavesurfer.load("", [waveformData], entry?.duration || 0);
 }
 
 listen<PlayerState>("player_state_updated", (event) => {
-  console.debug("player_state_updated", event.payload);
   wavesurfer.setTime(event.payload.pos);
   if (event.payload.playing) {
     playback_timer.start(event.payload.pos);
@@ -114,7 +112,7 @@ listen<PlayerState>("player_state_updated", (event) => {
 });
 
 watch(
-  () => props.entry,
+  () => entry,
   (entry) => {
     if (entry) {
       requestWaveform();

@@ -12,6 +12,11 @@ export const Preset = definePreset(Aura, {
         padding: "0.5rem 1rem !important",
       },
     },
+    list: {
+      option: {
+        padding: "0.3rem 0.65rem",
+      }
+    },
     transitionDuration: "0.1s",
     colorScheme: {
       dark: {

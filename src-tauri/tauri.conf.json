@@ -12,9 +12,10 @@
   "app": {
     "windows": [
       {
-        "title": "sound-manager-rust",
-        "width": 800,
-        "height": 600
+        "title": "Sound Manager",
+        "width": 1200,
+        "height": 800,
+        "theme": "Dark"
       }
     ],
     "security": {

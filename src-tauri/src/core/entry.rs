@@ -1,29 +1,18 @@
+use super::database::Error;
 use super::player::get_format_reader;
 
-use futures::{try_join, TryFutureExt};
-use log::debug;
+use futures::{join, TryFutureExt};
+use log::warn;
 use std::path::Path;
 
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use symphonia::core::meta::StandardTagKey;
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("database error: {0}")]
-    Database(#[from] rusqlite::Error),
-    #[error("r2d2 error: {0}")]
-    R2d2(#[from] r2d2::Error),
-    #[error("symphonia error: {0}")]
-    Symphonia(#[from] symphonia::core::errors::Error),
-}
 
 pub struct Entry {
     pub id: i32,
     pub path: Box<Path>,
     pub file_name: String,
-    pub tag_ids: Vec<i32>,
     pub metadata: Option<Metadata>,
 }
 
@@ -43,7 +32,6 @@ impl Entry {
             id: -1,
             path,
             file_name,
-            tag_ids: Vec::new(),
             metadata: None,
         }
     }
@@ -57,10 +45,28 @@ impl Entry {
         let future_read_metadata = self.read_metadata().err_into::<Error>();
         let future_query_database = self.query_database(db_conn_pool.get()?).err_into::<Error>();
 
-        let (metadata, (id, tag_ids)) = try_join!(future_read_metadata, future_query_database)?;
-        self.metadata = Some(metadata);
-        self.id = id;
-        self.tag_ids = tag_ids;
+        let (metadata, id) = join!(future_read_metadata, future_query_database);
+
+        if let Ok(metadata) = metadata {
+            self.metadata = Some(metadata);
+        } else {
+            warn!(
+                "Failed to read metadata of file {:?}: {:?}",
+                self.path,
+                metadata.err().unwrap()
+            );
+        }
+
+        if let Ok(id) = id {
+            self.id = id;
+        } else {
+            warn!(
+                "Failed to query database for file {:?}: {:?}",
+                self.path,
+                id.err().unwrap()
+            );
+        }
+
         Ok(())
     }
 
@@ -101,9 +107,8 @@ impl Entry {
     async fn query_database(
         &self,
         db: PooledConnection<SqliteConnectionManager>,
-    ) -> Result<(i32, Vec<i32>), rusqlite::Error> {
+    ) -> Result<i32, rusqlite::Error> {
         let ret_id;
-        let mut ret_tag_ids = Vec::new();
 
         // Query from database
         match db.query_row(
@@ -114,29 +119,59 @@ impl Entry {
             Ok(id) => {
                 // Entry already exists
                 ret_id = id;
-
-                // Read tags
-                let mut stmt = db
-                    .prepare("SELECT tag_id FROM entry_tag WHERE entry_id = ?")
-                    .unwrap();
-                let mut rows = stmt.query([&self.id]).unwrap();
-
-                while let Some(row) = rows.next().unwrap() {
-                    let tag_id = row.get(0).unwrap();
-                    ret_tag_ids.push(tag_id);
-                }
             }
             Err(_) => {
                 // Create new entry in database
-                let mut stmt = db
-                    .prepare("INSERT INTO entries (file_path) VALUES (?)")
-                    .unwrap();
-                stmt.execute(&[&self.path.to_str().unwrap()]).unwrap();
+                db.execute(
+                    "INSERT INTO entries (file_path) VALUES (?)",
+                    &[&self.path.to_str().unwrap()],
+                )?;
 
                 ret_id = db.last_insert_rowid() as i32;
             }
         };
 
-        Ok((ret_id, ret_tag_ids))
+        Ok(ret_id)
+    }
+
+    pub fn add_tag(
+        &self,
+        tag_id: i32,
+        db: PooledConnection<SqliteConnectionManager>,
+    ) -> Result<(), Error> {
+        let mut stmt = db.prepare("SELECT 1 FROM tags WHERE id = ?")?;
+        if !stmt.exists([&tag_id])? {
+            return Err(Error::TagNotFound(tag_id));
+        }
+
+        let mut stmt = db.prepare("SELECT 1 FROM entry_tag WHERE entry_id = ? AND tag_id = ?")?;
+        if stmt.exists([&self.id, &tag_id])? {
+            return Err(Error::TagAlreadyExistsForEntry(tag_id, self.id));
+        }
+
+        db.execute(
+            "INSERT INTO entry_tag (entry_id, tag_id) VALUES (?, ?)",
+            &[&self.id, &tag_id],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn remove_tag(
+        &self,
+        tag_id: i32,
+        db: PooledConnection<SqliteConnectionManager>,
+    ) -> Result<(), Error> {
+        let mut stmt = db.prepare("SELECT 1 FROM entry_tag WHERE entry_id = ? AND tag_id = ?")?;
+        if !stmt.exists([&self.id, &tag_id])? {
+            return Err(Error::TagNotFoundForEntry(tag_id, self.id));
+        }
+
+        db.execute(
+            "DELETE FROM entry_tag WHERE entry_id = ? AND tag_id = ?",
+            &[&self.id, &tag_id],
+        )?;
+
+        Ok(())
     }
 }

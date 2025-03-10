@@ -1,31 +1,32 @@
-use super::core;
 use super::core::{Entry, Folder, Tag};
 
 use serde::ser::{Serialize, SerializeStruct, Serializer};
+use thiserror::Error;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    Entry(#[from] core::entry::Error),
-    #[error(transparent)]
-    Database(#[from] core::database::Error),
-    #[error(transparent)]
-    Player(#[from] core::player::Error),
-    #[error(transparent)]
-    Waveform(#[from] core::waveform::Error),
-    #[error("entry not found for id: {0}")]
-    EntryNotFound(i32),
+    Database(#[from] crate::core::database::Error),
+    #[error("player error: {0}")]
+    Player(#[from] crate::core::player::Error),
+    #[error("waveform error: {0}")]
+    Waveform(#[from] crate::core::waveform::Error),
 }
 
 #[derive(serde::Serialize)]
 #[serde(tag = "kind", content = "message")]
 #[serde(rename_all = "camelCase")]
 enum ErrorKind {
-    Entry(String),
+    DatabaseNotFound(String),
+    DatabaseAlreadyExists(String),
+    EntryNotFound(String),
+    TagNotFound(String),
+    TagAlreadyExists(String),
+    TagNotFoundForEntry(String),
+    TagAlreadyExistsForEntry(String),
     Database(String),
     Player(String),
     Waveform(String),
-    EntryNotFound(String),
 }
 
 impl serde::Serialize for Error {
@@ -35,11 +36,32 @@ impl serde::Serialize for Error {
     {
         let error_message = self.to_string();
         let error_kind = match self {
-            Self::Entry(_) => ErrorKind::Entry(error_message),
-            Self::Database(_) => ErrorKind::Database(error_message),
+            Self::Database(e) => match e {
+                crate::core::database::Error::DatabaseNotFound(_) => {
+                    ErrorKind::DatabaseNotFound(error_message)
+                }
+                crate::core::database::Error::DatabaseAlreadyExists(_) => {
+                    ErrorKind::DatabaseAlreadyExists(error_message)
+                }
+                crate::core::database::Error::EntryNotFound(_) => {
+                    ErrorKind::EntryNotFound(error_message)
+                }
+                crate::core::database::Error::TagNotFound(_) => {
+                    ErrorKind::TagNotFound(error_message)
+                }
+                crate::core::database::Error::TagAlreadyExists(_) => {
+                    ErrorKind::TagAlreadyExists(error_message)
+                }
+                crate::core::database::Error::TagNotFoundForEntry(_, _) => {
+                    ErrorKind::TagNotFoundForEntry(error_message)
+                }
+                crate::core::database::Error::TagAlreadyExistsForEntry(_, _) => {
+                    ErrorKind::TagAlreadyExistsForEntry(error_message)
+                }
+                _ => ErrorKind::Database(error_message),
+            },
             Self::Player(_) => ErrorKind::Player(error_message),
             Self::Waveform(_) => ErrorKind::Waveform(error_message),
-            Self::EntryNotFound(_) => ErrorKind::EntryNotFound(error_message),
         };
         error_kind.serialize(serializer)
     }
@@ -50,7 +72,7 @@ impl Serialize for Entry {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Entry", 7)?;
+        let mut state = serializer.serialize_struct("Entry", 8)?;
         state.serialize_field("id", &self.id)?;
         state.serialize_field("path", &self.path)?;
         state.serialize_field("fileName", &self.file_name)?;

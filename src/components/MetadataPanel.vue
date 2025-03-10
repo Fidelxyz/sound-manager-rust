@@ -1,66 +1,63 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
+import { InputText } from "primevue";
 
-import { Tag, InputText } from "primevue";
+import MetadataTagEditor from "./MetadataTagEditor.vue";
+import { formatDuration } from "../utils/utils";
+import { Entry, EntryTag } from "../types";
 
-import { formatDuration } from "../lib/utils";
-import { Entry } from "../types";
-
-const props = defineProps<{
+const { entry, allTags } = defineProps<{
   entry?: Entry;
+  allTags: EntryTag[];
 }>();
+const metadataTagEditor = ref();
 
 const emit = defineEmits(["update"]);
 
-const activeEntry = ref({ ...props.entry });
+function refresh() {
+  metadataTagEditor.value?.refresh();
+}
 
-watch(
-  () => props.entry,
-  (newEntry) => {
-    if (newEntry) {
-      activeEntry.value = { ...newEntry };
-    }
-  },
-  { deep: true }
-);
+defineExpose({
+  refresh: refresh,
+});
 </script>
 
 <template>
   <div class="metadata-panel w-full h-full px-6 py-8">
-    <div v-if="entry">
-      <InputText class="w-full" v-model="activeEntry.fileName" />
-      <Tag
-        v-for="tag in entry.tagIds"
-        :key="tag"
-        :value="tag"
-        severity="info"
+    <div v-if="entry" class="metadata-content">
+      <InputText class="w-full" v-model="entry.fileName" />
+
+      <MetadataTagEditor
+        ref="metadataTagEditor"
+        :entry="entry"
+        :allTags="allTags"
       />
+
       <table class="w-full border-separate border-spacing-y-2">
         <tbody>
           <tr class="metadata-row">
             <td class="metadata-label">标题</td>
             <td class="metadata-field">
-              <InputText v-model="activeEntry.title" />
+              <InputText v-model="entry.title" />
             </td>
           </tr>
           <tr class="metadata-row">
             <td class="metadata-label">艺术家</td>
             <td class="metadata-field">
-              <InputText v-model="activeEntry.artist" />
+              <InputText v-model="entry.artist" />
             </td>
           </tr>
           <tr class="metadata-row">
             <td class="metadata-label">专辑</td>
             <td class="metadata-field">
-              <InputText v-model="activeEntry.album" />
+              <InputText v-model="entry.album" />
             </td>
           </tr>
           <tr class="metadata-row">
             <td class="metadata-label">时长</td>
             <td class="metadata-field">
-              {{
-                activeEntry.duration ? formatDuration(activeEntry.duration) : ""
-              }}
+              {{ entry.duration ? formatDuration(entry.duration) : "" }}
             </td>
           </tr>
         </tbody>
@@ -78,6 +75,10 @@ watch(
 <style scoped>
 .metadata-panel {
   background-color: var(--p-surface-800);
+}
+
+.metadata-content > * {
+  margin: 0.5rem 0;
 }
 
 .metadata-row {

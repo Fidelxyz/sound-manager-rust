@@ -22,6 +22,10 @@ pub enum Error {
     Decoder(#[from] rodio::decoder::DecoderError),
     #[error("seek error: {0}")]
     Seek(#[from] rodio::source::SeekError),
+    #[error("stream error: {0}")]
+    Stream(#[from] rodio::StreamError),
+    #[error("play error: {0}")]
+    Play(#[from] rodio::PlayError),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("symphonia error: {0}")]
@@ -58,23 +62,23 @@ impl Player {
     where
         F: Fn(PlayerState) + Send + Sync + Clone + 'static,
     {
-        let sink_ref = self.sink.clone();
         self.on_state_updated = Some(Box::new(on_state_updated.clone()));
 
+        let sink_ref = self.sink.clone();
         spawn(move || {
             debug!("start player thread");
 
-            let (_stream, handle) = OutputStream::try_default().unwrap();
-
-            {
-                let mut sink = sink_ref.write().unwrap();
-                sink.replace(Sink::try_new(&handle).unwrap());
-            }
+            // stream must be created in the player thread
+            // because it needs to live as long as the sink
+            let (_stream, handle) =
+                OutputStream::try_default().expect("failed to create output stream");
+            sink_ref
+                .write()
+                .unwrap()
+                .replace(Sink::try_new(&handle).expect("failed to create sink"));
 
             let mut had_source = false;
             loop {
-                //debug!("player thread loop");
-
                 // sleep should before break, to make sure it always sleep each loop
                 sleep(Duration::from_millis(100));
 
@@ -101,8 +105,7 @@ impl Player {
     }
 
     pub fn stop(&self) {
-        let mut sink = self.sink.write().unwrap();
-        sink.take();
+        self.sink.write().unwrap().take();
     }
 
     pub async fn set_source(&mut self, path: Box<Path>) -> Result<(), Error> {

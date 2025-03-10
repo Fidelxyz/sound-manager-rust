@@ -28,7 +28,7 @@ const selectFolder = (folder: Folder) => {
   <li>
     <Button
       variant="text"
-      class="w-full text-left justify-start!"
+      class="w-full justify-start!"
       :class="{ active: folder.path === selectedPath }"
       :style="{
         paddingLeft: `calc(var(--p-button-padding-x) + ${depth * 1}rem)`,

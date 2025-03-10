@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, onUnmounted, watch, onMounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { ref, onUnmounted, watch } from "vue";
 import { listen } from "@tauri-apps/api/event";
 
 import { Button, Slider, ToggleSwitch } from "primevue";
-
 import Waveform from "./Waveform.vue";
+
 import { Entry, PlayerState } from "../types";
+import { error } from "../utils/message";
+import api from "../api";
 
 const props = defineProps<{
   entry?: Entry;
@@ -32,9 +33,10 @@ watch(
     if (!entry) return;
 
     pause();
-    await invoke("set_player_source", {
-      entryId: entry.id,
-    }).catch(console.error);
+    await api.setPlayerSource(entry.id).catch((e) => {
+      error("设置播放源失败", e.message);
+      console.error(e);
+    });
     activeEntry.value = { ...entry };
     playingPos = 0;
     if (autoPlay.value) play();
@@ -43,29 +45,27 @@ watch(
   { deep: true }
 );
 
-onMounted(() => {
-  setVolume(volume.value);
-});
-
 onUnmounted(() => {
   pause();
 });
 
 async function play() {
   console.debug("play");
-  await invoke("play", {
-    seek: playingPos,
-    skipSilence: skipSilence.value,
-  })
+  setVolume(volume.value);
+  await api
+    .play(playingPos, skipSilence.value)
     .then(() => {
       playing.value = true;
     })
-    .catch(console.error);
+    .catch((e) => {
+      error("播放失败", e.message);
+      console.error(e);
+    });
 }
 
 function pause() {
   console.debug("pause");
-  invoke("pause");
+  api.pause();
   playing.value = false;
 }
 
@@ -82,11 +82,15 @@ async function seek(time: number) {
 
 function syncPlayingPos() {
   console.debug("updatePlayingPos");
-  invoke<number>("get_playing_pos")
+  api
+    .getPlayingPos()
     .then((pos) => {
       playingPos = pos;
     })
-    .catch(console.error);
+    .catch((e) => {
+      error("获取播放进度失败", e.message);
+      console.error(e);
+    });
 }
 
 function togglePlayPause() {
@@ -102,9 +106,10 @@ function togglePlayPause() {
 
 function setVolume(value: number) {
   console.debug("setVolume", value);
-  invoke("set_volume", {
-    volume: value / 100,
-  }).catch(console.error);
+  api.setVolume(value / 100).catch((e) => {
+    error("设置音量失败", e.message);
+    console.error(e);
+  });
 }
 
 listen<PlayerState>("player_state_updated", (event) => {
@@ -118,7 +123,7 @@ listen<PlayerState>("player_state_updated", (event) => {
   <div class="px-8 py-4">
     <Waveform :entry="activeEntry" @seek="seek" />
 
-    <div class="player-control flex">
+    <div class="flex">
       <div class="flex flex-1 align-center justify-start item-center gap-4">
         <label for="auto-play">自动播放</label>
         <ToggleSwitch v-model="autoPlay" inputId="auto-play"></ToggleSwitch>

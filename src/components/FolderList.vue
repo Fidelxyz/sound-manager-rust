@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
 
 import FolderItem from "./FolderItem.vue";
 
 import { Folder } from "../types";
+import { error } from "../utils/message";
+import api from "../api";
 
 const folder = ref<Folder>();
 const selectedFolder = ref<Folder>();
@@ -13,13 +14,15 @@ const emit = defineEmits(["select"]);
 
 async function loadFolders() {
   console.log("Load folders");
-  invoke<Folder>("get_folder")
+  api
+    .getFolder()
     .then((data) => {
       console.log(data);
       folder.value = data;
     })
-    .catch((error) => {
-      console.error(error);
+    .catch((e) => {
+      error("加载文件夹失败", e.message);
+      console.error(e);
     });
 }
 

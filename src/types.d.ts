@@ -1,5 +1,15 @@
 export type ErrorKind = {
-  kind: "entry" | "database";
+  kind:
+    | "databaseNotFound"
+    | "databaseAlreadyExists"
+    | "entryNotFound"
+    | "tagNotFound"
+    | "tagAlreadyExists"
+    | "tagNotFoundForEntry"
+    | "tagAlreadyExistsForEntry"
+    | "database"
+    | "player"
+    | "waveform";
   message: string;
 };
 
@@ -7,14 +17,13 @@ export type Entry = {
   id: number;
   path: string;
   fileName: string;
-  tagIds: number[];
   title: string?;
   artist: string?;
   album: string?;
   duration: number?;
 };
 
-export type Tag = {
+export type EntryTag = {
   id: number;
   name: string;
 };

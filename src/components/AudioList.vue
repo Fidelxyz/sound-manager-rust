@@ -1,26 +1,29 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
 
 import { DataTable, Column } from "primevue";
 
 import type { Entry } from "../types";
-import { formatDuration } from "../lib/utils";
+import { formatDuration } from "../utils/utils";
+import { error } from "../utils/message";
+import api from "../api";
 
 const entries = ref<Entry[]>([]);
-const selectedEntry = ref<Entry>();
+const activeEntry = ref<Entry>();
 
 const emit = defineEmits(["select"]);
 
 async function loadEntries() {
   console.log("Load entries");
-  invoke<Entry[]>("get_entries")
+  api
+    .getEntries()
     .then((data) => {
       console.log(data);
       entries.value = data;
     })
-    .catch((error) => {
-      console.error(error);
+    .catch((e) => {
+      error("加载文件失败", e.message);
+      console.error(e);
     });
 }
 
@@ -45,7 +48,7 @@ onMounted(() => {
     class="h-full w-full text-nowrap"
     tableClass="table-fixed"
     :value="entries"
-    v-model:selection="selectedEntry"
+    v-model:selection="activeEntry"
     selectionMode="single"
     :metaKeySelection="true"
     datakey="id"
@@ -60,7 +63,9 @@ onMounted(() => {
     <Column class="w-1/3" field="album" header="专辑" sortable />
     <Column class="w-1/6" field="duration" header="时长" sortable>
       <template #body="slotProps">
-        <span>{{ slotProps.data.duration ? formatDuration(slotProps.data.duration) : "" }}</span>
+        <span>{{
+          slotProps.data.duration ? formatDuration(slotProps.data.duration) : ""
+        }}</span>
       </template>
     </Column>
   </DataTable>

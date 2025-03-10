@@ -1,11 +1,11 @@
 mod core;
 mod response;
 
-use core::{Database, Player, WaveformGenerator};
+use core::{Database, Player, Tag, WaveformGenerator};
 use response::Error;
 
 use async_std::sync::RwLock;
-use futures::{try_join, TryFutureExt};
+use futures::try_join;
 use log::{debug, trace};
 use std::option::Option;
 use std::path::PathBuf;
@@ -44,7 +44,11 @@ async fn open_database(
 }
 
 #[tauri::command]
-async fn create_database(path: String, state: State<'_, AppData>) -> Result<(), Error> {
+async fn create_database(
+    path: String,
+    app: AppHandle,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
     trace!("create_database: {:?}", path);
 
     let path = PathBuf::from(path);
@@ -53,6 +57,10 @@ async fn create_database(path: String, state: State<'_, AppData>) -> Result<(), 
         .write()
         .await
         .replace(Database::create(path.into())?);
+    state.player.write().await.run(move |player_state| {
+        debug!("player_state_updated");
+        app.emit("player_state_updated", player_state).unwrap();
+    });
 
     trace!("create_database done");
     Ok(())
@@ -78,11 +86,10 @@ async fn get_entries(state: State<'_, AppData>) -> Result<Response, Error> {
 }
 
 #[tauri::command]
-async fn get_tags(state: State<'_, AppData>) -> Result<Response, Error> {
+async fn get_tags(state: State<'_, AppData>) -> Result<Vec<Tag>, Error> {
     let database = state.database.read().await;
-    let tags = &database.as_ref().unwrap().tags;
-    let response = serde_json::to_string(tags).unwrap();
-    Ok(Response::new(response))
+    let tags = database.as_ref().unwrap().get_tags()?;
+    Ok(tags)
 }
 
 #[tauri::command]
@@ -94,10 +101,99 @@ async fn get_folder(state: State<'_, AppData>) -> Result<Response, Error> {
 }
 
 #[tauri::command]
+async fn new_tag(name: String, state: State<'_, AppData>) -> Result<Tag, Error> {
+    trace!("new_tag: {:?}", name);
+
+    let database = state.database.read().await;
+    let tag = database.as_ref().unwrap().new_tag(name)?;
+
+    trace!("new_tag done");
+    Ok(tag)
+}
+
+#[tauri::command]
+async fn delete_tag(tag_id: i32, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("delete_tag: {:?}", tag_id);
+
+    let database = state.database.read().await;
+    database.as_ref().unwrap().delete_tag(tag_id)?;
+
+    trace!("delete_tag done");
+    Ok(())
+}
+
+#[tauri::command]
+async fn rename_tag(tag_id: i32, name: String, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("rename_tag: tag_id = {:?}, name = {:?}", tag_id, name);
+
+    let database = state.database.read().await;
+    database.as_ref().unwrap().rename_tag(tag_id, name)?;
+
+    trace!("rename_tag done");
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_tags_for_entry(entry_id: i32, state: State<'_, AppData>) -> Result<Vec<Tag>, Error> {
+    trace!("get_tags_for_entry: {:?}", entry_id);
+
+    let database = state.database.read().await;
+    let tags = database.as_ref().unwrap().get_tags_for_entry(entry_id)?;
+
+    trace!("get_tags_for_entry done");
+    Ok(tags)
+}
+
+#[tauri::command]
+async fn add_tag_for_entry(
+    entry_id: i32,
+    tag_id: i32,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
+    trace!(
+        "add_tag_for_entry: entry_id = {:?}, tag_id = {:?}",
+        entry_id,
+        tag_id
+    );
+
+    let database = state.database.read().await;
+    database
+        .as_ref()
+        .unwrap()
+        .add_tag_for_entry(entry_id, tag_id)?;
+
+    trace!("add_tag_for_entry done");
+    Ok(())
+}
+
+#[tauri::command]
+async fn remove_tag_for_entry(
+    entry_id: i32,
+    tag_id: i32,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
+    trace!(
+        "remove_tag_for_entry: entry_id = {:?}, tag_id = {:?}",
+        entry_id,
+        tag_id
+    );
+
+    let database = state.database.read().await;
+    database
+        .as_ref()
+        .unwrap()
+        .remove_tag_for_entry(entry_id, tag_id)?;
+
+    trace!("remove_tag_for_entry done");
+    Ok(())
+}
+
+#[tauri::command]
 async fn prepare_waveform(state: State<'_, AppData>) -> Result<u32, Error> {
-    debug!("prepare_waveform");
+    trace!("prepare_waveform");
     let waveform_generator = state.waveform_generator.read().await;
     let data_length = waveform_generator.prepare_waveform()?;
+    trace!("prepare_waveform done");
     Ok(data_length)
 }
 
@@ -129,14 +225,13 @@ async fn set_player_source(entry_id: i32, state: State<'_, AppData>) -> Result<(
         .await
         .as_ref()
         .unwrap()
-        .get_entry(entry_id)
-        .ok_or_else(|| Error::EntryNotFound(entry_id))?
+        .get_entry(entry_id)?
         .path
         .clone();
     debug!("path: {:?}", path);
 
     let mut player = state.player.write().await;
-    let set_player_source = player.set_source(path.clone()).err_into::<Error>();
+    let set_player_source = player.set_source(path.clone());
 
     let set_waveform_source = async {
         state.waveform_generator.write().await.set_source(path);
@@ -162,7 +257,6 @@ async fn play(
         .read()
         .await
         .play(seek.map(|seek| Duration::from_secs_f32(seek)), skip_silence)?;
-    // TODO: BUG HERE
 
     trace!("play done");
     Ok(())
@@ -213,6 +307,12 @@ pub fn run() {
             get_entries,
             get_tags,
             get_folder,
+            new_tag,
+            delete_tag,
+            rename_tag,
+            get_tags_for_entry,
+            add_tag_for_entry,
+            remove_tag_for_entry,
             prepare_waveform,
             request_waveform,
             set_player_source,
