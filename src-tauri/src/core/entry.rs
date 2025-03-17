@@ -1,11 +1,10 @@
-use super::database::Error;
 use super::player::get_format_reader;
 
-use futures::{join, TryFutureExt};
 use log::warn;
+use std::collections::HashSet;
 use std::path::Path;
 
-use r2d2::{Pool, PooledConnection};
+use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use symphonia::core::meta::StandardTagKey;
 
@@ -14,9 +13,9 @@ pub struct Entry {
     pub path: Box<Path>,
     pub file_name: String,
     pub metadata: Option<Metadata>,
+    pub tag_ids: HashSet<i32>,
 }
 
-#[derive(Clone)]
 pub struct Metadata {
     pub title: Option<String>,
     pub artist: Option<String>,
@@ -33,44 +32,20 @@ impl Entry {
             path,
             file_name,
             metadata: None,
+            tag_ids: HashSet::new(),
         }
     }
 
-    pub async fn read(
-        &mut self,
-        db_conn_pool: &Pool<SqliteConnectionManager>,
-    ) -> Result<(), Error> {
-        //debug!("Reading entries: {:?}", self.path);
+    pub async fn read(&mut self) {
+        let metadata = self.read_metadata();
 
-        let future_read_metadata = self.read_metadata().err_into::<Error>();
-        let future_query_database = self.query_database(db_conn_pool.get()?).err_into::<Error>();
-
-        let (metadata, id) = join!(future_read_metadata, future_query_database);
-
-        if let Ok(metadata) = metadata {
-            self.metadata = Some(metadata);
-        } else {
-            warn!(
-                "Failed to read metadata of file {:?}: {:?}",
-                self.path,
-                metadata.err().unwrap()
-            );
+        match metadata {
+            Ok(metadata) => self.metadata = Some(metadata),
+            Err(err) => warn!("Failed to read metadata of file {:?}: {:?}", self.path, err),
         }
-
-        if let Ok(id) = id {
-            self.id = id;
-        } else {
-            warn!(
-                "Failed to query database for file {:?}: {:?}",
-                self.path,
-                id.err().unwrap()
-            );
-        }
-
-        Ok(())
     }
 
-    async fn read_metadata(&self) -> Result<Metadata, symphonia::core::errors::Error> {
+    fn read_metadata(&self) -> Result<Metadata, symphonia::core::errors::Error> {
         let mut ret = Metadata {
             title: None,
             artist: None,
@@ -132,46 +107,5 @@ impl Entry {
         };
 
         Ok(ret_id)
-    }
-
-    pub fn add_tag(
-        &self,
-        tag_id: i32,
-        db: PooledConnection<SqliteConnectionManager>,
-    ) -> Result<(), Error> {
-        let mut stmt = db.prepare("SELECT 1 FROM tags WHERE id = ?")?;
-        if !stmt.exists([&tag_id])? {
-            return Err(Error::TagNotFound(tag_id));
-        }
-
-        let mut stmt = db.prepare("SELECT 1 FROM entry_tag WHERE entry_id = ? AND tag_id = ?")?;
-        if stmt.exists([&self.id, &tag_id])? {
-            return Err(Error::TagAlreadyExistsForEntry(tag_id, self.id));
-        }
-
-        db.execute(
-            "INSERT INTO entry_tag (entry_id, tag_id) VALUES (?, ?)",
-            &[&self.id, &tag_id],
-        )?;
-
-        Ok(())
-    }
-
-    pub fn remove_tag(
-        &self,
-        tag_id: i32,
-        db: PooledConnection<SqliteConnectionManager>,
-    ) -> Result<(), Error> {
-        let mut stmt = db.prepare("SELECT 1 FROM entry_tag WHERE entry_id = ? AND tag_id = ?")?;
-        if !stmt.exists([&self.id, &tag_id])? {
-            return Err(Error::TagNotFoundForEntry(tag_id, self.id));
-        }
-
-        db.execute(
-            "DELETE FROM entry_tag WHERE entry_id = ? AND tag_id = ?",
-            &[&self.id, &tag_id],
-        )?;
-
-        Ok(())
     }
 }

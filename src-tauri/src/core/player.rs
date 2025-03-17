@@ -138,7 +138,7 @@ impl Player {
             let mut reader = get_format_reader(&path)?;
             let track = reader
                 .default_track()
-                .ok_or(Error::TracksNotFound(path.to_str().unwrap().to_string()))?;
+                .ok_or(Error::TracksNotFound(path.to_string_lossy().to_string()))?;
             let track_id = track.id;
 
             let params = &track.codec_params;
@@ -276,10 +276,12 @@ impl Drop for Player {
 pub fn get_format_reader(
     path: &Path,
 ) -> Result<Box<dyn FormatReader>, symphonia::core::errors::Error> {
-    let src = std::fs::File::open(path).unwrap();
+    let src = std::fs::File::open(path)?;
     let mss = MediaSourceStream::new(Box::new(src), Default::default());
     let mut hint = Hint::new();
-    hint.with_extension(path.extension().unwrap().to_str().unwrap());
+    if let Some(ext) = path.extension() {
+        hint.with_extension(&ext.to_string_lossy().to_string());
+    }
     let meta_opts: MetadataOptions = Default::default();
     let fmt_opts: FormatOptions = Default::default();
     let probed = symphonia::default::get_probe().format(&hint, mss, &fmt_opts, &meta_opts)?;

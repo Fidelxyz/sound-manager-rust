@@ -6,12 +6,12 @@ import { Preset } from "./style";
 
 const app = createApp(App);
 app.use(PrimeVue, {
-  theme: {
-    preset: Preset,
-    options: {
-      darkModeSelector: ".dark",
-    },
-  },
+	theme: {
+		preset: Preset,
+		options: {
+			darkModeSelector: ".dark",
+		},
+	},
 });
 app.use(ToastService);
 app.use(ConfirmationService);

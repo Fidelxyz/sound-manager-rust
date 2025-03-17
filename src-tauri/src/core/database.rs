@@ -1,14 +1,14 @@
 use super::Entry;
 use super::Folder;
 
+use std::collections::HashMap;
 use std::path::Path;
-use std::result::Result;
 
 use futures::executor::block_on;
-use futures::future::join_all;
-use futures::TryFutureExt;
-use log::debug;
+use futures::future::{join, join_all};
+use log::{debug, warn};
 use r2d2::Pool;
+use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use thiserror::Error;
 
@@ -28,6 +28,8 @@ pub enum Error {
     TagNotFoundForEntry(i32, i32),
     #[error("tag {0} already exists for entry {1}")]
     TagAlreadyExistsForEntry(i32, i32),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
     #[error("database error: {0}")]
     Database(#[from] rusqlite::Error),
     #[error("r2d2 error: {0}")]
@@ -36,51 +38,58 @@ pub enum Error {
     Symphonia(#[from] symphonia::core::errors::Error),
 }
 
-#[derive(Clone)]
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
 pub struct Tag {
     pub id: i32,
     pub name: String,
+    pub position: i32,
+    pub color: i32,
 }
 
 pub struct Database {
     pub base_path: Box<Path>,
 
-    pub folder: Folder,
-    pub entries: Vec<Entry>,
+    folder: Folder,
+    entries: HashMap<i32, Entry>,
+    tags: HashMap<i32, Tag>,
 
     db_conn_pool: Pool<SqliteConnectionManager>,
 }
 
 impl Database {
-    pub fn open(base_path: Box<Path>) -> Result<Database, Error> {
+    // ========== Constructor ==========
+
+    pub fn open(base_path: Box<Path>) -> Result<Database> {
         let database_file = base_path.join(".soundmanager.db");
-        if !database_file.try_exists().unwrap() {
+        if !database_file.try_exists()? {
             // if database file does not exist
             return Err(Error::DatabaseNotFound(
-                base_path.to_str().unwrap().to_owned(),
+                base_path.to_string_lossy().to_string(),
             ));
         }
 
         let manager = SqliteConnectionManager::file(database_file);
         let db_conn_pool = r2d2::Pool::new(manager)?;
 
-        let (mut entries, folder) = block_on(read_dir(base_path.clone(), &db_conn_pool));
-        read_entries(&mut entries, &db_conn_pool);
+        let (entries, folder) = block_on(Self::read_dir(base_path.clone(), &db_conn_pool))?;
 
-        Ok(Database {
+        Ok(Self {
             base_path,
             folder,
-            entries,
+            entries: Self::read_entries(entries, db_conn_pool.get()?)?,
+            tags: Self::read_tags(&db_conn_pool)?,
             db_conn_pool,
         })
     }
 
-    pub fn create(base_path: Box<Path>) -> Result<Database, Error> {
+    pub fn create(base_path: Box<Path>) -> Result<Database> {
         let database_file = base_path.join(".soundmanager.db");
-        if database_file.try_exists().unwrap() {
+        if database_file.try_exists()? {
             // if database file already exists
             return Err(Error::DatabaseAlreadyExists(
-                base_path.to_str().unwrap().to_owned(),
+                base_path.to_string_lossy().to_string(),
             ));
         }
 
@@ -98,7 +107,9 @@ impl Database {
         db.execute(
             "CREATE TABLE IF NOT EXISTS tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL
+                name TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                color INTEGER DEFAULT 0
             )",
             (),
         )?;
@@ -113,192 +124,389 @@ impl Database {
             (),
         )?;
 
-        let (mut entries, folder) = block_on(read_dir(base_path.clone(), &db_conn_pool));
-        read_entries(&mut entries, &db_conn_pool);
+        let (entries, folder) = block_on(Self::read_dir(base_path.clone(), &db_conn_pool))?;
 
-        Ok(Database {
+        Ok(Self {
             base_path,
-            entries,
             folder,
+            entries: Self::read_entries(entries, db_conn_pool.get()?)?,
+            tags: Self::read_tags(&db_conn_pool)?,
             db_conn_pool,
         })
     }
 
-    pub fn get_entry(&self, entry_id: i32) -> Result<&Entry, Error> {
+    async fn read_dir(
+        path: Box<Path>,
+        db_conn_pool: &Pool<SqliteConnectionManager>,
+    ) -> Result<(Vec<Entry>, Folder)> {
+        debug!("Reading directory: {:?}", path);
+
+        let mut futures = Vec::new();
+        let mut entries = Vec::new();
+
+        for dir_entry in path.read_dir()? {
+            let dir_entry = match dir_entry {
+                Ok(dir_entry) => dir_entry,
+                Err(err) => {
+                    warn!("Failed to read directory entry: {:?}", err);
+                    continue;
+                }
+            };
+
+            // Skip hidden files and folders
+            if dir_entry.file_name().to_string_lossy().starts_with(".") {
+                continue;
+            }
+
+            let file_type = match dir_entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(err) => {
+                    warn!("Failed to read file type: {:?}", err);
+                    continue;
+                }
+            };
+
+            if file_type.is_symlink() {
+                todo!("Handle symlink");
+            }
+
+            if file_type.is_dir() {
+                let path = dir_entry.path().as_path().into();
+                futures.push(Self::read_dir(path, db_conn_pool));
+            } else if file_type.is_file() {
+                let path = dir_entry.path();
+                if let Some(ext) = path.extension() {
+                    let ext = ext.to_string_lossy();
+                    if ext == "wav" || ext == "mp3" || ext == "flac" || ext == "ogg" {
+                        entries.push(Entry::new(dir_entry.path().as_path().into()));
+                    }
+                }
+            }
+        }
+
+        let results = join_all(futures).await;
+        let mut sub_folders = Vec::new();
+
+        for result in results {
+            if let Ok((sub_entries, sub_folder)) = result {
+                entries.extend(sub_entries);
+                sub_folders.push(sub_folder);
+            }
+        }
+
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+
+        Ok((
+            entries,
+            Folder {
+                path,
+                name,
+                sub_folders,
+            },
+        ))
+    }
+
+    fn read_entries(
+        mut entries: Vec<Entry>,
+        db: PooledConnection<SqliteConnectionManager>,
+    ) -> Result<HashMap<i32, Entry>> {
+        debug!("Reading entries");
+
+        // read entries in parallel
+        let futures_read = entries.iter_mut().map(|entry| entry.read());
+
+        // query all entries from database in one batch
+        let future_query = async {
+            let entries = db
+                .prepare("SELECT id, file_path FROM entries")?
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(1)?, row.get::<_, i32>(0)?))
+                })?
+                .filter_map(|result| result.ok())
+                .collect::<HashMap<_, _>>();
+
+            let entry_tag = db
+                .prepare("SELECT entry_id, tag_id FROM entry_tag")?
+                .query_map([], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)))?
+                .filter_map(|result| result.ok())
+                .collect::<Vec<_>>();
+
+            Ok::<_, Error>((entries, entry_tag))
+        };
+
+        // parallelly read and query
+        let (_, query) = block_on(join(join_all(futures_read), future_query));
+
+        let (query_entries, query_entry_tag) = query?;
+
+        // match queried rows with entries and perform corresponding actions
+        let mut stmt = db.prepare("INSERT INTO entries (file_path) VALUES (?)")?;
+        for entry in entries.iter_mut() {
+            // find matching entry in queried rows
+            if let Some(path) = entry.path.to_str() {
+                let row = query_entries.get(path);
+                if let Some(id) = row {
+                    // if entry already exists in database, set id
+                    entry.id = *id;
+                } else {
+                    // if entry does not exist in database, insert entry and set id
+                    let id = stmt.insert(&[path])? as i32;
+                    entry.id = id;
+                }
+            }
+        }
+
+        let mut entries = entries
+            .into_iter()
+            .map(|entry| (entry.id, entry))
+            .collect::<HashMap<_, _>>();
+
+        for (entry_id, tag_id) in query_entry_tag {
+            if let Some(entry) = entries.get_mut(&entry_id) {
+                entry.tag_ids.insert(tag_id);
+            }
+        }
+
+        Ok(entries)
+    }
+
+    pub fn read_tags(db_conn_pool: &Pool<SqliteConnectionManager>) -> Result<HashMap<i32, Tag>> {
+        let db = db_conn_pool.get()?;
+
+        let mut stmt = db.prepare("SELECT id, name, position, color FROM tags")?;
+        let tags = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    Tag {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        position: row.get(2)?,
+                        color: row.get(3)?,
+                    },
+                ))
+            })?
+            .collect::<std::result::Result<HashMap<_, _>, _>>()?;
+
+        Ok(tags)
+    }
+
+    // ========== Folder ==========
+
+    pub fn get_folder(&self) -> &Folder {
+        &self.folder
+    }
+
+    // ========== Entry ==========
+
+    pub fn get_entries(&self) -> &HashMap<i32, Entry> {
+        &self.entries
+    }
+
+    pub fn get_entry(&self, entry_id: i32) -> Result<&Entry> {
         self.entries
-            .iter()
-            .find(|entry| entry.id == entry_id)
+            .get(&entry_id)
             .ok_or_else(|| Error::EntryNotFound(entry_id))
     }
 
-    pub fn new_tag(&self, name: String) -> Result<Tag, Error> {
+    // ========== Tag ==========
+
+    pub fn get_tags(&self) -> Vec<&Tag> {
+        let mut tags = self.tags.values().collect::<Vec<_>>();
+        tags.sort_by_key(|tag| tag.position);
+        tags
+    }
+
+    pub fn new_tag(&mut self, name: String) -> Result<i32> {
         let db = self.db_conn_pool.get()?;
 
-        let mut stmt = db.prepare("SELECT 1 FROM tags WHERE name = ?")?;
-        if stmt.exists(&[&name])? {
+        if self.tags.values().any(|tag| tag.name == name) {
             return Err(Error::TagAlreadyExists(name));
         }
 
-        let mut stmt = db.prepare("INSERT INTO tags (name) VALUES (?)")?;
-        let id = stmt.insert(&[&name])?;
+        let position = self.tags.len() as i32;
 
-        Ok(Tag {
-            id: id as i32,
-            name,
-        })
+        let mut stmt = db.prepare("INSERT INTO tags (name, position) VALUES (?, ?)")?;
+        let id = stmt.insert((&name, &position))? as i32;
+
+        self.tags.insert(
+            id,
+            Tag {
+                id,
+                name,
+                position,
+                color: 0,
+            },
+        );
+
+        Ok(id)
     }
 
-    pub fn delete_tag(&self, tag_id: i32) -> Result<(), Error> {
+    pub fn delete_tag(&mut self, tag_id: i32) -> Result<()> {
         let db = self.db_conn_pool.get()?;
 
-        let mut stmt = db.prepare("SELECT 1 FROM tags WHERE id = ?")?;
-        if !stmt.exists(&[&tag_id])? {
+        if !self.tags.contains_key(&tag_id) {
             return Err(Error::TagNotFound(tag_id));
         }
 
         db.execute("DELETE FROM tags WHERE id = ?", &[&tag_id])?;
 
+        self.tags.remove(&tag_id);
+
         Ok(())
     }
 
-    pub fn rename_tag(&self, tag_id: i32, name: String) -> Result<(), Error> {
+    pub fn rename_tag(&mut self, tag_id: i32, name: String) -> Result<()> {
         let db = self.db_conn_pool.get()?;
 
-        let mut stmt = db.prepare("SELECT 1 FROM tags WHERE id = ?")?;
-        if !stmt.exists(&[&tag_id])? {
-            return Err(Error::TagNotFound(tag_id));
-        }
-
-        let mut stmt = db.prepare("SELECT 1 FROM tags WHERE name = ?")?;
-        if stmt.exists(&[&name])? {
+        if self.tags.values().any(|tag| tag.name == name) {
             return Err(Error::TagAlreadyExists(name));
         }
 
+        let tag = self
+            .tags
+            .get_mut(&tag_id)
+            .ok_or(Error::TagNotFound(tag_id))?;
+
         db.execute("UPDATE tags SET name = ? WHERE id = ?", (&name, &tag_id))?;
 
-        Ok(())
-    }
-
-    pub fn get_tags(&self) -> Result<Vec<Tag>, Error> {
-        let db = self.db_conn_pool.get()?;
-
-        let mut stmt = db.prepare("SELECT id, name FROM tags")?;
-        let tags = stmt
-            .query_map([], |row| {
-                Ok(Tag {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(tags)
-    }
-
-    pub fn add_tag_for_entry(&self, entry_id: i32, tag_id: i32) -> Result<(), Error> {
-        let entry = self
-            .entries
-            .iter()
-            .find(|entry| entry.id == entry_id)
-            .ok_or(Error::EntryNotFound(entry_id))?;
-
-        entry.add_tag(tag_id, self.db_conn_pool.get()?)?;
+        tag.name = name;
 
         Ok(())
     }
 
-    pub fn get_tags_for_entry(&self, entry_id: i32) -> Result<Vec<Tag>, Error> {
-        let db = self.db_conn_pool.get()?;
+    pub fn reorder_tag(&mut self, tag_id: i32, new_pos: i32) -> Result<()> {
+        let tag = self
+            .tags
+            .get(&tag_id)
+            .ok_or_else(|| Error::TagNotFound(tag_id))?;
+        let from_pos = tag.position;
 
-        let mut stmt = db.prepare(
-            "SELECT tags.id, tags.name FROM tags
-            JOIN entry_tag ON tags.id = entry_tag.tag_id
-            WHERE entry_tag.entry_id = ?",
-        )?;
-        let tags = stmt
-            .query_map([&entry_id], |row| {
-                Ok(Tag {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(tags)
-    }
-
-    pub fn remove_tag_for_entry(&self, entry_id: i32, tag_id: i32) -> Result<(), Error> {
-        let entry = self
-            .entries
-            .iter()
-            .find(|entry| entry.id == entry_id)
-            .ok_or(Error::EntryNotFound(entry_id))?;
-
-        entry.remove_tag(tag_id, self.db_conn_pool.get()?)
-    }
-}
-
-async fn read_dir(
-    path: Box<Path>,
-    db_conn_pool: &Pool<SqliteConnectionManager>,
-) -> (Vec<Entry>, Folder) {
-    debug!("Reading directory: {:?}", path);
-
-    let mut futures = Vec::new();
-    let mut entries = Vec::new();
-
-    for dir_entry in std::fs::read_dir(&path).unwrap() {
-        let dir_entry = dir_entry.expect("Error reading directory entry");
-
-        // Skip hidden files and folders
-        if dir_entry.file_name().to_str().unwrap().starts_with(".") {
-            continue;
+        if tag.position == new_pos {
+            return Ok(());
         }
 
-        if dir_entry.file_type().unwrap().is_dir() {
-            let path = dir_entry.path().as_path().into();
-            futures.push(read_dir(path, db_conn_pool));
+        let mut db = self.db_conn_pool.get()?;
+
+        let tx = db.transaction()?;
+        if from_pos < new_pos {
+            // move downwards
+            tx.execute(
+                "UPDATE tags SET position = position - 1 WHERE id > ? AND id <= ?",
+                (&from_pos, &new_pos),
+            )?;
         } else {
-            let path = dir_entry.path();
-            let ext = path.extension().unwrap().to_str().unwrap();
-            if ext == "wav" || ext == "mp3" || ext == "flac" || ext == "ogg" {
-                entries.push(Entry::new(dir_entry.path().as_path().into()));
-            }
+            // move upwards
+            tx.execute(
+                "UPDATE tags SET position = position + 1 WHERE id < ? AND id >= ?",
+                (&from_pos, &new_pos),
+            )?;
         }
+        tx.execute(
+            "UPDATE tags SET position = ? WHERE id = ?",
+            (&new_pos, &tag_id),
+        )?;
+        tx.commit()?;
+
+        if tag.position < new_pos {
+            self.tags
+                .iter_mut()
+                .filter(|(_, t)| t.position > from_pos && t.position <= new_pos)
+                .for_each(|(_, t)| {
+                    t.position -= 1;
+                });
+        } else {
+            self.tags
+                .iter_mut()
+                .filter(|(_, t)| t.position < from_pos && t.position >= new_pos)
+                .for_each(|(_, t)| {
+                    t.position += 1;
+                });
+        }
+        self.tags.get_mut(&tag_id).unwrap().position = new_pos;
+
+        debug!("tags: {:?}", self.tags);
+
+        Ok(())
     }
 
-    let result = join_all(futures).await;
-    let mut sub_folders = Vec::new();
+    pub fn set_tag_color(&mut self, tag_id: i32, color: i32) -> Result<()> {
+        let tag = self
+            .tags
+            .get_mut(&tag_id)
+            .ok_or_else(|| Error::TagNotFound(tag_id))?;
 
-    for (sub_entries, sub_folder) in result {
-        entries.extend(sub_entries);
-        sub_folders.push(sub_folder);
+        let db = self.db_conn_pool.get()?;
+        db.execute("UPDATE tags SET color = ? WHERE id = ?", &[&color, &tag_id])?;
+
+        tag.color = color;
+
+        Ok(())
     }
 
-    let name = path.file_name().unwrap().to_str().unwrap().to_string();
+    // ========== Entry-Tag ==========
 
-    (
-        entries,
-        Folder {
-            path,
-            name,
-            sub_folders,
-        },
-    )
-}
+    pub fn add_tag_for_entry(&mut self, entry_id: i32, tag_id: i32) -> Result<()> {
+        let entry = self
+            .entries
+            .get_mut(&entry_id)
+            .ok_or(Error::EntryNotFound(entry_id))?;
 
-fn read_entries(entries: &mut Vec<Entry>, db_conn_pool: &Pool<SqliteConnectionManager>) {
-    debug!("Reading entries");
+        if !self.tags.contains_key(&tag_id) {
+            return Err(Error::TagNotFound(tag_id));
+        }
 
-    let mut futures = Vec::new();
+        if entry.tag_ids.contains(&tag_id) {
+            return Err(Error::TagAlreadyExistsForEntry(tag_id, entry_id));
+        }
 
-    for entry in entries {
-        futures.push(
-            entry
-                .read(db_conn_pool)
-                .map_err(|e| debug!("Error reading entry: {}", e)),
-        );
+        let db = self.db_conn_pool.get()?;
+        db.execute(
+            "INSERT INTO entry_tag (entry_id, tag_id) VALUES (?, ?)",
+            &[&entry_id, &tag_id],
+        )?;
+
+        entry.tag_ids.insert(tag_id);
+
+        Ok(())
     }
 
-    let _ = block_on(join_all(futures));
+    pub fn get_tags_for_entry(&self, entry_id: i32) -> Result<Vec<&Tag>> {
+        let entry = self.get_entry(entry_id)?;
+
+        let mut tags = entry
+            .tag_ids
+            .iter()
+            .map(|tag_id| {
+                self.tags
+                    .get(tag_id)
+                    .ok_or_else(|| Error::TagNotFound(*tag_id))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        tags.sort_by_key(|tag| tag.position);
+
+        Ok(tags)
+    }
+
+    pub fn remove_tag_for_entry(&mut self, entry_id: i32, tag_id: i32) -> Result<()> {
+        let entry = self
+            .entries
+            .get_mut(&entry_id)
+            .ok_or(Error::EntryNotFound(entry_id))?;
+
+        if !entry.tag_ids.contains(&tag_id) {
+            return Err(Error::TagNotFoundForEntry(tag_id, entry_id));
+        }
+
+        let db = self.db_conn_pool.get()?;
+        db.execute(
+            "DELETE FROM entry_tag WHERE entry_id = ? AND tag_id = ?",
+            &[&entry_id, &tag_id],
+        )?;
+
+        entry.tag_ids.remove(&tag_id);
+
+        Ok(())
+    }
 }

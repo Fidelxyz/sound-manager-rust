@@ -2,14 +2,14 @@
 import { onMounted, onUnmounted, watch } from "vue";
 import { Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import api from "../api";
 
 import { $dt } from "@primeuix/themes";
 import WaveSurfer from "wavesurfer.js";
 import Timer from "wavesurfer.js/dist/timer.js";
 import Hover from "wavesurfer.js/dist/plugins/hover.esm.js";
 
-import { Entry, PlayerState } from "../types";
+import type { Entry, PlayerState } from "../api";
+import { api } from "../api";
 import { PlaybackTimer } from "../utils/playback_timer";
 
 const { entry } = defineProps<{
@@ -25,7 +25,7 @@ let waveformLength = 0;
 let waveformChannel: Channel<ArrayBuffer> | undefined;
 
 let timer: Timer;
-let playback_timer = new PlaybackTimer();
+const playback_timer = new PlaybackTimer();
 
 onMounted(() => {
   wavesurfer = WaveSurfer.create({
@@ -43,8 +43,8 @@ onMounted(() => {
         labelSize: "11px",
       }),
     ],
-    peaks: [],
-    duration: 0,
+    peaks: [[0]],
+    duration: 1,
   });
   wavesurfer.on("interaction", (pos) => {
     console.debug("interaction", pos);

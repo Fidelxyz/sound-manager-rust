@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { open } from "@tauri-apps/plugin-dialog";
-import { Button } from "primevue";
-import { api } from "../api";
 
-import type { ErrorKind } from "../types";
+import { open } from "@tauri-apps/plugin-dialog";
+
+import { Button } from "primevue";
+
+import { api, type ErrorKind } from "../api";
 import { error } from "../utils/message";
 
 const emit = defineEmits(["database-loaded"]);
@@ -73,12 +74,12 @@ async function handleCreateDatabase() {
         label="打开数据库"
         :loading="loading"
         @click="handleOpenDatabase"
-      />
+      ></Button>
       <Button
         label="创建数据库"
         :loading="loading"
         @click="handleCreateDatabase"
-      />
+      ></Button>
     </div>
   </div>
 </template>

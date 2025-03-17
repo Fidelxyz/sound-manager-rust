@@ -1,19 +1,42 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { onMounted, ref, watch } from "vue";
 
-import { DataTable, Column } from "primevue";
+import { FilterMatchMode } from "@primevue/core/api";
+import {
+  Column,
+  DataTable,
+  type DataTableRowSelectEvent,
+  type DataTableFilterMeta,
+  type DataTableFilterMetaData,
+} from "primevue";
 
-import type { Entry } from "../types";
-import { formatDuration } from "../utils/utils";
+import type { Entry, EntryTag, Filter } from "../api";
+import { api } from "../api";
 import { error } from "../utils/message";
-import api from "../api";
+import { formatDuration } from "../utils/utils";
+import FilterPanel from "./FilterPanel.vue";
 
 const entries = ref<Entry[]>([]);
 const activeEntry = ref<Entry>();
 
-const emit = defineEmits(["select"]);
+const emit = defineEmits<{
+  select: [entry: Entry];
+}>();
 
-async function loadEntries() {
+defineExpose({
+  refresh: loadEntries,
+});
+
+const { filter, tags } = defineProps<{
+  filter: Filter;
+  tags: EntryTag[];
+}>();
+
+onMounted(() => {
+  loadEntries();
+});
+
+function loadEntries() {
   console.log("Load entries");
   api
     .getEntries()
@@ -27,40 +50,70 @@ async function loadEntries() {
     });
 }
 
-async function selectEntry(event: any) {
-  emit("select", event.data);
+function selectEntry(event: DataTableRowSelectEvent) {
+  const entry = event.data as Entry;
+  entry.viewed = true;
+  emit("select", entry);
 }
 
-defineExpose({
-  refresh: loadEntries,
+// ========== Filter BEGIN ==========
+
+const tableFilters = ref<DataTableFilterMeta>({
+  id: { value: undefined, matchMode: FilterMatchMode.IN },
 });
 
-onMounted(() => {
-  loadEntries();
-});
+watch(
+  () => filter,
+  async (filter) => {
+    let entry_ids = await api.filter(filter);
+    console.debug("Filtered entries", entry_ids);
+    if (Array.isArray(entry_ids) && entry_ids.length === 0) {
+      entry_ids = [-1];
+    }
+    (tableFilters.value.id as DataTableFilterMetaData).value = entry_ids;
+  },
+  { deep: true }
+);
+
+// ========== Filter END ==========
+
+function rowClass(data: Entry) {
+  return [{ viewed: data?.viewed }];
+}
 </script>
 
 <template>
+  <FilterPanel :filter="filter" :entries="entries" :tags="tags"></FilterPanel>
+
   <DataTable
+    :value="entries"
+    v-model:selection="activeEntry"
+    v-model:filters="tableFilters"
+    datakey="id"
+    class="h-full w-full text-nowrap"
+    :rowClass="rowClass"
     scrollable
     scrollHeight="flex"
     resizableColumns
-    class="h-full w-full text-nowrap"
+    removableSort
     tableClass="table-fixed"
-    :value="entries"
-    v-model:selection="activeEntry"
     selectionMode="single"
     :metaKeySelection="true"
-    datakey="id"
+    :virtualScrollerOptions="{ itemSize: 32 }"
     @rowSelect="selectEntry"
+    :pt="{
+      tableContainer: {
+        style: 'overflow-x: hidden !important',
+      },
+    }"
   >
     <Column class="w-1/3" field="title" header="标题" sortable>
       <template #body="slotProps">
         <span>{{ slotProps.data.title || slotProps.data.fileName }}</span>
       </template>
     </Column>
-    <Column class="w-1/6" field="artist" header="艺术家" sortable />
-    <Column class="w-1/3" field="album" header="专辑" sortable />
+    <Column class="w-1/6" field="artist" header="艺术家" sortable></Column>
+    <Column class="w-1/3" field="album" header="专辑" sortable></Column>
     <Column class="w-1/6" field="duration" header="时长" sortable>
       <template #body="slotProps">
         <span>{{
@@ -72,7 +125,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-:deep(.p-datatable-table-container) {
-  overflow-x: hidden !important;
+:deep(.viewed) {
+  color: var(--p-surface-300);
 }
 </style>

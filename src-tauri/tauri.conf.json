@@ -15,7 +15,8 @@
         "title": "Sound Manager",
         "width": 1200,
         "height": 800,
-        "theme": "Dark"
+        "theme": "Dark",
+        "dragDropEnabled": false
       }
     ],
     "security": {

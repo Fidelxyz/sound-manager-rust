@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
+
 import { InputText } from "primevue";
 
 import MetadataTagEditor from "./MetadataTagEditor.vue";
 import { formatDuration } from "../utils/utils";
-import { Entry, EntryTag } from "../types";
+import type { Entry, EntryTag } from "../api";
 
 const { entry, allTags } = defineProps<{
   entry?: Entry;

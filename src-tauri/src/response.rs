@@ -99,9 +99,10 @@ impl Serialize for Tag {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Tag", 2)?;
+        let mut state = serializer.serialize_struct("Tag", 3)?;
         state.serialize_field("id", &self.id)?;
         state.serialize_field("name", &self.name)?;
+        state.serialize_field("color", &self.color)?;
         state.end()
     }
 }

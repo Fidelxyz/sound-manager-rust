@@ -3,14 +3,24 @@ import { ref, onMounted } from "vue";
 
 import FolderItem from "./FolderItem.vue";
 
-import { Folder } from "../types";
+import type { Folder, Filter } from "../api";
+import { api } from "../api";
 import { error } from "../utils/message";
-import api from "../api";
+
+const { filter } = defineProps<{
+  filter: Filter;
+}>();
+
+defineExpose({
+  refresh: loadFolders,
+});
 
 const folder = ref<Folder>();
 const selectedFolder = ref<Folder>();
 
-const emit = defineEmits(["select"]);
+onMounted(() => {
+  loadFolders();
+});
 
 async function loadFolders() {
   console.log("Load folders");
@@ -30,21 +40,13 @@ function selectFolder(folder: Folder) {
   if (selectedFolder.value === folder) {
     console.log("Unselect folder:", folder.name);
     selectedFolder.value = undefined;
-    emit("select", undefined);
+    filter.folderPath = "";
     return;
   }
-  selectedFolder.value = folder;
   console.log("Select folder:", folder.name);
-  emit("select", folder);
+  selectedFolder.value = folder;
+  filter.folderPath = folder.path;
 }
-
-defineExpose({
-  refresh: loadFolders,
-});
-
-onMounted(() => {
-  loadFolders();
-});
 </script>
 
 <template>

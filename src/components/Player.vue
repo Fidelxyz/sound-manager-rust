@@ -5,9 +5,9 @@ import { listen } from "@tauri-apps/api/event";
 import { Button, Slider, ToggleSwitch } from "primevue";
 import Waveform from "./Waveform.vue";
 
-import { Entry, PlayerState } from "../types";
+import type { Entry, PlayerState } from "../api";
+import { api } from "../api";
 import { error } from "../utils/message";
-import api from "../api";
 
 const props = defineProps<{
   entry?: Entry;
@@ -21,7 +21,7 @@ const skipSilence = ref(true);
 const volume = ref(50);
 
 // states
-let playing = ref(false);
+const playing = ref(false);
 let playingPos = 0;
 let seeking = false;
 

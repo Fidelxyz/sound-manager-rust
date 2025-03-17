@@ -3,6 +3,7 @@ use super::player::get_format_reader;
 use log::{debug, warn};
 use std::path::Path;
 use std::slice::from_raw_parts;
+use std::sync::{Arc, RwLock};
 use std::thread::spawn;
 
 use symphonia::core::audio::SampleBuffer;
@@ -16,6 +17,8 @@ static SAMPLING_STEP: usize = 512;
 pub enum Error {
     #[error("source not set")]
     SourceNotSet,
+    #[error("source reset")]
+    SourceReset,
     #[error("tracks not found for source: {0}")]
     TracksNotFound(String),
     #[error(transparent)]
@@ -23,21 +26,18 @@ pub enum Error {
 }
 
 pub struct WaveformGenerator {
-    source_path: Option<Box<Path>>,
+    source_path: Arc<RwLock<Option<Box<Path>>>>,
 }
 
 impl WaveformGenerator {
     pub fn new() -> Self {
-        Self { source_path: None }
+        Self {
+            source_path: Arc::new(None.into()),
+        }
     }
 
     pub fn set_source(&mut self, path: Box<Path>) {
-        self.source_path = Some(path);
-    }
-
-    fn get_reader(&self) -> Result<Box<dyn FormatReader>, Error> {
-        let path = self.source_path.as_ref().ok_or(Error::SourceNotSet)?;
-        Ok(get_format_reader(path)?)
+        self.source_path.write().unwrap().replace(path);
     }
 
     fn get_default_track<'reader>(
@@ -47,10 +47,11 @@ impl WaveformGenerator {
         let track = reader.default_track().ok_or_else(|| {
             Error::TracksNotFound(
                 self.source_path
+                    .read()
+                    .unwrap()
                     .as_ref()
                     .unwrap()
-                    .to_str()
-                    .unwrap()
+                    .to_string_lossy()
                     .to_string(),
             )
         })?;
@@ -58,7 +59,10 @@ impl WaveformGenerator {
     }
 
     pub fn prepare_waveform(&self) -> Result<u32, Error> {
-        let reader = self.get_reader()?;
+        let path = self.source_path.read().unwrap();
+        let path = path.as_ref().ok_or(Error::SourceNotSet)?;
+        let reader = get_format_reader(path)?;
+
         let track = self.get_default_track(&reader)?;
         let params = &track.codec_params;
         let n_frames = params.n_frames.unwrap();
@@ -72,7 +76,14 @@ impl WaveformGenerator {
     where
         F: Fn(&[u8]) + Send + 'static,
     {
-        let mut reader = self.get_reader()?;
+        let mut reader = get_format_reader(
+            &self
+                .source_path
+                .write()
+                .unwrap()
+                .take() // source_path is set to None
+                .ok_or(Error::SourceNotSet)?,
+        )?;
 
         let track = self.get_default_track(&reader)?;
         let track_id = track.id;
@@ -90,6 +101,7 @@ impl WaveformGenerator {
         let mut decoder =
             symphonia::default::get_codecs().make(&track.codec_params, &Default::default())?;
 
+        let source_path_ref = self.source_path.clone();
         spawn(move || {
             debug!("start waveform generation");
 
@@ -98,7 +110,12 @@ impl WaveformGenerator {
             let mut available_samples_head = 0;
 
             // Decode all packets, ignoring all decode errors.
-            let result = loop {
+            let result: Error = loop {
+                // if source_path is not None, it means source is reset
+                if !source_path_ref.read().unwrap().is_none() {
+                    break Error::SourceReset;
+                }
+
                 // loop for packets
                 let result = match reader.next_packet() {
                     Err(e) => Err(e), // about to break
@@ -183,12 +200,12 @@ impl WaveformGenerator {
 
                 // handle break
                 if let Err(e) = result {
-                    break e;
+                    break e.into();
                 }
-            };
+            }; // loop
 
             match result {
-                symphonia::core::errors::Error::IoError(e)
+                Error::Symphonia(symphonia::core::errors::Error::IoError(e))
                     if e.kind() == std::io::ErrorKind::UnexpectedEof
                         && e.to_string() == "end of stream" =>
                 {

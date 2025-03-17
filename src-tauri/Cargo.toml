@@ -1,8 +1,8 @@
 [package]
 name = "sound-manager-rust"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Sound Manager"
+authors = ["Fidel Yin"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -19,6 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -26,10 +27,10 @@ thiserror = "2.0.11"
 futures = "0.3.31"
 async-std = "1.13.0"
 log = "0.4.26"
+simplelog = "0.12.2"
 rusqlite = { version = "0.33.0", features = ["bundled"] }
 r2d2_sqlite = "0.26.0"
 r2d2 = "0.8.10"
-tauri-plugin-dialog = "2"
 symphonia = { version = "0.5.4", features = ["mp3", "opt-simd"] }
 rodio = { version = "0.20.1", default-features = false, features = [
     "symphonia-wav",
@@ -37,7 +38,6 @@ rodio = { version = "0.20.1", default-features = false, features = [
     "symphonia-mp3",
     "symphonia-aac",
 ] }
-simplelog = "0.12.2"
 
 [profile.release]
 codegen-units = 1

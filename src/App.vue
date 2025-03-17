@@ -9,9 +9,9 @@ import TagList from "./components/TagList.vue";
 import FolderList from "./components/FolderList.vue";
 import Startup from "./components/Startup.vue";
 
-import type { Entry, EntryTag } from "./types";
+import type { Entry, EntryTag, Filter } from "./api";
+import { api } from "./api";
 import Player from "./components/Player.vue";
-import api from "./api";
 
 const emit = defineEmits(["database-updated"]);
 
@@ -23,18 +23,16 @@ const metadataPanel = ref();
 const loaded = ref(false);
 const activeEntry = ref<Entry>();
 const tags = ref<EntryTag[]>([]);
+const filter = ref<Filter>({
+  search: "",
+  tagIds: [],
+  folderPath: "",
+});
 
 function onDatabaseLoaded() {
   console.log("Database loaded");
   loadTags();
   loaded.value = true;
-}
-
-function onDatabaseUpdated() {
-  console.debug("Database updated");
-  loadTags();
-  audioList.value?.refresh();
-  folderList.value?.refresh();
 }
 
 function onTagsChanged() {
@@ -43,16 +41,8 @@ function onTagsChanged() {
   metadataPanel.value?.refresh();
 }
 
-function onEntrySelected(entry: any) {
+function onEntrySelected(entry: Entry) {
   activeEntry.value = entry;
-}
-
-function onTagSelected(tagId: number) {
-  console.debug("Selected tag:", tagId);
-}
-
-function onFolderSelected(folderId: number) {
-  console.debug("Selected folder:", folderId);
 }
 
 function loadTags() {
@@ -79,26 +69,35 @@ function loadTags() {
           <SplitterPanel class="min-w-2xs" :size="15">
             <Splitter layout="vertical" class="h-full" :gutterSize="2">
               <SplitterPanel :minSize="20">
-                <FolderList ref="folderList" @select="onFolderSelected" />
+                <FolderList ref="folderList" :filter="filter" />
               </SplitterPanel>
 
               <SplitterPanel :minSize="20">
                 <TagList
                   ref="tagList"
                   :tags="tags"
+                  :filter="filter"
                   @tags-changed="onTagsChanged"
-                  @select="onTagSelected"
                 />
               </SplitterPanel>
             </Splitter>
           </SplitterPanel>
 
           <SplitterPanel :size="65">
-            <AudioList ref="audioList" @select="onEntrySelected" />
+            <AudioList
+              ref="audioList"
+              :filter="filter"
+              :tags="tags"
+              @select="onEntrySelected"
+            />
           </SplitterPanel>
 
           <SplitterPanel class="min-w-xs" :size="20">
-            <MetadataPanel ref="metadataPanel" :entry="activeEntry" :allTags="tags" />
+            <MetadataPanel
+              ref="metadataPanel"
+              :entry="activeEntry"
+              :allTags="tags"
+            />
           </SplitterPanel>
         </Splitter>
       </div>
@@ -116,6 +115,8 @@ function loadTags() {
 @import "tailwindcss";
 @import "tailwindcss-primeui";
 @import "primeicons/primeicons.css";
+@import "./assets/variables.css";
+@import "./assets/global.css";
 
 html {
   user-select: none !important;

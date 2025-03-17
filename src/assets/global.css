@@ -1,0 +1,57 @@
+@import "./variables.css";
+
+.tag-color-0 {
+	color: var(--tag-color-0) !important;
+}
+.tag-color-1 {
+	color: var(--tag-color-1) !important;
+}
+.tag-color-2 {
+	color: var(--tag-color-2) !important;
+}
+.tag-color-3 {
+	color: var(--tag-color-3) !important;
+}
+.tag-color-4 {
+	color: var(--tag-color-4) !important;
+}
+.tag-color-5 {
+	color: var(--tag-color-5) !important;
+}
+.tag-color-6 {
+	color: var(--tag-color-6) !important;
+}
+.tag-color-7 {
+	color: var(--tag-color-7) !important;
+}
+.tag-color-8 {
+	color: var(--tag-color-8) !important;
+}
+
+.tag-bg-0 {
+	background-color: var(--tag-background-color-0) !important;
+}
+.tag-bg-1 {
+	background-color: var(--tag-background-color-1) !important;
+}
+.tag-bg-2 {
+	background-color: var(--tag-background-color-2) !important;
+}
+.tag-bg-3 {
+	background-color: var(--tag-background-color-3) !important;
+}
+.tag-bg-4 {
+	background-color: var(--tag-background-color-4) !important;
+}
+.tag-bg-5 {
+	background-color: var(--tag-background-color-5) !important;
+}
+.tag-bg-6 {
+	background-color: var(--tag-background-color-6) !important;
+}
+.tag-bg-7 {
+	background-color: var(--tag-background-color-7) !important;
+}
+.tag-bg-8 {
+	background-color: var(--tag-background-color-8) !important;
+}

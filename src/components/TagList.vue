@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 
 import {
   Button,
-  InputText,
-  ContextMenu,
-  useConfirm,
   ConfirmDialog,
+  ContextMenu,
+  IconField,
+  InputIcon,
+  InputText,
+  useConfirm,
 } from "primevue";
+import { type SortableEvent, VueDraggable } from "vue-draggable-plus";
 
-import { EntryTag } from "../types";
+import { type EntryTag, type Filter, api } from "../api";
 import { error } from "../utils/message";
-import api from "../api";
+import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
 
 const emit = defineEmits(["tags-changed"]);
 
-const { tags } = defineProps<{
+const { tags, filter } = defineProps<{
   tags: EntryTag[];
+  filter: Filter;
 }>();
 
 const selectedTagId = ref<number>();
@@ -26,10 +30,14 @@ const editingTagName = ref("");
 
 function selectTag(tagId: number) {
   if (selectedTagId.value === tagId) {
+    console.debug("Unselect tag:", tagId);
     selectedTagId.value = undefined;
+    filter.tagIds = [];
     return;
   }
+  console.debug("Select tag:", tagId);
   selectedTagId.value = tagId;
+  filter.tagIds = [tagId];
 }
 
 function newTag() {
@@ -52,8 +60,8 @@ function completeEditingNewTag() {
 
   api
     .newTag(editingTagName.value)
-    .then((tag) => {
-      tags.push(tag);
+    .then(() => {
+      emit("tags-changed");
     })
     .catch((e) => {
       console.error(e);
@@ -78,9 +86,6 @@ function completeRenameTag() {
   api
     .renameTag(editingTag.value.id, editingTagName.value)
     .then(() => {
-      if (editingTag.value) {
-        editingTag.value.name = editingTagName.value;
-      }
       emit("tags-changed");
     })
     .catch((e) => {
@@ -101,11 +106,71 @@ function completeRenameTag() {
 const confirm = useConfirm();
 const contextMenu = ref();
 const contextMenuSelectedTag = ref<EntryTag>();
-const contextMenuItems = ref([
+const contextMenuItems = ref<MenuItem[]>([
   {
     label: "重命名",
     icon: "pi pi-pencil",
     command: renameTag,
+  },
+  {
+    label: "色彩",
+    icon: "pi pi-palette",
+    items: [
+      {
+        label: "灰色",
+        icon: "pi pi-circle-fill tag-color-0",
+        command: setTagColor,
+        color: 0,
+      },
+      {
+        label: "红色",
+        icon: "pi pi-circle-fill tag-color-1",
+        command: setTagColor,
+        color: 1,
+      },
+      {
+        label: "橙色",
+        icon: "pi pi-circle-fill tag-color-2",
+        command: setTagColor,
+        color: 2,
+      },
+      {
+        label: "黄色",
+        icon: "pi pi-circle-fill tag-color-3",
+        command: setTagColor,
+        color: 3,
+      },
+      {
+        label: "绿色",
+        icon: "pi pi-circle-fill tag-color-4",
+        command: setTagColor,
+        color: 4,
+      },
+      {
+        label: "青色",
+        icon: "pi pi-circle-fill tag-color-5",
+        command: setTagColor,
+        color: 5,
+      },
+      {
+        label: "蓝色",
+        icon: "pi pi-circle-fill tag-color-6",
+        command: setTagColor,
+        color: 6,
+      },
+      {
+        label: "紫色",
+        icon: "pi pi-circle-fill tag-color-7",
+        command: setTagColor,
+        color: 7,
+      },
+      {
+        label: "粉色",
+        icon: "pi pi-circle-fill tag-color-8",
+        command: setTagColor,
+        color: 8,
+      },
+    ],
   },
   {
     label: "删除",
@@ -126,7 +191,7 @@ function renameTag() {
   editingTag.value = tag;
   editingTagName.value = tag.name;
   setTimeout(() => {
-    const input = document.querySelector(".editingtag");
+    const input = document.querySelector(".editing-input");
     if (input) {
       (input as HTMLElement).focus();
     }
@@ -160,7 +225,63 @@ function deleteTag(tag: EntryTag) {
     });
 }
 
+function setTagColor(event: MenuItemCommandEvent) {
+  const tag = contextMenuSelectedTag.value;
+  if (!tag) return;
+  const color: number = event.item.color;
+  console.debug("Set tag color", tag, color);
+  api
+    .setTagColor(tag.id, color)
+    .then(() => {
+      emit("tags-changed");
+    })
+    .catch((e) => {
+      console.error(e);
+      error("设置标签颜色错误", e.message);
+    });
+}
+
 // ========== Context Menu END ==========
+
+// ========== Sortable BEGIN ==========
+
+const draggableTags = ref<EntryTag[]>([]);
+watch(
+  () => tags,
+  (tags) => {
+    draggableTags.value = tags;
+  }
+);
+
+function reorder(event: SortableEvent) {
+  console.debug("Reorder tags", event.oldIndex, event.newIndex);
+  if (event.oldIndex === undefined) {
+    console.error("event.oldIndex is undefined");
+    return;
+  }
+  if (event.newIndex === undefined) {
+    console.error("event.newIndex is undefined");
+    return;
+  }
+  api
+    .reorderTag(tags[event.oldIndex].id, event.newIndex)
+    .then(() => {
+      emit("tags-changed");
+    })
+    .catch((e) => {
+      console.error(e);
+      error("重排序标签错误", e.message);
+    });
+}
+
+function exitEditing() {
+  const input = document.querySelector(".editing-input");
+  if (input) {
+    (input as HTMLElement).blur();
+  }
+}
+
+// ========== Sortable END ==========
 </script>
 
 <template>
@@ -174,35 +295,68 @@ function deleteTag(tag: EntryTag) {
         @click="newTag"
       />
     </div>
-    <ul>
-      <ContextMenu ref="contextMenu" :model="contextMenuItems" />
-      <ConfirmDialog />
-      <li v-for="tag in tags" :key="tag.id" @click.stop="selectTag(tag.id)">
+    <ContextMenu ref="contextMenu" :model="contextMenuItems" />
+    <ConfirmDialog />
+    <VueDraggable
+      class="h-full overflow-auto"
+      v-model="draggableTags"
+      :animation="150"
+      ghostClass="dragging-ghost"
+      filter=".editing-tag"
+      @start="exitEditing"
+      @update="reorder"
+    >
+      <div
+        v-for="tag in draggableTags"
+        :key="tag.id"
+        @click.stop="selectTag(tag.id)"
+      >
         <Button
           v-if="tag.id !== editingTag?.id"
           variant="text"
           class="w-full justify-start!"
           :class="{ active: tag.id === selectedTagId }"
           :label="tag.name"
+          icon="pi pi-tag"
+          :iconClass="`tag-color-${tag.color}`"
           @contextmenu="onTagRightClick($event, tag)"
+          :dt="{
+            label: {
+              font: {
+                weight: 300,
+              },
+            },
+          }"
+          :pt="{
+            label: {
+              class: 'text-surface-100',
+            },
+          }"
         />
-        <InputText
-          v-else
-          v-model="editingTagName"
-          :class="{ editingtag: tag.id === editingTag?.id }"
-          @focusout="completeRenameTag"
-          @keydown.enter="completeRenameTag"
-        />
-      </li>
-      <li v-if="editingNewTag">
+
+        <IconField v-else class="editing-tag">
+          <InputIcon class="pi pi-tag" :class="`tag-color-${tag.color}`" />
+          <InputText
+            v-model="editingTagName"
+            class="editing-input w-full"
+            @focusout="completeRenameTag"
+            @keydown.enter="completeRenameTag"
+          />
+        </IconField>
+      </div>
+
+      <IconField v-if="editingNewTag" class="editing-tag">
+        <InputIcon class="pi pi-tag" />
         <InputText
           id="new-tag"
           v-model="editingTagName"
+          icon="pi pi-tag"
+          class="editing-input w-full"
           v-on:focusout="completeEditingNewTag"
           v-on:keydown.enter="completeEditingNewTag"
         />
-      </li>
-    </ul>
+      </IconField>
+    </VueDraggable>
   </div>
 </template>
 
@@ -211,8 +365,8 @@ button.active {
   background: var(--p-button-text-primary-active-background) !important;
 }
 
-:deep(.p-button-label) {
-  font-weight: 300;
-  color: var(--p-surface-100);
+.dragging-ghost {
+  background: var(--p-surface-700);
+  border-radius: var(--p-button-border-radius);
 }
 </style>

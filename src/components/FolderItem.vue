@@ -3,7 +3,7 @@ import type { PropType } from "vue";
 
 import { Button } from "primevue";
 
-import { Folder } from "../types";
+import type { Folder } from "../api";
 
 defineProps({
   folder: {
@@ -35,6 +35,18 @@ const selectFolder = (folder: Folder) => {
       }"
       :label="folder.name"
       @click.stop="selectFolder(folder)"
+      :dt="{
+        label: {
+          font: {
+            weight: 300,
+          },
+        },
+      }"
+      :pt="{
+        label: {
+          class: 'text-surface-100',
+        },
+      }"
     >
     </Button>
   </li>
@@ -51,10 +63,5 @@ const selectFolder = (folder: Folder) => {
 <style scoped>
 button.active {
   background: var(--p-button-text-primary-active-background) !important;
-}
-
-:deep(.p-button-label) {
-  font-weight: 300;
-  color: var(--p-surface-100);
 }
 </style>
