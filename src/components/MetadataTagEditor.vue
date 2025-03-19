@@ -1,22 +1,23 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
 
-import { Tag, Button, Popover, Listbox } from "primevue";
+import { Button, Popover, Tree, type TreeSelectionKeys } from "primevue";
+import type { TreeNode } from "primevue/treenode";
 
-import type { Entry, EntryTag, ErrorKind } from "../api";
+import type { Entry, Tag, ErrorKind } from "../api";
 import { api } from "../api";
 import { error } from "../utils/message";
 
 const { entry, allTags } = defineProps<{
   entry?: Entry;
-  allTags: EntryTag[];
+  allTags: TreeNode[];
 }>();
 
 const popover = ref();
-const listbox = ref();
+const tree = ref();
 
-const tags = ref<EntryTag[]>([]);
-const selectedTag = ref<EntryTag | null>();
+const tags = ref<Tag[]>([]);
+const selectedTag = ref<TreeSelectionKeys>();
 
 watch(() => entry, refresh);
 
@@ -48,21 +49,21 @@ function refresh() {
 function toggleTagSelector(event: MouseEvent) {
   popover.value?.toggle(event);
   setTimeout(() => {
-    if (listbox.value) {
-      listbox.value.$el.querySelector("input")?.focus();
-    }
+    // if (treeSelect.value) {
+    //   treeSelect.value.$el.querySelector("input")?.focus();
+    // }
   }, 0);
 }
 
-function addTag(tag: EntryTag) {
-  if (!entry || !tag) return;
+function addTag(value: TreeSelectionKeys) {
+  if (!entry) return;
 
-  console.log("Add tag", tag);
+  const tagId = Number.parseInt(Object.keys(value)[0]);
+  console.log("Add tag", tagId);
   api
-    .addTagForEntry(entry.id, tag.id)
+    .addTagForEntry(entry.id, tagId)
     .then(() => {
-      console.debug(entry);
-      tags.value.push(tag);
+      refresh();
     })
     .catch((e: ErrorKind) => {
       console.error(e);
@@ -72,7 +73,7 @@ function addTag(tag: EntryTag) {
   popover.value?.hide();
 }
 
-function removeTag(tag: EntryTag) {
+function removeTag(tag: Tag) {
   if (!entry) return;
 
   console.debug("Remove tag", tag);
@@ -89,19 +90,19 @@ function removeTag(tag: EntryTag) {
 }
 
 function onTagSelectorHide() {
-  selectedTag.value = null;
+  selectedTag.value = {};
 }
 </script>
 
 <template>
   <div class="p-inputtext flex flex-wrap items-stretch gap-2 py-2!">
-    <span v-if="tags.length === 0" class="text-surface-400 content-center h-8"
-      >添加标签</span
-    >
+    <span v-if="tags.length === 0" class="text-surface-400 content-center h-8">
+      添加标签
+    </span>
 
-    <Tag
+    <div
       v-for="tag in tags"
-      class="items-center rounded-md! h-8 px-2.5! gap-0.5!"
+      class="flex items-center rounded-md h-8 px-2.5 gap-0.5"
       :class="`tag-bg-${tag.color}`"
     >
       <span class="font-normal ml-0.5">{{ tag.name }}</span>
@@ -113,7 +114,7 @@ function onTagSelectorHide() {
         rounded
         @click="removeTag(tag)"
       />
-    </Tag>
+    </div>
 
     <Button
       icon="pi pi-plus"
@@ -121,23 +122,21 @@ function onTagSelectorHide() {
       @click="toggleTagSelector"
     ></Button>
 
-    <Popover class="tag-selector" ref="popover" dismissable closeOnEscape>
-      <Listbox
-        ref="listbox"
-        v-model="selectedTag"
-        :options="allTags"
-        optionLabel="name"
+    <Popover
+      class="tag-selector"
+      ref="popover"
+      dismissable
+      closeOnEscape
+      @hide="onTagSelectorHide"
+    >
+      <Tree
+        ref="tree"
+        v-model:selectionKeys="selectedTag"
+        :value="allTags"
+        selectionMode="single"
+        class="p-0!"
         filter
-        emptyMessage="无标签"
-        emptyFilterMessage="无匹配标签"
-        @update:modelValue="addTag"
-        @hide="onTagSelectorHide"
-        :dt="{
-          background: 'none',
-          border: {
-            color: 'none',
-          },
-        }"
+        @update:selectionKeys="addTag"
       />
     </Popover>
   </div>

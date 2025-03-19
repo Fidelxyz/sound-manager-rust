@@ -117,8 +117,7 @@ watch(
     if (entry) {
       requestWaveform();
     }
-  },
-  { deep: true }
+  }
 );
 </script>
 

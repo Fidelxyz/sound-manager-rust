@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, computed } from "vue";
 
 import {
   Button,
@@ -8,37 +8,41 @@ import {
   IconField,
   InputIcon,
   InputText,
+  Tree,
+  type TreeSelectionKeys,
   useConfirm,
 } from "primevue";
-import { type SortableEvent, VueDraggable } from "vue-draggable-plus";
+import type { TreeNode } from "primevue/treenode";
 
-import { type EntryTag, type Filter, api } from "../api";
+import type { Tag, Filter } from "../api";
+import { api } from "../api";
 import { error } from "../utils/message";
 import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
 
 const emit = defineEmits(["tags-changed"]);
 
 const { tags, filter } = defineProps<{
-  tags: EntryTag[];
+  tags: TreeNode[];
   filter: Filter;
 }>();
 
-const selectedTagId = ref<number>();
-const editingNewTag = ref(false);
-const editingTag = ref<EntryTag>();
-const editingTagName = ref("");
+const selectedTags = computed({
+  get: () => {
+    const selectionKeys: TreeSelectionKeys = {};
+    for (const tagId of filter.tagIds) {
+      selectionKeys[tagId.toString()] = true;
+    }
+    return selectionKeys;
+  },
+  set: (selectionKeys: TreeSelectionKeys) => {
+    console.debug("Set selected tag", selectionKeys);
+    filter.tagIds = Object.keys(selectionKeys).map((id) => Number.parseInt(id));
+  },
+});
 
-function selectTag(tagId: number) {
-  if (selectedTagId.value === tagId) {
-    console.debug("Unselect tag:", tagId);
-    selectedTagId.value = undefined;
-    filter.tagIds = [];
-    return;
-  }
-  console.debug("Select tag:", tagId);
-  selectedTagId.value = tagId;
-  filter.tagIds = [tagId];
-}
+const editingNewTag = ref(false);
+const editingTag = ref<Tag>();
+const editingTagName = ref("");
 
 function newTag() {
   editingNewTag.value = true;
@@ -105,7 +109,7 @@ function completeRenameTag() {
 
 const confirm = useConfirm();
 const contextMenu = ref();
-const contextMenuSelectedTag = ref<EntryTag>();
+const contextMenuSelectedTag = ref<Tag>();
 const contextMenuItems = ref<MenuItem[]>([
   {
     label: "重命名",
@@ -179,7 +183,7 @@ const contextMenuItems = ref<MenuItem[]>([
   },
 ]);
 
-function onTagRightClick(event: MouseEvent, tag: EntryTag) {
+function onTagRightClick(event: MouseEvent, tag: Tag) {
   contextMenuSelectedTag.value = tag;
   contextMenu.value.show(event);
 }
@@ -212,7 +216,7 @@ function confirmDeleteTag() {
   });
 }
 
-function deleteTag(tag: EntryTag) {
+function deleteTag(tag: Tag) {
   console.debug("Delete tag", tag);
   api
     .deleteTag(tag.id)
@@ -245,35 +249,6 @@ function setTagColor(event: MenuItemCommandEvent) {
 
 // ========== Sortable BEGIN ==========
 
-const draggableTags = ref<EntryTag[]>([]);
-watch(
-  () => tags,
-  (tags) => {
-    draggableTags.value = tags;
-  }
-);
-
-function reorder(event: SortableEvent) {
-  console.debug("Reorder tags", event.oldIndex, event.newIndex);
-  if (event.oldIndex === undefined) {
-    console.error("event.oldIndex is undefined");
-    return;
-  }
-  if (event.newIndex === undefined) {
-    console.error("event.newIndex is undefined");
-    return;
-  }
-  api
-    .reorderTag(tags[event.oldIndex].id, event.newIndex)
-    .then(() => {
-      emit("tags-changed");
-    })
-    .catch((e) => {
-      console.error(e);
-      error("重排序标签错误", e.message);
-    });
-}
-
 function exitEditing() {
   const input = document.querySelector(".editing-input");
   if (input) {
@@ -295,57 +270,39 @@ function exitEditing() {
         @click="newTag"
       />
     </div>
-    <ContextMenu ref="contextMenu" :model="contextMenuItems" />
-    <ConfirmDialog />
-    <VueDraggable
-      class="h-full overflow-auto"
-      v-model="draggableTags"
-      :animation="150"
-      ghostClass="dragging-ghost"
-      filter=".editing-tag"
-      @start="exitEditing"
-      @update="reorder"
-    >
-      <div
-        v-for="tag in draggableTags"
-        :key="tag.id"
-        @click.stop="selectTag(tag.id)"
-      >
-        <Button
-          v-if="tag.id !== editingTag?.id"
-          variant="text"
-          class="w-full justify-start!"
-          :class="{ active: tag.id === selectedTagId }"
-          :label="tag.name"
-          icon="pi pi-tag"
-          :iconClass="`tag-color-${tag.color}`"
-          @contextmenu="onTagRightClick($event, tag)"
-          :dt="{
-            label: {
-              font: {
-                weight: 300,
-              },
-            },
-          }"
-          :pt="{
-            label: {
-              class: 'text-surface-100',
-            },
-          }"
-        />
 
-        <IconField v-else class="editing-tag">
-          <InputIcon class="pi pi-tag" :class="`tag-color-${tag.color}`" />
+    <div class="h-full overflow-auto">
+      <ContextMenu ref="contextMenu" :model="contextMenuItems" />
+      <ConfirmDialog />
+      <Tree
+        class="p-0!"
+        :value="tags"
+        v-model:selectionKeys="selectedTags"
+        selectionMode="single"
+        :pt="{
+          nodeContent: ({ context }) => ({
+            onContextmenu: (event: MouseEvent) => onTagRightClick(event, context.node.data),
+            class: { 'py-0!': context.node.data === editingTag },
+          }),
+        }"
+      >
+        <template #default="{ node }">
+          <span v-if="node.data !== editingTag">
+            {{ node.label }}
+          </span>
+
           <InputText
+            v-else
             v-model="editingTagName"
             class="editing-input w-full"
             @focusout="completeRenameTag"
             @keydown.enter="completeRenameTag"
           />
-        </IconField>
-      </div>
+        </template>
+      </Tree>
 
-      <IconField v-if="editingNewTag" class="editing-tag">
+      <!-- New tag -->
+      <IconField v-if="editingNewTag">
         <InputIcon class="pi pi-tag" />
         <InputText
           id="new-tag"
@@ -356,17 +313,6 @@ function exitEditing() {
           v-on:keydown.enter="completeEditingNewTag"
         />
       </IconField>
-    </VueDraggable>
+    </div>
   </div>
 </template>
-
-<style scoped>
-button.active {
-  background: var(--p-button-text-primary-active-background) !important;
-}
-
-.dragging-ghost {
-  background: var(--p-surface-700);
-  border-radius: var(--p-button-border-radius);
-}
-</style>

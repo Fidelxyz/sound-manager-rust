@@ -2,14 +2,15 @@
 import { ref } from "vue";
 
 import { InputText } from "primevue";
+import type { TreeNode } from "primevue/treenode";
 
 import MetadataTagEditor from "./MetadataTagEditor.vue";
 import { formatDuration } from "../utils/utils";
-import type { Entry, EntryTag } from "../api";
+import type { Entry } from "../api";
 
 const { entry, allTags } = defineProps<{
   entry?: Entry;
-  allTags: EntryTag[];
+  allTags: TreeNode[];
 }>();
 const metadataTagEditor = ref();
 

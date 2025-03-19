@@ -1,4 +1,4 @@
-use super::core::{Entry, Folder, Tag};
+use super::core::{Entry, Folder, Tag, TagNode};
 
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use thiserror::Error;
@@ -103,6 +103,18 @@ impl Serialize for Tag {
         state.serialize_field("id", &self.id)?;
         state.serialize_field("name", &self.name)?;
         state.serialize_field("color", &self.color)?;
+        state.end()
+    }
+}
+
+impl<'a> Serialize for TagNode<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("TagNode", 2)?;
+        state.serialize_field("tag", &self.tag)?;
+        state.serialize_field("children", &self.children)?;
         state.end()
     }
 }

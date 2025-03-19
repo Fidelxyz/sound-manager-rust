@@ -1,31 +1,50 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed } from "vue";
 
-import { InputText, FloatLabel, MultiSelect, Button } from "primevue";
+import {
+  InputText,
+  FloatLabel,
+  TreeSelect,
+  Button,
+  type TreeSelectionKeys,
+} from "primevue";
+import type { TreeNode } from "primevue/treenode";
 
-import type { Filter, Entry, EntryTag } from "../api";
+import type { Filter, Entry } from "../api";
 
 const { filter, entries, tags } = defineProps<{
   filter: Filter;
   entries: Entry[];
-  tags: EntryTag[];
+  tags: TreeNode[];
 }>();
 
-const filterEnabled = ref(false);
+const selectedTags = computed({
+  get: () => {
+    const selectionKeys: TreeSelectionKeys = {};
+    for (const tagId of filter.tagIds) {
+      selectionKeys[tagId.toString()] = { checked: true };
+    }
+    return selectionKeys;
+  },
+  set: (selectionKeys: TreeSelectionKeys) => {
+    const tagIds = [];
+    for (const [tagId, state] of Object.entries(selectionKeys)) {
+      if (state.checked) {
+        tagIds.push(Number.parseInt(tagId));
+      }
+    }
+    filter.tagIds = tagIds;
+  },
+});
+
+const filterEnabled = computed(() => {
+  return filter.search.length > 0 || filter.tagIds.length > 0;
+});
 
 function clearFilter() {
   filter.search = "";
   filter.tagIds = [];
-  filterEnabled.value = false;
 }
-
-watch(
-  () => filter,
-  (filter) => {
-    filterEnabled.value = filter.search.length > 0 || filter.tagIds.length > 0;
-  },
-  { deep: true }
-);
 
 function shuffle() {
   for (let i = entries.length - 1; i >= 0; i--) {
@@ -49,12 +68,11 @@ function shuffle() {
       </FloatLabel>
 
       <FloatLabel variant="on">
-        <MultiSelect
+        <TreeSelect
           id="filter-tags"
-          v-model="filter.tagIds"
+          v-model="selectedTags"
           :options="tags"
-          optionValue="id"
-          optionLabel="name"
+          selectionMode="checkbox"
           class="w-48"
           showClear
         />

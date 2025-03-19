@@ -2,6 +2,7 @@
 import { ref } from "vue";
 
 import { Splitter, SplitterPanel, Toast } from "primevue";
+import type { TreeNode } from "primevue/treenode";
 
 import AudioList from "./components/AudioList.vue";
 import MetadataPanel from "./components/MetadataPanel.vue";
@@ -9,7 +10,7 @@ import TagList from "./components/TagList.vue";
 import FolderList from "./components/FolderList.vue";
 import Startup from "./components/Startup.vue";
 
-import type { Entry, EntryTag, Filter } from "./api";
+import type { Entry, TagNode, Filter } from "./api";
 import { api } from "./api";
 import Player from "./components/Player.vue";
 
@@ -22,7 +23,7 @@ const metadataPanel = ref();
 
 const loaded = ref(false);
 const activeEntry = ref<Entry>();
-const tags = ref<EntryTag[]>([]);
+const tags = ref<TreeNode[]>([]);
 const filter = ref<Filter>({
   search: "",
   tagIds: [],
@@ -49,14 +50,26 @@ function loadTags() {
   console.log("Load tags");
   api
     .getTags()
-    .then((data) => {
-      console.log(data);
-      tags.value = data;
+    .then((tagNodes) => {
+      console.log(tagNodes);
+      tags.value = toTagTree(tagNodes);
     })
     .catch((e) => {
       e("加载标签失败", e.message);
       console.error(e);
     });
+}
+
+function toTagTree(tags: TagNode[]): TreeNode[] {
+  return tags.map((tagNode): TreeNode => {
+    return {
+      key: tagNode.tag.id.toString(),
+      label: tagNode.tag.name,
+      data: tagNode.tag,
+      icon: `pi pi-tag tag-color-${tagNode.tag.color}`,
+      children: toTagTree(tagNode.children),
+    };
+  });
 }
 </script>
 

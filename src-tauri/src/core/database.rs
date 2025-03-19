@@ -1,7 +1,6 @@
-use super::Entry;
-use super::Folder;
+use super::{Entry, Folder, Tag, TagNode};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use futures::executor::block_on;
@@ -40,20 +39,13 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug)]
-pub struct Tag {
-    pub id: i32,
-    pub name: String,
-    pub position: i32,
-    pub color: i32,
-}
-
 pub struct Database {
     pub base_path: Box<Path>,
 
     folder: Folder,
     entries: HashMap<i32, Entry>,
     tags: HashMap<i32, Tag>,
+    root_tag_ids: HashSet<i32>,
 
     db_conn_pool: Pool<SqliteConnectionManager>,
 }
@@ -74,12 +66,14 @@ impl Database {
         let db_conn_pool = r2d2::Pool::new(manager)?;
 
         let (entries, folder) = block_on(Self::read_dir(base_path.clone(), &db_conn_pool))?;
+        let (tags, root_tag_ids) = Self::read_tags(&db_conn_pool)?;
 
         Ok(Self {
             base_path,
             folder,
             entries: Self::read_entries(entries, db_conn_pool.get()?)?,
-            tags: Self::read_tags(&db_conn_pool)?,
+            tags,
+            root_tag_ids,
             db_conn_pool,
         })
     }
@@ -108,8 +102,9 @@ impl Database {
             "CREATE TABLE IF NOT EXISTS tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                position INTEGER NOT NULL,
-                color INTEGER DEFAULT 0
+                color INTEGER DEFAULT 0,
+                parent INTEGER DEFAULT -1,
+                position INTEGER NOT NULL
             )",
             (),
         )?;
@@ -125,12 +120,14 @@ impl Database {
         )?;
 
         let (entries, folder) = block_on(Self::read_dir(base_path.clone(), &db_conn_pool))?;
+        let (tags, root_tag_ids) = Self::read_tags(&db_conn_pool)?;
 
         Ok(Self {
             base_path,
             folder,
             entries: Self::read_entries(entries, db_conn_pool.get()?)?,
-            tags: Self::read_tags(&db_conn_pool)?,
+            tags,
+            root_tag_ids,
             db_conn_pool,
         })
     }
@@ -270,25 +267,44 @@ impl Database {
         Ok(entries)
     }
 
-    pub fn read_tags(db_conn_pool: &Pool<SqliteConnectionManager>) -> Result<HashMap<i32, Tag>> {
+    pub fn read_tags(
+        db_conn_pool: &Pool<SqliteConnectionManager>,
+    ) -> Result<(HashMap<i32, Tag>, HashSet<i32>)> {
         let db = db_conn_pool.get()?;
 
-        let mut stmt = db.prepare("SELECT id, name, position, color FROM tags")?;
-        let tags = stmt
+        let mut stmt = db.prepare("SELECT id, name, parent, position, color FROM tags")?;
+        let mut tags = stmt
             .query_map([], |row| {
                 Ok((
                     row.get(0)?,
                     Tag {
                         id: row.get(0)?,
                         name: row.get(1)?,
-                        position: row.get(2)?,
-                        color: row.get(3)?,
+                        parent_id: row.get(2)?,
+                        position: row.get(3)?,
+                        color: row.get(4)?,
+                        children_ids: HashSet::new(),
                     },
                 ))
             })?
             .collect::<std::result::Result<HashMap<_, _>, _>>()?;
 
-        Ok(tags)
+        // build tree relationship
+        let tag_parent = tags
+            .iter()
+            .map(|(id, tag)| (*id, tag.parent_id))
+            .collect::<Vec<_>>();
+        let mut root_tag_ids = HashSet::new();
+        for (id, parent_id) in tag_parent {
+            if parent_id == -1 {
+                root_tag_ids.insert(id);
+            } else {
+                let parent = tags.get_mut(&parent_id).unwrap();
+                parent.children_ids.insert(id);
+            }
+        }
+
+        Ok((tags, root_tag_ids))
     }
 
     // ========== Folder ==========
@@ -311,10 +327,8 @@ impl Database {
 
     // ========== Tag ==========
 
-    pub fn get_tags(&self) -> Vec<&Tag> {
-        let mut tags = self.tags.values().collect::<Vec<_>>();
-        tags.sort_by_key(|tag| tag.position);
-        tags
+    pub fn get_tags(&self) -> Vec<TagNode> {
+        TagNode::build(&self.tags, &self.root_tag_ids)
     }
 
     pub fn new_tag(&mut self, name: String) -> Result<i32> {
@@ -324,7 +338,7 @@ impl Database {
             return Err(Error::TagAlreadyExists(name));
         }
 
-        let position = self.tags.len() as i32;
+        let position = self.root_tag_ids.len() as i32;
 
         let mut stmt = db.prepare("INSERT INTO tags (name, position) VALUES (?, ?)")?;
         let id = stmt.insert((&name, &position))? as i32;
@@ -333,25 +347,42 @@ impl Database {
             id,
             Tag {
                 id,
-                name,
+                parent_id: -1,
                 position,
+                children_ids: HashSet::new(),
+                name,
                 color: 0,
             },
         );
+        self.root_tag_ids.insert(id);
 
         Ok(id)
     }
 
     pub fn delete_tag(&mut self, tag_id: i32) -> Result<()> {
+        let tag = self
+            .tags
+            .get(&tag_id)
+            .ok_or_else(|| Error::TagNotFound(tag_id))?;
+
         let db = self.db_conn_pool.get()?;
-
-        if !self.tags.contains_key(&tag_id) {
-            return Err(Error::TagNotFound(tag_id));
-        }
-
         db.execute("DELETE FROM tags WHERE id = ?", &[&tag_id])?;
 
+        let parent_id = tag.parent_id;
         self.tags.remove(&tag_id);
+        if parent_id == -1 {
+            self.root_tag_ids.remove(&tag_id);
+        } else {
+            let parent = self
+                .tags
+                .get_mut(&parent_id)
+                .ok_or_else(|| Error::TagNotFound(parent_id))?;
+            parent.children_ids.remove(&tag_id);
+        }
+
+        for entries in self.entries.values_mut() {
+            entries.tag_ids.remove(&tag_id);
+        }
 
         Ok(())
     }
@@ -366,7 +397,7 @@ impl Database {
         let tag = self
             .tags
             .get_mut(&tag_id)
-            .ok_or(Error::TagNotFound(tag_id))?;
+            .ok_or_else(|| Error::TagNotFound(tag_id))?;
 
         db.execute("UPDATE tags SET name = ? WHERE id = ?", (&name, &tag_id))?;
 
@@ -450,7 +481,7 @@ impl Database {
         let entry = self
             .entries
             .get_mut(&entry_id)
-            .ok_or(Error::EntryNotFound(entry_id))?;
+            .ok_or_else(|| Error::EntryNotFound(entry_id))?;
 
         if !self.tags.contains_key(&tag_id) {
             return Err(Error::TagNotFound(tag_id));
@@ -493,7 +524,7 @@ impl Database {
         let entry = self
             .entries
             .get_mut(&entry_id)
-            .ok_or(Error::EntryNotFound(entry_id))?;
+            .ok_or_else(|| Error::EntryNotFound(entry_id))?;
 
         if !entry.tag_ids.contains(&tag_id) {
             return Err(Error::TagNotFoundForEntry(tag_id, entry_id));

@@ -9,8 +9,9 @@ import {
   type DataTableFilterMeta,
   type DataTableFilterMetaData,
 } from "primevue";
+import type { TreeNode } from "primevue/treenode";
 
-import type { Entry, EntryTag, Filter } from "../api";
+import type { Entry, Filter } from "../api";
 import { api } from "../api";
 import { error } from "../utils/message";
 import { formatDuration } from "../utils/utils";
@@ -29,7 +30,7 @@ defineExpose({
 
 const { filter, tags } = defineProps<{
   filter: Filter;
-  tags: EntryTag[];
+  tags: TreeNode[];
 }>();
 
 onMounted(() => {

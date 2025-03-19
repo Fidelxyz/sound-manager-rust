@@ -26,11 +26,15 @@ export type Entry = {
 	viewed?: boolean;
 };
 
-export type EntryTag = {
+export type Tag = {
 	id: number;
 	name: string;
-	position: number;
 	color: number;
+};
+
+export type TagNode = {
+	tag: Tag;
+	children: TagNode[];
 };
 
 export type Folder = {
@@ -63,8 +67,8 @@ export const api = {
 		return invoke<Entry[]>("get_entries");
 	},
 
-	getTags(): Promise<EntryTag[]> {
-		return invoke<EntryTag[]>("get_tags");
+	getTags(): Promise<TagNode[]> {
+		return invoke<TagNode[]>("get_tags");
 	},
 
 	getFolder(): Promise<Folder> {
@@ -91,8 +95,8 @@ export const api = {
 		return invoke<void>("set_tag_color", { tagId, color });
 	},
 
-	getTagsForEntry(entryId: number): Promise<EntryTag[]> {
-		return invoke<EntryTag[]>("get_tags_for_entry", { entryId });
+	getTagsForEntry(entryId: number): Promise<Tag[]> {
+		return invoke<Tag[]>("get_tags_for_entry", { entryId });
 	},
 
 	addTagForEntry(entryId: number, tagId: number): Promise<void> {
