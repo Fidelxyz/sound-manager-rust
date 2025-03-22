@@ -122,7 +122,7 @@ listen<PlayerState>("player_state_updated", (event) => {
     <Waveform :entry="activeEntry" @seek="seek" />
 
     <div class="flex">
-      <div class="flex flex-1 align-center justify-start item-center gap-4">
+      <div class="flex flex-1 align-center justify-start items-center gap-4">
         <label for="auto-play">自动播放</label>
         <ToggleSwitch v-model="autoPlay" inputId="auto-play"></ToggleSwitch>
         <label for="auto-play">跳过无声</label>

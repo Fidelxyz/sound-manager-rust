@@ -10,9 +10,13 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.5.2",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.0.3",
     "@heroicons/vue": "^2.2.0",
     "@primeuix/themes": "^1.0.0",
+    "@primeuix/utils": "^0.5.1",
     "@primevue/core": "^4.3.1",
+    "@primevue/icons": "^4.3.2",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-opener": "^2",

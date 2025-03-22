@@ -8,16 +8,16 @@ import {
   IconField,
   InputIcon,
   InputText,
-  Tree,
   type TreeSelectionKeys,
   useConfirm,
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
+import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
 
 import type { Tag, Filter } from "../api";
 import { api } from "../api";
 import { error } from "../utils/message";
-import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
+import Tree from "./sortabletree";
 
 const emit = defineEmits(["tags-changed"]);
 
@@ -246,17 +246,6 @@ function setTagColor(event: MenuItemCommandEvent) {
 }
 
 // ========== Context Menu END ==========
-
-// ========== Sortable BEGIN ==========
-
-function exitEditing() {
-  const input = document.querySelector(".editing-input");
-  if (input) {
-    (input as HTMLElement).blur();
-  }
-}
-
-// ========== Sortable END ==========
 </script>
 
 <template>

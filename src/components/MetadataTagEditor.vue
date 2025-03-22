@@ -118,7 +118,7 @@ function onTagSelectorHide() {
 
     <Button
       icon="pi pi-plus"
-      class="ml-auto"
+      class="ml-auto size-8!"
       @click="toggleTagSelector"
     ></Button>
 
