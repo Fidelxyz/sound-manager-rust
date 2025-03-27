@@ -180,8 +180,8 @@ export default defineComponent({
           _selectionKeys = !metaKey
             ? {}
             : this.selectionKeys
-            ? { ...this.selectionKeys }
-            : {};
+              ? { ...this.selectionKeys }
+              : {};
         }
 
         _selectionKeys[node.key] = true;
@@ -255,7 +255,7 @@ export default defineComponent({
         searchFields: string[];
         filterText: string;
         strict: boolean;
-      }
+      },
     ) {
       if (node) {
         let matched = false;
@@ -286,13 +286,13 @@ export default defineComponent({
         searchFields,
         filterText,
         strict,
-      }: { searchFields: string[]; filterText: string; strict: boolean }
+      }: { searchFields: string[]; filterText: string; strict: boolean },
     ) {
       let matched = false;
 
       for (const field of searchFields) {
         const fieldValue = String(
-          resolveFieldData(node, field)
+          resolveFieldData(node, field),
         ).toLocaleLowerCase(this.filterLocale);
 
         if (fieldValue.indexOf(filterText) > -1) {

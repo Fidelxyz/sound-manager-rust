@@ -270,7 +270,8 @@ function setTagColor(event: MenuItemCommandEvent) {
         selectionMode="single"
         :pt="{
           nodeContent: ({ context }) => ({
-            onContextmenu: (event: MouseEvent) => onTagRightClick(event, context.node.data),
+            onContextmenu: (event: MouseEvent) =>
+              onTagRightClick(event, context.node.data),
             class: { 'py-0!': context.node.data === editingTag },
           }),
         }"

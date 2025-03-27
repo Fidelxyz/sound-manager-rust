@@ -40,7 +40,7 @@ watch(
     activeEntry.value = { ...entry };
     playingPos = 0;
     if (autoPlay.value) play();
-  }
+  },
 );
 
 onUnmounted(() => {

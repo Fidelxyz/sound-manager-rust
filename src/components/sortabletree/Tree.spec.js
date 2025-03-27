@@ -64,7 +64,7 @@ describe("Tree.vue", () => {
   it("should render icon", ({ expect }) => {
     expect(wrapper.find("span.pi-inbox").exists()).toBeTruthy();
     expect(
-      wrapper.find("span.pi-inbox").classes("p-tree-node-icon")
+      wrapper.find("span.pi-inbox").classes("p-tree-node-icon"),
     ).toBeTruthy();
   });
 

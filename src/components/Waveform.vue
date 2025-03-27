@@ -117,7 +117,7 @@ watch(
     if (entry) {
       requestWaveform();
     }
-  }
+  },
 );
 </script>
 

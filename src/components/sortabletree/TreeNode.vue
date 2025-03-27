@@ -266,7 +266,7 @@ export default defineComponent({
         getAttribute(event.target, '[data-pc-section="nodetogglebutton"]') ||
         getAttribute(
           (event.target as Element).parentElement,
-          '[data-pc-section="nodetogglebutton"]'
+          '[data-pc-section="nodetogglebutton"]',
         )
       ) {
         this.toggleClicked = false;
@@ -354,7 +354,7 @@ export default defineComponent({
         this.focusRowChange(
           nodeElement,
           nodeElement.previousElementSibling,
-          this.findLastVisibleDescendant(nodeElement.previousElementSibling)
+          this.findLastVisibleDescendant(nodeElement.previousElementSibling),
         );
       } else {
         const parentNodeElement = this.getParentNodeElement(nodeElement);
@@ -379,7 +379,7 @@ export default defineComponent({
     onArrowLeft(event: KeyboardEvent) {
       const togglerElement = findSingle(
         event.currentTarget as Element,
-        '[data-pc-section="nodetogglebutton"]'
+        '[data-pc-section="nodetogglebutton"]',
       );
 
       if (this.level === 0 && !this.expanded) {
@@ -393,7 +393,7 @@ export default defineComponent({
       }
 
       const target = this.findBeforeClickableNode(
-        event.currentTarget as Element
+        event.currentTarget as Element,
       );
 
       if (target) {
@@ -412,13 +412,13 @@ export default defineComponent({
     setAllNodesTabIndexes() {
       const nodes = find(
         this.$refs.currentNode.closest('[data-pc-section="rootchildren"]'),
-        '[role="treeitem"]'
+        '[role="treeitem"]',
       );
 
       const hasSelectedNode = [...nodes].some(
         (node) =>
           node.getAttribute("aria-selected") === "true" ||
-          node.getAttribute("aria-checked") === "true"
+          node.getAttribute("aria-checked") === "true",
       );
 
       for (const node of [...nodes]) {
@@ -429,7 +429,7 @@ export default defineComponent({
         const selectedNodes = [...nodes].filter(
           (node) =>
             node.getAttribute("aria-selected") === "true" ||
-            node.getAttribute("aria-checked") === "true"
+            node.getAttribute("aria-checked") === "true",
         );
 
         (selectedNodes[0] as HTMLElement).tabIndex = 0;
@@ -458,7 +458,7 @@ export default defineComponent({
     focusRowChange(
       firstFocusableRow: HTMLElement,
       currentFocusedRow: HTMLElement,
-      lastVisibleDescendant: HTMLElement | null = null
+      lastVisibleDescendant: HTMLElement | null = null,
     ) {
       firstFocusableRow.tabIndex = -1;
       currentFocusedRow.tabIndex = 0;
@@ -500,7 +500,7 @@ export default defineComponent({
     propagateDown(
       node: TreeNode,
       check: boolean,
-      selectionKeys: TreeSelectionKeys
+      selectionKeys: TreeSelectionKeys,
     ) {
       if (check && node.selectable !== false)
         selectionKeys[node.key] = { checked: true, partialChecked: false };
@@ -518,7 +518,7 @@ export default defineComponent({
       let checkedChildCount = 0;
       let childPartialSelected = false;
 
-      for (let child of this.node.children) {
+      for (const child of this.node.children) {
         if (_selectionKeys[child.key] && _selectionKeys[child.key].checked)
           checkedChildCount++;
         else if (
@@ -598,7 +598,7 @@ export default defineComponent({
         event.currentTarget &&
         ((event.currentTarget as Element).isSameNode(event.target) ||
           (event.currentTarget as Element).isSameNode(
-            (event.target as Element).closest('[role="treeitem"]')
+            (event.target as Element).closest('[role="treeitem"]'),
           ))
       );
     },
@@ -637,7 +637,7 @@ export default defineComponent({
         },
         onDrag: (args) => {
           const instruction: Instruction | null = extractInstruction(
-            args.self.data
+            args.self.data,
           );
           console.debug("onDrag", args.self.data.key);
           console.debug(instruction);

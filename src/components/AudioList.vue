@@ -73,7 +73,7 @@ watch(
     }
     (tableFilters.value.id as DataTableFilterMetaData).value = entry_ids;
   },
-  { deep: true }
+  { deep: true },
 );
 
 // ========== Filter END ==========
