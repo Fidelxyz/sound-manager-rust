@@ -15,6 +15,7 @@
     v-bind="level === 1 ? getPTOptions('node') : ptm('nodeChildren')"
   >
     <div
+      ref="nodeContent"
       class="relative"
       :class="cx('nodeContent')"
       @click="onClick"
@@ -135,6 +136,7 @@
         :node="childNode"
         :templates="templates"
         :level="level + 1"
+        :root="root"
         :loadingMode="loadingMode"
         :expandedKeys="expandedKeys"
         @node-toggle="onChildNodeToggle"
@@ -150,7 +152,9 @@
 </template>
 
 <script lang="ts">
+// @ts-nocheck
 import { defineComponent } from "vue";
+import type { PropType } from "vue";
 import { find, findSingle, getAttribute } from "@primeuix/utils/dom";
 import BaseComponent from "@primevue/core/basecomponent";
 import CheckIcon from "@primevue/icons/check";
@@ -160,8 +164,9 @@ import MinusIcon from "@primevue/icons/minus";
 import SpinnerIcon from "@primevue/icons/spinner";
 import Checkbox from "primevue/checkbox";
 import Ripple from "primevue/ripple";
-import type { TreeNode } from "primevue/treenode";
-import type { TreeSelectionKeys } from "./Tree";
+import type Tree from ".";
+import type { TreeNode } from "../sortabletreenode";
+import type { TreeSelectionKeys, TreeExpandedKeys } from "./Tree";
 
 import {
   draggable,
@@ -173,6 +178,7 @@ import {
   type Instruction,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
+import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
 import DropIndicator from "./dropindicator/DropIndicator.vue";
 
 export default defineComponent({
@@ -182,11 +188,11 @@ export default defineComponent({
   emits: ["node-toggle", "node-click", "checkbox-change"],
   props: {
     node: {
-      type: null,
+      type: Object as PropType<TreeNode>,
       default: null,
     },
     expandedKeys: {
-      type: null,
+      type: Object as PropType<TreeExpandedKeys>,
       default: null,
     },
     loadingMode: {
@@ -194,7 +200,7 @@ export default defineComponent({
       default: "mask",
     },
     selectionKeys: {
-      type: null,
+      type: Object as PropType<TreeSelectionKeys>,
       default: null,
     },
     selectionMode: {
@@ -210,6 +216,9 @@ export default defineComponent({
       default: null,
     },
     index: null,
+    root: {
+      type: Object as PropType<TreeNode[]>,
+    },
   },
   data(): {
     nodeTouched: boolean;
@@ -247,7 +256,7 @@ export default defineComponent({
     onChildNodeToggle(node: TreeNode) {
       this.$emit("node-toggle", node);
     },
-    getPTOptions(key) {
+    getPTOptions(key: string) {
       return this.ptm(key, {
         context: {
           node: this.node,
@@ -265,7 +274,7 @@ export default defineComponent({
         this.toggleClicked ||
         getAttribute(event.target, '[data-pc-section="nodetogglebutton"]') ||
         getAttribute(
-          (event.target as Element).parentElement,
+          event.target.parentElement,
           '[data-pc-section="nodetogglebutton"]',
         )
       ) {
@@ -299,7 +308,7 @@ export default defineComponent({
 
       switch (event.code) {
         case "Tab":
-          this.onTabKey(event);
+          this.onTabKey();
           break;
         case "ArrowDown":
           this.onArrowDown(event);
@@ -323,11 +332,10 @@ export default defineComponent({
       }
     },
     onArrowDown(event: KeyboardEvent) {
-      const nodeElement =
-        (event.target as Element).getAttribute("data-pc-section") ===
-        "nodetogglebutton"
-          ? (event.target as Element).closest('[role="treeitem"]')
-          : (event.target as Element);
+      const nodeElement: HTMLElement | null =
+        event.target.getAttribute("data-pc-section") === "nodetogglebutton"
+          ? event.target.closest('[role="treeitem"]')
+          : event.target;
       const listElement = nodeElement?.children[1];
 
       if (listElement) {
@@ -348,7 +356,7 @@ export default defineComponent({
       event.preventDefault();
     },
     onArrowUp(event: KeyboardEvent) {
-      const nodeElement = event.target as Element;
+      const nodeElement = event.target;
 
       if (nodeElement.previousElementSibling) {
         this.focusRowChange(
@@ -369,7 +377,7 @@ export default defineComponent({
     onArrowRight(event: KeyboardEvent) {
       if (this.leaf || this.expanded) return;
 
-      (event.currentTarget as HTMLElement).tabIndex = -1;
+      event.currentTarget.tabIndex = -1;
 
       this.$emit("node-toggle", this.node);
       this.$nextTick(() => {
@@ -378,7 +386,7 @@ export default defineComponent({
     },
     onArrowLeft(event: KeyboardEvent) {
       const togglerElement = findSingle(
-        event.currentTarget as Element,
+        event.currentTarget,
         '[data-pc-section="nodetogglebutton"]',
       );
 
@@ -387,14 +395,12 @@ export default defineComponent({
       }
 
       if (this.expanded && !this.leaf) {
-        (togglerElement as HTMLElement).click();
+        togglerElement.click();
 
         return false;
       }
 
-      const target = this.findBeforeClickableNode(
-        event.currentTarget as Element,
-      );
+      const target = this.findBeforeClickableNode(event.currentTarget);
 
       if (target) {
         this.focusRowChange(event.currentTarget, target);
@@ -422,7 +428,7 @@ export default defineComponent({
       );
 
       for (const node of [...nodes]) {
-        (node as HTMLElement).tabIndex = -1;
+        node.tabIndex = -1;
       }
 
       if (hasSelectedNode) {
@@ -432,12 +438,12 @@ export default defineComponent({
             node.getAttribute("aria-checked") === "true",
         );
 
-        (selectedNodes[0] as HTMLElement).tabIndex = 0;
+        selectedNodes[0].tabIndex = 0;
 
         return;
       }
 
-      ([...nodes][0] as HTMLElement).tabIndex = 0;
+      [...nodes][0].tabIndex = 0;
     },
     setTabIndexForSelectionMode(event: UIEvent, nodeTouched: boolean) {
       if (this.selectionMode !== null) {
@@ -445,13 +451,10 @@ export default defineComponent({
           ...find(this.$refs.currentNode.parentElement, '[role="treeitem"]'),
         ];
 
-        (event.currentTarget as HTMLElement).tabIndex =
-          nodeTouched === false ? -1 : 0;
+        event.currentTarget.tabIndex = nodeTouched === false ? -1 : 0;
 
-        if (
-          elements.every((element) => (element as HTMLElement).tabIndex === -1)
-        ) {
-          (elements[0] as HTMLElement).tabIndex = 0;
+        if (elements.every((element) => element.tabIndex === -1)) {
+          elements[0].tabIndex = 0;
         }
       }
     },
@@ -471,10 +474,7 @@ export default defineComponent({
       if (parentListElement) {
         const prevNodeButton = findSingle(parentListElement, "button");
 
-        if (
-          prevNodeButton &&
-          (prevNodeButton as HTMLElement).style.visibility !== "hidden"
-        ) {
+        if (prevNodeButton && prevNodeButton.style.visibility !== "hidden") {
           return parentListElement;
         }
 
@@ -512,7 +512,11 @@ export default defineComponent({
         }
       }
     },
-    propagateUp(event) {
+    propagateUp(event: {
+      check: boolean;
+      selectionKeys: TreeSelectionKeys;
+      node: TreeNode;
+    }) {
       const check = event.check;
       const _selectionKeys = { ...event.selectionKeys };
       let checkedChildCount = 0;
@@ -528,7 +532,7 @@ export default defineComponent({
           childPartialSelected = true;
       }
 
-      if (check && checkedChildCount === this.node.children.length) {
+      if (check && checkedChildCount === this.node.children?.length) {
         _selectionKeys[this.node.key] = {
           checked: true,
           partialChecked: false,
@@ -541,7 +545,7 @@ export default defineComponent({
         if (
           childPartialSelected ||
           (checkedChildCount > 0 &&
-            checkedChildCount !== this.node.children.length)
+            checkedChildCount !== this.node.children?.length)
         )
           _selectionKeys[this.node.key] = {
             checked: false,
@@ -596,9 +600,9 @@ export default defineComponent({
     isSameNode(event: UIEvent) {
       return (
         event.currentTarget &&
-        ((event.currentTarget as Element).isSameNode(event.target) ||
-          (event.currentTarget as Element).isSameNode(
-            (event.target as Element).closest('[role="treeitem"]'),
+        (event.currentTarget.isSameNode(event.target) ||
+          event.currentTarget.isSameNode(
+            event.target.closest('[role="treeitem"]'),
           ))
       );
     },
@@ -606,41 +610,51 @@ export default defineComponent({
     registerDraggable() {
       // Draggable
       this.unregisterDraggable = draggable({
-        element: this.$refs.currentNode,
+        element: this.$refs.nodeContent,
         getInitialData: () => ({
+          root: this.root,
           key: this.node.key,
+          node: this.node,
+          expanded: this.expanded,
         }),
-        onDragStart: () => {
+        onDragStart: ({ source }) => {
           this.dragging = true;
+          if (source.data.expanded) {
+            this.toggle();
+          }
         },
-        onDrop: () => {
+        onDrop: ({ source }) => {
           this.dragging = false;
+          if (source.data.expanded) {
+            this.toggle();
+          }
         },
       });
       // Drop Target
       this.unregisterDropTarget = dropTargetForElements({
-        element: this.$refs.currentNode,
+        element: this.$refs.nodeContent,
         getData: ({ input, element }) => {
           const data = {
+            root: this.root,
             key: this.node.key,
           };
           return attachInstruction(data, {
             input,
             element,
-            currentLevel: 1, // TODO
+            currentLevel: 1,
             indentPerLevel: 4,
             mode: "standard",
           });
         },
         canDrop: ({ source }) => {
-          return source.data.key !== this.node.key;
-        },
-        onDrag: (args) => {
-          const instruction: Instruction | null = extractInstruction(
-            args.self.data,
+          return (
+            source.data.root === this.root && source.data.key !== this.node.key
           );
-          console.debug("onDrag", args.self.data.key);
-          console.debug(instruction);
+        },
+        onDrag: ({ self, source }) => {
+          const instruction = extractInstruction(self.data);
+          // console.debug("onDrag", self.data.key);
+          // console.debug(instruction);
           this.dropTargetInstruction = instruction;
         },
         onDragLeave: () => {
@@ -651,6 +665,7 @@ export default defineComponent({
         },
       });
     },
+
     // ========== Drag and Drop END ==========
   },
   computed: {

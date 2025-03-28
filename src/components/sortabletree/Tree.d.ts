@@ -576,11 +576,11 @@ export declare type TreeEmits = EmitFn<TreeEmitsOptions>;
  * @group Component
  *
  */
-declare const SortableTree: DefineComponent<TreeProps, TreeSlots, TreeEmits>;
+declare const Tree: DefineComponent<TreeProps, TreeSlots, TreeEmits>;
 
 declare module "vue" {
   export interface GlobalComponents {
-    SortableTree: DefineComponent<TreeProps, TreeSlots, TreeEmits>;
+    Tree: DefineComponent<TreeProps, TreeSlots, TreeEmits>;
   }
 
   interface ComponentCustomProperties {
@@ -590,4 +590,4 @@ declare module "vue" {
   }
 }
 
-export default SortableTree;
+export default Tree;

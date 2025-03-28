@@ -91,7 +91,13 @@ function shuffle() {
     </div>
 
     <div class="flex justify-end ml-auto">
-      <Button icon="pi pi-refresh" label="打乱" size="small" @click="shuffle" />
+      <Button
+        icon="pi pi-refresh"
+        label="打乱"
+        severity="secondary"
+        size="small"
+        @click="shuffle"
+      />
     </div>
   </div>
 </template>

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-// TODO: Update default values
+import { $dt } from "@primeuix/themes";
+
 const {
-  strokeColor = "#579DFF",
+  strokeColor = $dt("primary.color").value.dark.value,
   strokeWidth = "2px",
-  borderRadius = "3px", // TODO: update to border.radius (4px) token
+  borderRadius = "4px",
   indent = "0px",
 } = defineProps<{
   strokeColor?: string;

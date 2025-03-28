@@ -406,55 +406,119 @@ impl Database {
         Ok(())
     }
 
-    pub fn reorder_tag(&mut self, tag_id: i32, new_pos: i32) -> Result<()> {
+    pub fn reorder_tag(&mut self, tag_id: i32, to_parent_id: i32, to_pos: i32) -> Result<()> {
         let tag = self
             .tags
             .get(&tag_id)
             .ok_or_else(|| Error::TagNotFound(tag_id))?;
         let from_pos = tag.position;
+        let from_parent_id = tag.parent_id;
 
-        if tag.position == new_pos {
+        if to_parent_id != -1 && !self.tags.contains_key(&to_parent_id) {
+            return Err(Error::TagNotFound(to_parent_id));
+        }
+
+        // if position is not changed
+        if from_parent_id == to_parent_id && from_pos == to_pos {
             return Ok(());
         }
 
         let mut db = self.db_conn_pool.get()?;
 
-        let tx = db.transaction()?;
-        if from_pos < new_pos {
-            // move downwards
-            tx.execute(
-                "UPDATE tags SET position = position - 1 WHERE id > ? AND id <= ?",
-                (&from_pos, &new_pos),
-            )?;
-        } else {
-            // move upwards
-            tx.execute(
-                "UPDATE tags SET position = position + 1 WHERE id < ? AND id >= ?",
-                (&from_pos, &new_pos),
-            )?;
-        }
-        tx.execute(
-            "UPDATE tags SET position = ? WHERE id = ?",
-            (&new_pos, &tag_id),
-        )?;
-        tx.commit()?;
+        if from_parent_id == to_parent_id {
+            // move tag within the same parent
 
-        if tag.position < new_pos {
-            self.tags
-                .iter_mut()
-                .filter(|(_, t)| t.position > from_pos && t.position <= new_pos)
-                .for_each(|(_, t)| {
-                    t.position -= 1;
-                });
+            // update database
+            let tx = db.transaction()?;
+            if from_pos < to_pos {
+                // move downwards
+                tx.execute("UPDATE tags SET position = position - 1 WHERE parent = ? AND position > ? AND position <= ?", &[&from_parent_id, &from_pos, &to_pos])?;
+            } else {
+                // move upwards
+                tx.execute("UPDATE tags SET position = position + 1 WHERE parent = ? AND position < ? AND position >= ?", &[&from_parent_id, &from_pos, &to_pos])?;
+            }
+            tx.execute(
+                "UPDATE tags SET position = ? WHERE id = ?",
+                &[&to_pos, &tag_id],
+            )?;
+            tx.commit()?;
+
+            // update in-memory data
+            if tag.position < to_pos {
+                self.tags
+                    .iter_mut()
+                    .filter(|(_, t)| {
+                        t.parent_id == from_parent_id
+                            && t.position > from_pos
+                            && t.position <= to_pos
+                    })
+                    .for_each(|(_, t)| {
+                        t.position -= 1;
+                    });
+            } else {
+                self.tags
+                    .iter_mut()
+                    .filter(|(_, t)| {
+                        t.parent_id == from_parent_id
+                            && t.position < from_pos
+                            && t.position >= to_pos
+                    })
+                    .for_each(|(_, t)| {
+                        t.position += 1;
+                    });
+            }
+            self.tags.get_mut(&tag_id).unwrap().position = to_pos;
         } else {
-            self.tags
-                .iter_mut()
-                .filter(|(_, t)| t.position < from_pos && t.position >= new_pos)
-                .for_each(|(_, t)| {
+            // move tag across different parents
+
+            // update database
+            let tx = db.transaction()?;
+            tx.execute(
+                "UPDATE tags SET position = position - 1 WHERE parent = ? AND position > ?",
+                &[&from_parent_id, &from_pos],
+            )?;
+            tx.execute(
+                "UPDATE tags SET position = position + 1 WHERE parent = ? AND position >= ?",
+                &[&to_parent_id, &to_pos],
+            )?;
+            tx.execute(
+                "UPDATE tags SET parent = ?, position = ? WHERE id = ?",
+                &[&to_parent_id, &to_pos, &tag_id],
+            )?;
+            tx.commit()?;
+
+            // update in-memory data
+            for (_, t) in self.tags.iter_mut() {
+                if t.parent_id == from_parent_id && t.position > from_pos {
+                    t.position -= 1;
+                } else if t.parent_id == to_parent_id && t.position >= to_pos {
                     t.position += 1;
-                });
+                }
+            }
+            let tag = self.tags.get_mut(&tag_id).unwrap();
+            tag.parent_id = to_parent_id;
+            tag.position = to_pos;
+
+            if from_parent_id == -1 {
+                self.root_tag_ids.remove(&tag_id);
+            } else {
+                self.tags
+                    .get_mut(&from_parent_id)
+                    .unwrap()
+                    .children_ids
+                    .remove(&tag_id);
+            }
+
+            if to_parent_id == -1 {
+                self.root_tag_ids.insert(tag_id);
+            } else {
+                self.tags
+                    .get_mut(&to_parent_id)
+                    .unwrap()
+                    .children_ids
+                    .insert(tag_id);
+            }
         }
-        self.tags.get_mut(&tag_id).unwrap().position = new_pos;
 
         debug!("tags: {:?}", self.tags);
 

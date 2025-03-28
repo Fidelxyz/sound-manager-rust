@@ -105,6 +105,35 @@ function completeRenameTag() {
     });
 }
 
+function reorderTags({
+  sourceKey,
+  targetParentKey,
+  targetLocation,
+}: {
+  sourceKey: string;
+  targetParentKey: string | null | undefined;
+  targetLocation: number;
+}) {
+  if (targetParentKey === undefined) {
+    console.error("targetParentKey is undefined");
+    return;
+  }
+
+  const tagId = Number.parseInt(sourceKey);
+  const parentId =
+    targetParentKey !== null ? Number.parseInt(targetParentKey) : -1;
+
+  api
+    .reorderTag(tagId, parentId, targetLocation)
+    .then(() => {
+      emit("tags-changed");
+    })
+    .catch((e) => {
+      console.error(e);
+      error("移动标签错误", e.message);
+    });
+}
+
 // ========== Context Menu BEGIN ==========
 
 const confirm = useConfirm();
@@ -268,6 +297,7 @@ function setTagColor(event: MenuItemCommandEvent) {
         :value="tags"
         v-model:selectionKeys="selectedTags"
         selectionMode="single"
+        @node-reorder="reorderTags"
         :pt="{
           nodeContent: ({ context }) => ({
             onContextmenu: (event: MouseEvent) =>

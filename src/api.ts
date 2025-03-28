@@ -87,8 +87,12 @@ export const api = {
     return invoke<void>("rename_tag", { tagId, name });
   },
 
-  reorderTag(tagId: number, newPos: number): Promise<void> {
-    return invoke<void>("reorder_tag", { tagId, newPos });
+  reorderTag(
+    tagId: number,
+    newParentId: number,
+    newPos: number,
+  ): Promise<void> {
+    return invoke<void>("reorder_tag", { tagId, newParentId, newPos });
   },
 
   setTagColor(tagId: number, color: number): Promise<void> {

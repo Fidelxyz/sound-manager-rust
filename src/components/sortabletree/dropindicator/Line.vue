@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
+import { $dt } from "@primeuix/themes";
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 
 const {
   edge,
   gap = "0px",
   indent = "0px",
-  strokeColor = "#579DFF",
+  strokeColor = $dt("primary.color").value.dark.value,
   strokeWidth = "2px",
   type = "terminal",
 } = defineProps<{

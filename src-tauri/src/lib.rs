@@ -140,15 +140,24 @@ async fn rename_tag(tag_id: i32, name: String, state: State<'_, AppData>) -> Res
 }
 
 #[tauri::command]
-async fn reorder_tag(tag_id: i32, new_pos: i32, state: State<'_, AppData>) -> Result<(), Error> {
+async fn reorder_tag(
+    tag_id: i32,
+    new_parent_id: i32,
+    new_pos: i32,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
     trace!(
-        "reorder_tag: tag_id = {:?}, new_pos = {:?}",
+        "reorder_tag: tag_id = {:?}, new_parent_id = {:?}, new_pos = {:?}",
         tag_id,
+        new_parent_id,
         new_pos
     );
 
     let mut database = state.database.write().await;
-    database.as_mut().unwrap().reorder_tag(tag_id, new_pos)?;
+    database
+        .as_mut()
+        .unwrap()
+        .reorder_tag(tag_id, new_parent_id, new_pos)?;
 
     trace!("reorder_tag done");
     Ok(())

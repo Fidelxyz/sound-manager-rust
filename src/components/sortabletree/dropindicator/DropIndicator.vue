@@ -15,12 +15,13 @@ const isBlocked = computed(() => {
   return instruction?.type === "instruction-blocked";
 });
 const indent = computed(() => {
-  if (
-    instruction?.type === "reorder-above" ||
-    instruction?.type === "reorder-below" ||
-    instruction?.type === "make-child"
-  ) {
-    return `${instruction.currentLevel * instruction.indentPerLevel}px`;
+  switch (instruction?.type) {
+    case "reorder-above":
+    case "reorder-below":
+    case "make-child":
+      return `${instruction.currentLevel * instruction.indentPerLevel}px`;
+    case "reparent":
+      return `${instruction.desiredLevel * instruction.indentPerLevel}px`;
   }
 });
 </script>
