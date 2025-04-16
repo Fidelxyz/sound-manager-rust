@@ -5,8 +5,8 @@ import { InputText } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
 import MetadataTagEditor from "./MetadataTagEditor.vue";
-import { formatDuration } from "../utils/utils";
-import type { Entry } from "../api";
+import { formatDuration } from "@/utils/utils";
+import type { Entry } from "@/api";
 
 const { entry, allTags } = defineProps<{
   entry?: Entry;
@@ -26,8 +26,8 @@ defineExpose({
 </script>
 
 <template>
-  <div class="metadata-panel w-full h-full px-6 py-8">
-    <div v-if="entry" class="metadata-content">
+  <div class="w-full h-full px-6 py-8 bg-surface-800">
+    <div v-if="entry" class="*:my-2">
       <InputText class="w-full" v-model="entry.fileName" />
 
       <MetadataTagEditor
@@ -37,26 +37,26 @@ defineExpose({
       />
 
       <table class="w-full border-separate border-spacing-y-2">
-        <tbody>
-          <tr class="metadata-row">
+        <tbody class="*:h-[2.4rem]">
+          <tr>
             <td class="metadata-label">标题</td>
             <td class="metadata-field">
               <InputText v-model="entry.title" />
             </td>
           </tr>
-          <tr class="metadata-row">
+          <tr>
             <td class="metadata-label">艺术家</td>
             <td class="metadata-field">
               <InputText v-model="entry.artist" />
             </td>
           </tr>
-          <tr class="metadata-row">
+          <tr>
             <td class="metadata-label">专辑</td>
             <td class="metadata-field">
               <InputText v-model="entry.album" />
             </td>
           </tr>
-          <tr class="metadata-row">
+          <tr>
             <td class="metadata-label">时长</td>
             <td class="metadata-field">
               {{ entry.duration ? formatDuration(entry.duration) : "" }}
@@ -75,18 +75,6 @@ defineExpose({
 </template>
 
 <style scoped>
-.metadata-panel {
-  background-color: var(--p-surface-800);
-}
-
-.metadata-content > * {
-  margin: 0.5rem 0;
-}
-
-.metadata-row {
-  height: 2.4rem;
-}
-
 .metadata-label {
   width: 20%;
   color: var(--p-surface-400);
@@ -104,11 +92,5 @@ defineExpose({
 :deep(.p-inputtext) {
   color: var(--p-surface-50);
   border-color: transparent;
-}
-
-.tags-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 </style>

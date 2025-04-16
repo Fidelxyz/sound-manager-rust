@@ -4,9 +4,9 @@ import { onMounted, ref, watch } from "vue";
 import { Button, Popover, Tree, type TreeSelectionKeys } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
-import type { Entry, Tag, ErrorKind } from "../api";
-import { api } from "../api";
-import { error } from "../utils/message";
+import type { Entry, Tag, ErrorKind } from "@/api";
+import { api } from "@/api";
+import { error } from "@/utils/message";
 
 const { entry, allTags } = defineProps<{
   entry?: Entry;

@@ -10,7 +10,7 @@ import {
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
-import type { Filter, Entry } from "../api";
+import type { Filter, Entry } from "@/api";
 
 const { filter, entries, tags } = defineProps<{
   filter: Filter;

@@ -152,9 +152,7 @@
 </template>
 
 <script lang="ts">
-// @ts-nocheck
-import { defineComponent } from "vue";
-import type { PropType } from "vue";
+import { defineComponent, type PropType } from "vue";
 import { find, findSingle, getAttribute } from "@primeuix/utils/dom";
 import BaseComponent from "@primevue/core/basecomponent";
 import CheckIcon from "@primevue/icons/check";
@@ -164,8 +162,7 @@ import MinusIcon from "@primevue/icons/minus";
 import SpinnerIcon from "@primevue/icons/spinner";
 import Checkbox from "primevue/checkbox";
 import Ripple from "primevue/ripple";
-import type Tree from ".";
-import type { TreeNode } from "../sortabletreenode";
+import type { TreeNode } from "primevue/treenode";
 import type { TreeSelectionKeys, TreeExpandedKeys } from "./Tree";
 
 import {
@@ -178,7 +175,6 @@ import {
   type Instruction,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
-import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
 import DropIndicator from "./dropindicator/DropIndicator.vue";
 
 export default defineComponent({
@@ -274,7 +270,7 @@ export default defineComponent({
         this.toggleClicked ||
         getAttribute(event.target, '[data-pc-section="nodetogglebutton"]') ||
         getAttribute(
-          event.target.parentElement,
+          event.target?.parentElement,
           '[data-pc-section="nodetogglebutton"]',
         )
       ) {
@@ -332,23 +328,37 @@ export default defineComponent({
       }
     },
     onArrowDown(event: KeyboardEvent) {
-      const nodeElement: HTMLElement | null =
-        event.target.getAttribute("data-pc-section") === "nodetogglebutton"
-          ? event.target.closest('[role="treeitem"]')
-          : event.target;
+      const nodeElement =
+        (event.target as Element | null)?.getAttribute("data-pc-section") ===
+        "nodetogglebutton"
+          ? (event.target as Element | null)?.closest<HTMLElement>(
+              '[role="treeitem"]',
+            )
+          : (event.target as HTMLElement);
       const listElement = nodeElement?.children[1];
 
-      if (listElement) {
-        this.focusRowChange(nodeElement, listElement.children[0]);
-      } else {
-        if (nodeElement?.nextElementSibling) {
-          this.focusRowChange(nodeElement, nodeElement.nextElementSibling);
+      if (nodeElement) {
+        if (listElement) {
+          this.focusRowChange(
+            nodeElement,
+            listElement.children[0] as HTMLElement,
+          );
         } else {
-          const nextSiblingAncestor =
-            this.findNextSiblingOfAncestor(nodeElement);
+          if (nodeElement.nextElementSibling) {
+            this.focusRowChange(
+              nodeElement,
+              nodeElement.nextElementSibling as HTMLElement,
+            );
+          } else {
+            const nextSiblingAncestor =
+              this.findNextSiblingOfAncestor(nodeElement);
 
-          if (nextSiblingAncestor) {
-            this.focusRowChange(nodeElement, nextSiblingAncestor);
+            if (nextSiblingAncestor) {
+              this.focusRowChange(
+                nodeElement,
+                nextSiblingAncestor as HTMLElement,
+              );
+            }
           }
         }
       }
@@ -356,13 +366,16 @@ export default defineComponent({
       event.preventDefault();
     },
     onArrowUp(event: KeyboardEvent) {
-      const nodeElement = event.target;
+      if (!event.target) return;
+      const nodeElement = event.target as HTMLElement;
 
       if (nodeElement.previousElementSibling) {
         this.focusRowChange(
           nodeElement,
-          nodeElement.previousElementSibling,
-          this.findLastVisibleDescendant(nodeElement.previousElementSibling),
+          nodeElement.previousElementSibling as HTMLElement,
+          this.findLastVisibleDescendant(
+            nodeElement.previousElementSibling,
+          ) as HTMLElement,
         );
       } else {
         const parentNodeElement = this.getParentNodeElement(nodeElement);
@@ -377,7 +390,9 @@ export default defineComponent({
     onArrowRight(event: KeyboardEvent) {
       if (this.leaf || this.expanded) return;
 
-      event.currentTarget.tabIndex = -1;
+      if (event.currentTarget) {
+        (event.currentTarget as HTMLElement).tabIndex = -1;
+      }
 
       this.$emit("node-toggle", this.node);
       this.$nextTick(() => {
@@ -385,8 +400,10 @@ export default defineComponent({
       });
     },
     onArrowLeft(event: KeyboardEvent) {
+      if (!event.currentTarget) return;
+
       const togglerElement = findSingle(
-        event.currentTarget,
+        event.currentTarget as Element,
         '[data-pc-section="nodetogglebutton"]',
       );
 
@@ -395,15 +412,22 @@ export default defineComponent({
       }
 
       if (this.expanded && !this.leaf) {
-        togglerElement.click();
+        if (togglerElement !== null) {
+          (togglerElement as HTMLElement).click();
+        }
 
         return false;
       }
 
-      const target = this.findBeforeClickableNode(event.currentTarget);
+      const target = this.findBeforeClickableNode(
+        event.currentTarget as Element,
+      );
 
       if (target) {
-        this.focusRowChange(event.currentTarget, target);
+        this.focusRowChange(
+          event.currentTarget as HTMLElement,
+          target as HTMLElement,
+        );
       }
     },
     onEnterKey(event: KeyboardEvent) {
@@ -416,10 +440,11 @@ export default defineComponent({
       this.setAllNodesTabIndexes();
     },
     setAllNodesTabIndexes() {
-      const nodes = find(
-        this.$refs.currentNode.closest('[data-pc-section="rootchildren"]'),
-        '[role="treeitem"]',
+      const rootChildren = this.$refs.currentNode.closest(
+        '[data-pc-section="rootchildren"]',
       );
+      if (!rootChildren) return;
+      const nodes = find(rootChildren, '[role="treeitem"]');
 
       const hasSelectedNode = [...nodes].some(
         (node) =>
@@ -428,7 +453,7 @@ export default defineComponent({
       );
 
       for (const node of [...nodes]) {
-        node.tabIndex = -1;
+        (node as HTMLElement).tabIndex = -1;
       }
 
       if (hasSelectedNode) {
@@ -438,20 +463,25 @@ export default defineComponent({
             node.getAttribute("aria-checked") === "true",
         );
 
-        selectedNodes[0].tabIndex = 0;
+        (selectedNodes[0] as HTMLElement).tabIndex = 0;
 
         return;
       }
 
-      [...nodes][0].tabIndex = 0;
+      ([...nodes][0] as HTMLElement).tabIndex = 0;
     },
     setTabIndexForSelectionMode(event: UIEvent, nodeTouched: boolean) {
-      if (this.selectionMode !== null) {
-        const elements = [
-          ...find(this.$refs.currentNode.parentElement, '[role="treeitem"]'),
-        ];
+      if (!event.currentTarget) return;
 
-        event.currentTarget.tabIndex = nodeTouched === false ? -1 : 0;
+      if (this.selectionMode !== null) {
+        const parentElement = this.$refs.currentNode.parentElement;
+        if (!parentElement) return;
+        const elements = [
+          ...find(parentElement, '[role="treeitem"]'),
+        ] as HTMLElement[];
+
+        (event.currentTarget as HTMLElement).tabIndex =
+          nodeTouched === false ? -1 : 0;
 
         if (elements.every((element) => element.tabIndex === -1)) {
           elements[0].tabIndex = 0;
@@ -469,12 +499,17 @@ export default defineComponent({
       this.focusNode(lastVisibleDescendant || currentFocusedRow);
     },
     findBeforeClickableNode(node: Element): Element | null {
+      if (!node.previousElementSibling) return null;
+
       const parentListElement = node.closest("ul")?.closest("li");
 
       if (parentListElement) {
         const prevNodeButton = findSingle(parentListElement, "button");
 
-        if (prevNodeButton && prevNodeButton.style.visibility !== "hidden") {
+        if (
+          prevNodeButton &&
+          (prevNodeButton as HTMLElement).style.visibility !== "hidden"
+        ) {
           return parentListElement;
         }
 
@@ -522,14 +557,16 @@ export default defineComponent({
       let checkedChildCount = 0;
       let childPartialSelected = false;
 
-      for (const child of this.node.children) {
-        if (_selectionKeys[child.key] && _selectionKeys[child.key].checked)
-          checkedChildCount++;
-        else if (
-          _selectionKeys[child.key] &&
-          _selectionKeys[child.key].partialChecked
-        )
-          childPartialSelected = true;
+      if (this.node.children) {
+        for (const child of this.node.children) {
+          if (_selectionKeys[child.key] && _selectionKeys[child.key].checked)
+            checkedChildCount++;
+          else if (
+            _selectionKeys[child.key] &&
+            _selectionKeys[child.key].partialChecked
+          )
+            childPartialSelected = true;
+        }
       }
 
       if (check && checkedChildCount === this.node.children?.length) {
@@ -586,6 +623,7 @@ export default defineComponent({
     },
     getParentNodeElement(nodeElement: Element) {
       const parentNodeElement = nodeElement.parentElement?.parentElement;
+      if (!parentNodeElement) return null;
 
       return getAttribute(parentNodeElement, "role") === "treeitem"
         ? parentNodeElement
@@ -598,12 +636,14 @@ export default defineComponent({
       return this.selectionMode === "checkbox";
     },
     isSameNode(event: UIEvent) {
+      if (!event.currentTarget) return null;
       return (
-        event.currentTarget &&
-        (event.currentTarget.isSameNode(event.target) ||
-          event.currentTarget.isSameNode(
-            event.target.closest('[role="treeitem"]'),
-          ))
+        (event.currentTarget as Node).isSameNode(event.target as Node | null) ||
+        (event.currentTarget as Node).isSameNode(
+          (event.target as HTMLElement | null)?.closest(
+            '[role="treeitem"]',
+          ) as Node | null,
+        )
       );
     },
     // ========== Drag and Drop BEGIN ==========
@@ -612,7 +652,7 @@ export default defineComponent({
       this.unregisterDraggable = draggable({
         element: this.$refs.nodeContent,
         getInitialData: () => ({
-          root: this.root,
+          type: "tag",
           key: this.node.key,
           node: this.node,
           expanded: this.expanded,
@@ -635,7 +675,7 @@ export default defineComponent({
         element: this.$refs.nodeContent,
         getData: ({ input, element }) => {
           const data = {
-            root: this.root,
+            type: "tag",
             key: this.node.key,
           };
           return attachInstruction(data, {
@@ -648,13 +688,11 @@ export default defineComponent({
         },
         canDrop: ({ source }) => {
           return (
-            source.data.root === this.root && source.data.key !== this.node.key
+            source.data.type === "tag" && source.data.key !== this.node.key
           );
         },
-        onDrag: ({ self, source }) => {
+        onDrag: ({ self }) => {
           const instruction = extractInstruction(self.data);
-          // console.debug("onDrag", self.data.key);
-          // console.debug(instruction);
           this.dropTargetInstruction = instruction;
         },
         onDragLeave: () => {

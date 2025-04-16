@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 import BaseComponent from "@primevue/core/basecomponent";
 import TreeStyle from "primevue/tree/style";
 

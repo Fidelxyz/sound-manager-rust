@@ -8,9 +8,9 @@ import WaveSurfer from "wavesurfer.js";
 import Timer from "wavesurfer.js/dist/timer.js";
 import Hover from "wavesurfer.js/dist/plugins/hover.esm.js";
 
-import type { Entry, PlayerState } from "../api";
-import { api } from "../api";
-import { PlaybackTimer } from "../utils/playback_timer";
+import type { Entry, PlayerState } from "@/api";
+import { api } from "@/api";
+import { PlaybackTimer } from "@/utils/playback_timer";
 
 const { entry } = defineProps<{
   entry?: Entry;

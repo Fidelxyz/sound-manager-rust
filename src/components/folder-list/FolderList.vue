@@ -3,9 +3,9 @@ import { ref, onMounted } from "vue";
 
 import FolderItem from "./FolderItem.vue";
 
-import type { Folder, Filter } from "../api";
-import { api } from "../api";
-import { error } from "../utils/message";
+import type { Folder, Filter } from "@/api";
+import { api } from "@/api";
+import { error } from "@/utils/message";
 
 const { filter } = defineProps<{
   filter: Filter;
@@ -50,7 +50,7 @@ function selectFolder(folder: Folder) {
 </script>
 
 <template>
-  <div class="w-full h-full p-8">
+  <div class="w-full h-full p-8 bg-surface-800">
     <div class="font-bold p-2">文件夹</div>
     <ul>
       <FolderItem

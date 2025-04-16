@@ -5,8 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { Button } from "primevue";
 
-import { api, type ErrorKind } from "../api";
-import { error } from "../utils/message";
+import { api, type ErrorKind } from "@/api";
+import { error } from "@/utils/message";
 
 const emit = defineEmits(["database-loaded"]);
 

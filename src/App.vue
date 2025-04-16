@@ -4,15 +4,15 @@ import { ref } from "vue";
 import { Splitter, SplitterPanel, Toast } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
-import AudioList from "./components/AudioList.vue";
-import MetadataPanel from "./components/MetadataPanel.vue";
-import TagList from "./components/TagList.vue";
-import FolderList from "./components/FolderList.vue";
+import AudioList from "./components/audio-list/AudioList.vue";
+import MetadataPanel from "./components/metadata-panel/MetadataPanel.vue";
+import TagList from "./components/tag-list/TagList.vue";
+import FolderList from "./components/folder-list/FolderList.vue";
 import Startup from "./components/Startup.vue";
+import Player from "./components/player/Player.vue";
 
-import type { Entry, TagNode, Filter } from "./api";
-import { api } from "./api";
-import Player from "./components/Player.vue";
+import type { Entry, TagNode, Filter } from "@/api";
+import { api } from "@/api";
 
 const emit = defineEmits(["database-updated"]);
 

@@ -4,17 +4,17 @@ import { onMounted, ref, watch } from "vue";
 import { FilterMatchMode } from "@primevue/core/api";
 import {
   Column,
-  DataTable,
   type DataTableRowSelectEvent,
   type DataTableFilterMeta,
   type DataTableFilterMetaData,
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
+import DataTable from "./datatable";
 
-import type { Entry, Filter } from "../api";
-import { api } from "../api";
-import { error } from "../utils/message";
-import { formatDuration } from "../utils/utils";
+import type { Entry, Filter } from "@/api";
+import { api } from "@/api";
+import { error } from "@/utils/message";
+import { formatDuration } from "@/utils/utils";
 import FilterPanel from "./FilterPanel.vue";
 
 const entries = ref<Entry[]>([]);
@@ -53,6 +53,8 @@ function loadEntries() {
 
 function selectEntry(event: DataTableRowSelectEvent) {
   const entry = event.data as Entry;
+  console.debug("Select entry", entry);
+
   entry.viewed = true;
   emit("select", entry);
 }

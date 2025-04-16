@@ -14,10 +14,10 @@ import {
 import type { TreeNode } from "primevue/treenode";
 import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
 
-import type { Tag, Filter } from "../api";
-import { api } from "../api";
-import { error } from "../utils/message";
-import Tree from "./sortabletree";
+import type { Tag, Filter } from "@/api";
+import { api } from "@/api";
+import { error } from "@/utils/message";
+import Tree from "./tree";
 
 const emit = defineEmits(["tags-changed"]);
 
@@ -278,7 +278,7 @@ function setTagColor(event: MenuItemCommandEvent) {
 </script>
 
 <template>
-  <div class="w-full h-full p-8">
+  <div class="w-full h-full p-8 bg-surface-800">
     <div class="flex items-center">
       <div class="mr-auto font-bold p-2">标签</div>
       <Button
@@ -299,6 +299,9 @@ function setTagColor(event: MenuItemCommandEvent) {
         selectionMode="single"
         @node-reorder="reorderTags"
         :pt="{
+          root: {
+            class: 'bg-transparent!',
+          },
           nodeContent: ({ context }) => ({
             onContextmenu: (event: MouseEvent) =>
               onTagRightClick(event, context.node.data),

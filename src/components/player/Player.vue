@@ -5,9 +5,9 @@ import { listen } from "@tauri-apps/api/event";
 import { Button, Slider, ToggleSwitch } from "primevue";
 import Waveform from "./Waveform.vue";
 
-import type { Entry, PlayerState } from "../api";
-import { api } from "../api";
-import { error } from "../utils/message";
+import type { Entry, PlayerState } from "@/api";
+import { api } from "@/api";
+import { error } from "@/utils/message";
 
 const props = defineProps<{
   entry?: Entry;

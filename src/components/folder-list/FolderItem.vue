@@ -3,7 +3,7 @@ import type { PropType } from "vue";
 
 import { Button } from "primevue";
 
-import type { Folder } from "../api";
+import type { Folder } from "@/api";
 
 defineProps({
   folder: {
