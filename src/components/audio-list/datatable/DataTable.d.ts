@@ -960,6 +960,10 @@ export interface DataTableProps<T = any> {
    */
   dataKey?: keyof T | ((item: NoInfer<T>) => string) | undefined;
   /**
+   * Name of the field that used as the drag and drop preview.
+   */
+  dragPreviewKey?: keyof T | ((item: NoInfer<T>) => string) | undefined;
+  /**
    * Number of rows to display per page.
    * @defaultValue 0
    */

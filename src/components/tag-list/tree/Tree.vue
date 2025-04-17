@@ -92,7 +92,7 @@
 
 <script lang="ts">
 import { defineComponent } from "vue";
-import { isFunction, resolveFieldData } from "@primeuix/utils/object";
+import { resolveFieldData } from "@primeuix/utils/object";
 import SearchIcon from "@primevue/icons/search";
 import SpinnerIcon from "@primevue/icons/spinner";
 import IconField from "primevue/iconfield";
@@ -100,12 +100,13 @@ import InputIcon from "primevue/inputicon";
 import InputText from "primevue/inputtext";
 import BaseTree from "./BaseTree.vue";
 import TreeNode from "./TreeNode.vue";
-import type { TreeNode } from "primevue/treenode";
+import type { TreeNode as TreeNodeType } from "primevue/treenode";
 import type { TreeSelectionKeys, TreeState } from "./Tree";
 
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 
 export default defineComponent({
   name: "Tree",
@@ -120,6 +121,7 @@ export default defineComponent({
     "node-unselect",
     "filter",
     "node-reorder",
+    "add-tag-to-entry",
   ],
   data(): TreeState & { unregisterDraggingMonitor: CleanupFn } {
     return {
@@ -140,7 +142,7 @@ export default defineComponent({
     this.unregisterDraggingMonitor();
   },
   methods: {
-    onNodeToggle(node: TreeNode) {
+    onNodeToggle(node: TreeNodeType) {
       const key = node.key;
 
       if (this.d_expandedKeys[key]) {
@@ -157,7 +159,7 @@ export default defineComponent({
     onNodeClick(event: {
       originalEvent: UIEvent;
       nodeTouched: boolean;
-      node: TreeNode;
+      node: TreeNodeType;
     }) {
       if (this.selectionMode != null && event.node.selectable !== false) {
         const metaSelection = event.nodeTouched ? false : this.metaKeySelection;
@@ -171,7 +173,7 @@ export default defineComponent({
     onCheckboxChange(event: {
       selectionKeys: TreeSelectionKeys;
       check: boolean;
-      node: TreeNode;
+      node: TreeNodeType;
     }) {
       this.$emit("update:selectionKeys", event.selectionKeys);
 
@@ -181,7 +183,7 @@ export default defineComponent({
     handleSelectionWithMetaKey(event: {
       originalEvent: UIEvent;
       nodeTouched: boolean;
-      node: TreeNode;
+      node: TreeNodeType;
     }) {
       const originalEvent = event.originalEvent as MouseEvent;
       const node = event.node;
@@ -218,7 +220,7 @@ export default defineComponent({
     handleSelectionWithoutMetaKey(event: {
       selectionKeys: TreeSelectionKeys;
       check: boolean;
-      node: TreeNode;
+      node: TreeNodeType;
     }) {
       const node = event.node;
       const selected = this.isNodeSelected(node);
@@ -255,17 +257,17 @@ export default defineComponent({
     isMultipleSelectionMode() {
       return this.selectionMode === "multiple";
     },
-    isNodeSelected(node: TreeNode) {
+    isNodeSelected(node: TreeNodeType) {
       return this.selectionMode && this.selectionKeys
         ? this.selectionKeys[node.key] === true
         : false;
     },
-    isChecked(node: TreeNode) {
+    isChecked(node: TreeNodeType) {
       return this.selectionKeys
         ? this.selectionKeys[node.key] && this.selectionKeys[node.key].checked
         : false;
     },
-    isNodeLeaf(node: TreeNode) {
+    isNodeLeaf(node: TreeNodeType) {
       return node.leaf === false ? false : !node.children?.length;
     },
     onFilterKeyup(event: KeyboardEvent) {
@@ -279,7 +281,7 @@ export default defineComponent({
       });
     },
     findFilteredNodes(
-      node: TreeNode,
+      node: TreeNodeType,
       paramsWithoutNode: {
         searchFields: string[];
         filterText: string;
@@ -310,7 +312,7 @@ export default defineComponent({
       }
     },
     isFilterMatched(
-      node: TreeNode,
+      node: TreeNodeType,
       {
         searchFields,
         filterText,
@@ -340,53 +342,78 @@ export default defineComponent({
     // ========== Drag and Drop BEGIN ==========
     registerDraggingMonitor() {
       const tree = this;
-      this.unregisterDraggingMonitor = monitorForElements({
-        onDrop({ location, source }) {
-          // console.debug("onDrop", location, source);
-          if (location.current.dropTargets.length === 0) return;
+      this.unregisterDraggingMonitor = combine(
+        monitorForElements({
+          canMonitor: ({ source }) => source.data.type === "tag",
+          onDrop({ location, source }) {
+            // console.debug("onDrop", location, source);
+            if (location.current.dropTargets.length === 0) return;
 
-          const sourceData = source.data;
-          const targetData = location.current.dropTargets[0].data;
-          const instruction = extractInstruction(targetData);
-          // console.debug("onDrop", sourceData.key, targetData.key, instruction);
+            const sourceData = source.data;
+            const targetData = location.current.dropTargets[0].data;
+            const instruction = extractInstruction(targetData);
+            // console.debug("onDrop", sourceData.key, targetData.key, instruction);
 
-          const sourceKey: string = sourceData.key as string;
-          const targetKey: string = targetData.key as string;
+            const sourceKey = sourceData.key as string;
+            const targetKey = targetData.key as string;
 
-          let inserted: {
-            parentKey: string | null | undefined;
-            location: number;
-          };
-          switch (instruction?.type) {
-            case "reorder-above": {
-              const sourceNode = tree.takeNode(sourceKey);
-              inserted = tree.insertNodeAbove(sourceNode, targetKey);
-              break;
+            // take the source node from the tree
+            let sourceNode: TreeNodeType | null = null;
+            if (
+              instruction?.type === "reorder-above" ||
+              instruction?.type === "reorder-below" ||
+              instruction?.type === "make-child"
+            ) {
+              sourceNode = tree.takeNode(sourceKey);
             }
-            case "reorder-below": {
-              const sourceNode = tree.takeNode(sourceKey);
-              inserted = tree.insertNodeBelow(sourceNode, targetKey);
-              break;
-            }
-            case "make-child": {
-              const sourceNode = tree.takeNode(sourceKey);
-              inserted = tree.appendChildNode(sourceNode, targetKey);
-              break;
-            }
-            default:
-              return;
-          }
+            if (!sourceNode) return;
 
-          tree.$emit("node-reorder", {
-            sourceKey: sourceKey,
-            targetParentKey: inserted.parentKey,
-            targetLocation: inserted.location,
-          });
-        },
-      });
+            // insert the source node into the target node
+            let inserted: {
+              parentKey: string | null | undefined;
+              location: number;
+            } | null;
+            switch (instruction?.type) {
+              case "reorder-above":
+                inserted = tree.insertNodeAbove(sourceNode, targetKey);
+                break;
+              case "reorder-below":
+                inserted = tree.insertNodeBelow(sourceNode, targetKey);
+                break;
+              case "make-child":
+                inserted = tree.appendChildNode(sourceNode, targetKey);
+                break;
+              default:
+                return;
+            }
+            if (!inserted) return;
+
+            tree.$emit("node-reorder", {
+              sourceKey: sourceKey,
+              targetParentKey: inserted.parentKey,
+              targetLocation: inserted.location,
+            });
+          },
+        }),
+        monitorForElements({
+          canMonitor: ({ source }) => source.data.type === "entry",
+          onDrop({ location, source }) {
+            // console.debug("onDrop", location, source);
+            if (location.current.dropTargets.length === 0) return;
+
+            const sourceData = source.data;
+            const targetData = location.current.dropTargets[0].data;
+
+            const entryKey = sourceData.key as number;
+            const tagKey = targetData.key as string;
+
+            tree.$emit("add-tag-to-entry", { tagKey, entryKey });
+          },
+        }),
+      );
     },
-    takeNode(key: string): TreeNode | null {
-      const takeNode = (nodes: TreeNode[]): TreeNode | null => {
+    takeNode(key: string): TreeNodeType | null {
+      const takeNode = (nodes: TreeNodeType[]): TreeNodeType | null => {
         for (let i = 0; i < nodes.length; i++) {
           const node = nodes[i];
           if (node.key === key) {
@@ -404,12 +431,12 @@ export default defineComponent({
       return takeNode(this.value);
     },
     insertNodeAbove(
-      node: TreeNode,
+      node: TreeNodeType,
       targetKey: string,
     ): { parentKey: string | null | undefined; location: number } | null {
       const insertNodeAbove = (
-        nodes: TreeNode[],
-        parent?: TreeNode,
+        nodes: TreeNodeType[],
+        parent?: TreeNodeType,
       ): { parentKey: string | null | undefined; location: number } | null => {
         for (let i = 0; i < nodes.length; i++) {
           const current = nodes[i];
@@ -429,12 +456,12 @@ export default defineComponent({
       return insertNodeAbove(this.value);
     },
     insertNodeBelow(
-      node: TreeNode,
+      node: TreeNodeType,
       targetKey: string,
     ): { parentKey: string | null | undefined; location: number } | null {
       const insertNodeBelow = (
-        nodes: TreeNode[],
-        parent?: TreeNode,
+        nodes: TreeNodeType[],
+        parent?: TreeNodeType,
       ): { parentKey: string | null | undefined; location: number } | null => {
         for (let i = 0; i < nodes.length; i++) {
           const current = nodes[i];
@@ -454,11 +481,11 @@ export default defineComponent({
       return insertNodeBelow(this.value);
     },
     appendChildNode(
-      node: TreeNode,
+      node: TreeNodeType,
       targetKey: string,
     ): { parentKey: string | undefined; location: number } | null {
       const appendChildNode = (
-        nodes: TreeNode[],
+        nodes: TreeNodeType[],
       ): { parentKey: string | undefined; location: number } | null => {
         for (let i = 0; i < nodes.length; i++) {
           const current = nodes[i];
@@ -485,10 +512,13 @@ export default defineComponent({
   },
   computed: {
     filteredValue() {
+      if (!this.filterValue) return;
+
       const filteredNodes = [];
-      const searchFields = isFunction(this.filterBy)
-        ? [this.filterBy]
-        : this.filterBy.split(",");
+      const searchFields =
+        this.filterBy instanceof Function
+          ? [this.filterBy]
+          : this.filterBy.split(",");
       const filterText = this.filterValue
         .trim()
         .toLocaleLowerCase(this.filterLocale);

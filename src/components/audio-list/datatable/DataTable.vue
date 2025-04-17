@@ -186,6 +186,7 @@
               :columns="slotProps.columns"
               :first="d_first"
               :dataKey="dataKey"
+              :dragPreviewKey="dragPreviewKey"
               :selection="selection"
               :selectionKeys="d_selectionKeys"
               :selectionMode="selectionMode"
@@ -243,6 +244,7 @@
               :empty="empty"
               :first="d_first"
               :dataKey="dataKey"
+              :dragPreviewKey="dragPreviewKey"
               :selection="selection"
               :selectionKeys="d_selectionKeys"
               :selectionMode="selectionMode"
@@ -488,6 +490,12 @@ export default defineComponent({
   name: "DataTable",
   extends: BaseDataTable,
   inheritAttrs: false,
+  props: {
+    dragPreviewKey: {
+      type: [String, Function],
+      default: null,
+    },
+  },
   emits: [
     "value-change",
     "update:first",
@@ -798,7 +806,7 @@ export default defineComponent({
 
       return data;
     },
-    multisortField(data1, data2, index) {
+    multisortField(data1, data2, index: number) {
       const value1 = resolveFieldData(data1, this.d_multiSortMeta[index].field);
       const value2 = resolveFieldData(data2, this.d_multiSortMeta[index].field);
       const comparer = localeComparator();
@@ -954,7 +962,7 @@ export default defineComponent({
           }
         }
 
-        let matches;
+        let matches: boolean;
 
         if (activeFilters.global) {
           matches = localFiltered
@@ -2013,14 +2021,14 @@ export default defineComponent({
       return null;
     },
     onRowMouseDown(event) {
-      if (
-        getAttribute(event.target, "data-pc-section") ===
-          "reorderablerowhandle" ||
-        getAttribute(event.target.parentElement, "data-pc-section") ===
-          "reorderablerowhandle"
-      )
-        event.currentTarget.draggable = true;
-      else event.currentTarget.draggable = false;
+      // if (
+      //   getAttribute(event.target, "data-pc-section") ===
+      //     "reorderablerowhandle" ||
+      //   getAttribute(event.target.parentElement, "data-pc-section") ===
+      //     "reorderablerowhandle"
+      // )
+      //   event.currentTarget.draggable = true;
+      // else event.currentTarget.draggable = false;
     },
     onRowDragStart(e) {
       const event = e.originalEvent;
@@ -2033,6 +2041,15 @@ export default defineComponent({
     onRowDragOver(e) {
       const event = e.originalEvent;
       const index = e.index;
+
+      if (
+        getAttribute(event.target, "data-pc-section") !==
+          "reorderablerowhandle" &&
+        getAttribute(event.target.parentElement, "data-pc-section") !==
+          "reorderablerowhandle"
+      ) {
+        return;
+      }
 
       if (this.rowDragging && this.draggedRowIndex !== index) {
         const rowElement = event.currentTarget;
@@ -2106,7 +2123,7 @@ export default defineComponent({
       this.rowDragging = false;
       this.draggedRowIndex = null;
       this.droppedRowIndex = null;
-      event.currentTarget.draggable = false;
+      // event.currentTarget.draggable = false;
     },
     onRowDrop(event) {
       if (this.droppedRowIndex != null) {

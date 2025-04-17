@@ -86,13 +86,14 @@ function rowClass(data: Entry) {
 </script>
 
 <template>
-  <FilterPanel :filter="filter" :entries="entries" :tags="tags"></FilterPanel>
+  <FilterPanel :filter="filter" :entries="entries" :tags="tags" />
 
   <DataTable
     :value="entries"
     v-model:selection="activeEntry"
     v-model:filters="tableFilters"
-    datakey="id"
+    dataKey="id"
+    dragPreviewKey="fileName"
     class="h-full w-full text-nowrap"
     :rowClass="rowClass"
     scrollable

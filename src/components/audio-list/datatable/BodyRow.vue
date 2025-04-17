@@ -61,6 +61,7 @@
     </tr>
     <tr
       v-if="expandableRowGroups ? isRowGroupExpanded : true"
+      ref="row"
       :class="rowClasses"
       :style="rowStyles"
       :tabindex="rowTabindex"
@@ -77,6 +78,8 @@
       @dragleave="onRowDragLeave"
       @dragend="onRowDragEnd"
       @drop="onRowDrop"
+      @vue:mounted="registerDraggable"
+      @vue:unmounted="unregisterDraggable"
       v-bind="getBodyRowPTOptions('bodyRow')"
       :data-p-index="rowIndex"
       :data-p-selectable-row="selectionMode ? true : false"
@@ -187,6 +190,10 @@ import ChevronRightIcon from "@primevue/icons/chevronright";
 import { defineComponent, mergeProps } from "vue";
 import BodyCell from "./BodyCell.vue";
 
+import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
+import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
+
 export default defineComponent({
   name: "BodyRow",
   hostName: "DataTable",
@@ -261,6 +268,10 @@ export default defineComponent({
       default: 0,
     },
     dataKey: {
+      type: [String, Function],
+      default: null,
+    },
+    dragPreviewKey: {
       type: [String, Function],
       default: null,
     },
@@ -357,9 +368,13 @@ export default defineComponent({
       default: null,
     },
   },
-  data() {
+  data(): {
+    d_rowExpanded: boolean;
+    unregisterDraggable: CleanupFn;
+  } {
     return {
       d_rowExpanded: false,
+      unregisterDraggable: () => {},
     };
   },
   watch: {
@@ -410,70 +425,61 @@ export default defineComponent({
     shouldRenderBodyCell(column) {
       const isHidden = this.columnProp(column, "hidden");
 
-      if (this.rowGroupMode && !isHidden) {
-        const field = this.columnProp(column, "field");
-
-        if (this.rowGroupMode === "subheader") {
-          return this.groupRowsBy !== field;
-        } else if (this.rowGroupMode === "rowspan") {
-          if (this.isGrouped(column)) {
-            let prevRowData = this.value[this.rowIndex - 1];
-
-            if (prevRowData) {
-              const currentRowFieldData = resolveFieldData(
-                this.value[this.rowIndex],
-                field,
-              );
-              const previousRowFieldData = resolveFieldData(prevRowData, field);
-
-              return currentRowFieldData !== previousRowFieldData;
-            } else {
-              return true;
-            }
-          } else {
-            return true;
-          }
-        }
-      } else {
+      if (!this.rowGroupMode || isHidden) {
         return !isHidden;
+      }
+
+      const field = this.columnProp(column, "field");
+
+      if (this.rowGroupMode === "subheader") {
+        return this.groupRowsBy !== field;
+      }
+      if (this.rowGroupMode === "rowspan") {
+        if (!this.isGrouped(column)) return true;
+
+        const prevRowData = this.value[this.rowIndex - 1];
+        if (!prevRowData) return true;
+
+        const currentRowFieldData = resolveFieldData(
+          this.value[this.rowIndex],
+          field,
+        );
+        const previousRowFieldData = resolveFieldData(prevRowData, field);
+        return currentRowFieldData !== previousRowFieldData;
       }
     },
     calculateRowGroupSize(column) {
-      if (this.isGrouped(column)) {
-        let index = this.rowIndex;
-        const field = this.columnProp(column, "field");
-        const currentRowFieldData = resolveFieldData(this.value[index], field);
-        let nextRowFieldData = currentRowFieldData;
-        let groupRowSpan = 0;
+      if (!this.isGrouped(column)) return null;
 
-        if (this.d_rowExpanded) groupRowSpan++;
+      let index = this.rowIndex;
+      const field = this.columnProp(column, "field");
+      const currentRowFieldData = resolveFieldData(this.value[index], field);
+      let nextRowFieldData = currentRowFieldData;
+      let groupRowSpan = 0;
 
-        while (currentRowFieldData === nextRowFieldData) {
-          groupRowSpan++;
-          let nextRowData = this.value[++index];
+      if (this.d_rowExpanded) groupRowSpan++;
 
-          if (nextRowData) {
-            nextRowFieldData = resolveFieldData(nextRowData, field);
-          } else {
-            break;
-          }
+      while (currentRowFieldData === nextRowFieldData) {
+        groupRowSpan++;
+        const nextRowData = this.value[++index];
+
+        if (nextRowData) {
+          nextRowFieldData = resolveFieldData(nextRowData, field);
+        } else {
+          break;
         }
-
-        return groupRowSpan === 1 ? null : groupRowSpan;
-      } else {
-        return null;
       }
+
+      return groupRowSpan === 1 ? null : groupRowSpan;
     },
     isGrouped(column) {
       const field = this.columnProp(column, "field");
 
-      if (this.groupRowsBy && field) {
-        if (Array.isArray(this.groupRowsBy))
-          return this.groupRowsBy.indexOf(field) > -1;
-        else return this.groupRowsBy === field;
-      } else {
-        return false;
-      }
+      if (!this.groupRowsBy || !field) return false;
+
+      return Array.isArray(this.groupRowsBy)
+        ? this.groupRowsBy.indexOf(field) > -1
+        : this.groupRowsBy === field;
     },
     findIndexInSelection(data) {
       return this.findIndex(data, this.selection);
@@ -481,7 +487,7 @@ export default defineComponent({
     findIndex(data, collection) {
       let index = -1;
 
-      if (collection && collection.length) {
+      if (collection?.length) {
         for (let i = 0; i < collection.length; i++) {
           if (this.equals(data, collection[i])) {
             index = i;
@@ -595,6 +601,46 @@ export default defineComponent({
 
       return options ? options[option] : null;
     },
+    // ========== Drag and Drop BEGIN ==========
+    registerDraggable() {
+      const draggableArgs: Parameters<typeof draggable>[0] = {
+        element: this.$refs.row,
+        getInitialData: () => ({
+          type: "entry",
+          key: this.dataKey
+            ? resolveFieldData(this.rowData, this.dataKey)
+            : this.rowIndex,
+        }),
+      };
+      if (this.dragPreviewKey) {
+        console.debug(
+          "previewContent",
+          resolveFieldData(this.rowData, this.dragPreviewKey),
+        );
+        draggableArgs.onGenerateDragPreview = ({ nativeSetDragImage }) => {
+          setCustomNativeDragPreview({
+            getOffset: ({ container }) => {
+              const offset = {
+                x: container.offsetWidth / 2,
+                y: container.offsetHeight / 2,
+              };
+              return offset;
+            },
+            render: ({ container }) => {
+              const preview = document.createElement("div");
+              preview.textContent = resolveFieldData(
+                this.rowData,
+                this.dragPreviewKey,
+              );
+              container.appendChild(preview);
+            },
+            nativeSetDragImage,
+          });
+        };
+      }
+      this.unregisterDraggable = draggable(draggableArgs);
+    },
+    // ========== Drag and Drop END ==========
   },
   computed: {
     rowIndex() {
@@ -606,11 +652,11 @@ export default defineComponent({
       return this.rowStyle?.(this.rowData);
     },
     rowClasses() {
-      let rowStyleClass = [];
+      const rowStyleClass = [];
       let columnSelectionMode = null;
 
       if (this.rowClass) {
-        let rowClassValue = this.rowClass(this.rowData);
+        const rowClassValue = this.rowClass(this.rowData);
 
         if (rowClassValue) {
           rowStyleClass.push(rowClassValue);
@@ -618,8 +664,8 @@ export default defineComponent({
       }
 
       if (this.columns) {
-        for (let col of this.columns) {
-          let _selectionMode = this.columnProp(col, "selectionMode");
+        for (const col of this.columns) {
+          const _selectionMode = this.columnProp(col, "selectionMode");
 
           if (isNotEmpty(_selectionMode)) {
             columnSelectionMode = _selectionMode;
@@ -648,110 +694,82 @@ export default defineComponent({
       return -1;
     },
     isRowEditing() {
-      if (this.rowData && this.editingRows) {
-        if (this.dataKey)
-          return this.editingRowKeys
-            ? this.editingRowKeys[
-                resolveFieldData(this.rowData, this.dataKey)
-              ] !== undefined
-            : false;
-        else return this.findIndex(this.rowData, this.editingRows) > -1;
+      if (!this.rowData || !this.editingRows) return false;
+      if (!this.dataKey) {
+        return this.findIndex(this.rowData, this.editingRows) > -1;
       }
+      if (!this.editingRowKeys) return false;
 
-      return false;
+      return (
+        this.editingRowKeys[resolveFieldData(this.rowData, this.dataKey)] !==
+        undefined
+      );
     },
     isRowGroupExpanded() {
-      if (this.expandableRowGroups && this.expandedRowGroups) {
-        const groupFieldValue = resolveFieldData(
-          this.rowData,
-          this.groupRowsBy,
-        );
+      if (!this.expandableRowGroups || !this.expandedRowGroups) return false;
 
-        return this.expandedRowGroups.indexOf(groupFieldValue) > -1;
-      }
-
-      return false;
+      const groupFieldValue = resolveFieldData(this.rowData, this.groupRowsBy);
+      return this.expandedRowGroups.indexOf(groupFieldValue) > -1;
     },
     isSelected() {
-      if (this.rowData && this.selection) {
-        if (this.dataKey) {
-          return this.selectionKeys
-            ? this.selectionKeys[
-                resolveFieldData(this.rowData, this.dataKey)
-              ] !== undefined
-            : false;
-        } else {
-          if (this.selection instanceof Array)
-            return this.findIndexInSelection(this.rowData) > -1;
-          else return this.equals(this.rowData, this.selection);
-        }
-      }
+      if (!this.rowData || !this.selection) return false;
 
-      return false;
-    },
-    isSelectedWithContextMenu() {
-      if (this.rowData && this.contextMenuSelection) {
-        return this.equals(
-          this.rowData,
-          this.contextMenuSelection,
-          this.dataKey,
+      if (this.dataKey) {
+        if (!this.selectionKeys) return false;
+        return (
+          this.selectionKeys[resolveFieldData(this.rowData, this.dataKey)] !==
+          undefined
         );
       }
 
-      return false;
+      return Array.isArray(this.selection)
+        ? this.findIndexInSelection(this.rowData) > -1
+        : this.equals(this.rowData, this.selection);
+    },
+    isSelectedWithContextMenu() {
+      if (!this.rowData || !this.contextMenuSelection) return false;
+
+      return this.equals(this.rowData, this.contextMenuSelection);
     },
     shouldRenderRowGroupHeader() {
       const currentRowFieldData = resolveFieldData(
         this.rowData,
         this.groupRowsBy,
       );
+
       const prevRowData = this.value[this.rowIndex - 1];
+      if (!prevRowData) return true;
 
-      if (prevRowData) {
-        const previousRowFieldData = resolveFieldData(
-          prevRowData,
-          this.groupRowsBy,
-        );
+      const previousRowFieldData = resolveFieldData(
+        prevRowData,
+        this.groupRowsBy,
+      );
 
-        return currentRowFieldData !== previousRowFieldData;
-      } else {
-        return true;
-      }
+      return currentRowFieldData !== previousRowFieldData;
     },
     shouldRenderRowGroupFooter() {
-      if (this.expandableRowGroups && !this.isRowGroupExpanded) {
-        return false;
-      } else {
-        let currentRowFieldData = resolveFieldData(
-          this.rowData,
-          this.groupRowsBy,
-        );
-        let nextRowData = this.value[this.rowIndex + 1];
+      if (this.expandableRowGroups && !this.isRowGroupExpanded) return false;
 
-        if (nextRowData) {
-          let nextRowFieldData = resolveFieldData(
-            nextRowData,
-            this.groupRowsBy,
-          );
+      const currentRowFieldData = resolveFieldData(
+        this.rowData,
+        this.groupRowsBy,
+      );
 
-          return currentRowFieldData !== nextRowFieldData;
-        } else {
-          return true;
-        }
-      }
+      const nextRowData = this.value[this.rowIndex + 1];
+      if (!nextRowData) return true;
+
+      const nextRowFieldData = resolveFieldData(nextRowData, this.groupRowsBy);
+
+      return currentRowFieldData !== nextRowFieldData;
     },
     columnsLength() {
-      if (this.columns) {
-        let hiddenColLength = 0;
+      if (!this.columns) return 0;
 
-        this.columns.forEach((column) => {
-          if (this.columnProp(column, "hidden")) hiddenColLength++;
-        });
-
-        return this.columns.length - hiddenColLength;
+      let hiddenColLength = 0;
+      for (const column of this.columns) {
+        if (this.columnProp(column, "hidden")) hiddenColLength++;
       }
-
-      return 0;
+      return this.columns.length - hiddenColLength;
     },
   },
   components: {

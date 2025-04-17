@@ -14,7 +14,7 @@ import {
 import type { TreeNode } from "primevue/treenode";
 import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
 
-import type { Tag, Filter } from "@/api";
+import type { Tag, Filter, ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 import Tree from "./tree";
@@ -131,6 +131,29 @@ function reorderTags({
     .catch((e) => {
       console.error(e);
       error("移动标签错误", e.message);
+    });
+}
+
+function addTagToEntry({
+  tagKey,
+  entryKey,
+}: {
+  tagKey: string;
+  entryKey: number;
+}) {
+  const tagId = Number.parseInt(tagKey);
+  const entryId = entryKey;
+
+  api
+    .addTagForEntry(entryId, tagId)
+    .then(() => {
+      emit("tags-changed");
+    })
+    .catch((e: ErrorKind) => {
+      if (e.kind === "tagAlreadyExistsForEntry") return;
+
+      console.error(e);
+      error("添加标签到条目错误", e.message);
     });
 }
 
@@ -298,6 +321,7 @@ function setTagColor(event: MenuItemCommandEvent) {
         v-model:selectionKeys="selectedTags"
         selectionMode="single"
         @node-reorder="reorderTags"
+        @add-tag-to-entry="addTagToEntry"
         :pt="{
           root: {
             class: 'bg-transparent!',

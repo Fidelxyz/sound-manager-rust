@@ -21,6 +21,7 @@
           :empty="empty"
           :first="first"
           :dataKey="dataKey"
+          :dragPreviewKey="dragPreviewKey"
           :selection="selection"
           :selectionKeys="selectionKeys"
           :selectionMode="selectionMode"
@@ -86,14 +87,15 @@
   </tbody>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from "vue";
 import { cn } from "@primeuix/utils";
 import { getOuterHeight } from "@primeuix/utils/dom";
 import { resolveFieldData } from "@primeuix/utils/object";
 import BaseComponent from "@primevue/core/basecomponent";
 import BodyRow from "./BodyRow.vue";
 
-export default {
+export default defineComponent({
   name: "TableBody",
   hostName: "DataTable",
   extends: BaseComponent,
@@ -159,6 +161,10 @@ export default {
       default: 0,
     },
     dataKey: {
+      type: [String, Function],
+      default: null,
+    },
+    dragPreviewKey: {
       type: [String, Function],
       default: null,
     },
@@ -275,13 +281,12 @@ export default {
       return this.dataKey ? resolveFieldData(rowData, this.dataKey) : rowIndex;
     },
     updateFrozenRowStickyPosition() {
-      this.$el.style.top =
-        getOuterHeight(this.$el.previousElementSibling) + "px";
+      this.$el.style.top = `${getOuterHeight(this.$el.previousElementSibling)}px`;
     },
     updateFrozenRowGroupHeaderStickyPosition() {
-      let tableHeaderHeight = getOuterHeight(this.$el.previousElementSibling);
+      const tableHeaderHeight = getOuterHeight(this.$el.previousElementSibling);
 
-      this.rowGroupHeaderStyleObject.top = tableHeaderHeight + "px";
+      this.rowGroupHeaderStyleObject.top = `${tableHeaderHeight}px`;
     },
     getVirtualScrollerProp(option, options) {
       options = options || this.virtualScrollerContentProps;
@@ -292,7 +297,7 @@ export default {
       // For VirtualScroller
       const contentRef = this.getVirtualScrollerProp("contentRef");
 
-      contentRef && contentRef(el);
+      contentRef?.(el);
     },
   },
   computed: {
@@ -323,5 +328,5 @@ export default {
   components: {
     DTBodyRow: BodyRow,
   },
-};
+});
 </script>

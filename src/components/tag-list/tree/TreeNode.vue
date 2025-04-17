@@ -686,13 +686,21 @@ export default defineComponent({
             mode: "standard",
           });
         },
-        canDrop: ({ source }) => {
-          return (
-            source.data.type === "tag" && source.data.key !== this.node.key
-          );
-        },
-        onDrag: ({ self }) => {
-          const instruction = extractInstruction(self.data);
+        canDrop: ({ source }) =>
+          (source.data.type === "tag" && source.data.key !== this.node.key) ||
+          source.data.type === "entry",
+        onDrag: ({ self, source }) => {
+          console.debug(source.data.type);
+          let instruction: Instruction | null = null;
+          if (source.data.type === "tag") {
+            instruction = extractInstruction(self.data);
+          } else if (source.data.type === "entry") {
+            instruction = {
+              type: "make-child",
+              currentLevel: 1,
+              indentPerLevel: 4,
+            };
+          }
           this.dropTargetInstruction = instruction;
         },
         onDragLeave: () => {
