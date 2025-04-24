@@ -1,14 +1,22 @@
-use super::{Entry, Folder, Tag, TagNode};
+mod entry;
+mod file_watcher;
+mod filter;
+mod folder;
+mod tag;
 
+pub use entry::Entry;
+pub use filter::Filter;
+pub use folder::Folder;
+pub use tag::{Tag, TagNode};
+
+use file_watcher::notify;
+
+use log::{debug, info, trace, warn};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::{Arc, Mutex, RwLock};
 
-use futures::executor::block_on;
-use futures::future::{join, join_all};
-use log::{debug, warn};
-use r2d2::Pool;
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -19,6 +27,10 @@ pub enum Error {
     DatabaseAlreadyExists(String),
     #[error("entry not found: {0}")]
     EntryNotFound(i32),
+    #[error("entry not found by path: {0}")]
+    EntryNotFoundByPath(String),
+    #[error("folder not found: {0}")]
+    FolderNotFound(String),
     #[error("tag not found: {0}")]
     TagNotFound(i32),
     #[error("tag already exists: {0}")]
@@ -29,31 +41,45 @@ pub enum Error {
     TagAlreadyExistsForEntry(i32, i32),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("path strip prefix error: {0}")]
+    PathStripPrefix(#[from] std::path::StripPrefixError),
     #[error("database error: {0}")]
-    Database(#[from] rusqlite::Error),
-    #[error("r2d2 error: {0}")]
-    R2d2(#[from] r2d2::Error),
+    Rusqlite(#[from] rusqlite::Error),
     #[error("symphonia error: {0}")]
     Symphonia(#[from] symphonia::core::errors::Error),
+    #[error("notify error: {0}")]
+    Notify(#[from] notify::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
 pub struct Database {
-    pub base_path: Box<Path>,
+    pub data: Arc<RwLock<DatabaseData>>,
+    pub db: Arc<Mutex<Connection>>,
 
+    emitter: Arc<dyn DatabaseEmitter + Send + Sync>,
+}
+
+pub struct DatabaseData {
+    base_path: Box<Path>,
     folder: Folder,
     entries: HashMap<i32, Entry>,
+    path_to_entry_id: HashMap<Box<Path>, i32>,
     tags: HashMap<i32, Tag>,
     root_tag_ids: HashSet<i32>,
+}
 
-    db_conn_pool: Pool<SqliteConnectionManager>,
+pub trait DatabaseEmitter {
+    fn on_files_updated(&self);
 }
 
 impl Database {
     // ========== Constructor ==========
 
-    pub fn open(base_path: Box<Path>) -> Result<Database> {
+    pub fn open<E>(base_path: Box<Path>, emitter: E) -> Result<Database>
+    where
+        E: DatabaseEmitter + Send + Sync + 'static,
+    {
         let database_file = base_path.join(".soundmanager.db");
         if !database_file.try_exists()? {
             // if database file does not exist
@@ -62,23 +88,43 @@ impl Database {
             ));
         }
 
-        let manager = SqliteConnectionManager::file(database_file);
-        let db_conn_pool = r2d2::Pool::new(manager)?;
+        let db = Connection::open(database_file)?;
 
-        let (entries, folder) = block_on(Self::read_dir(base_path.clone(), &db_conn_pool))?;
-        let (tags, root_tag_ids) = Self::read_tags(&db_conn_pool)?;
+        let (tags, root_tag_ids) = Self::read_tags(&db)?;
+        let folder = Folder::new(
+            base_path.file_name().unwrap().to_string_lossy().to_string(),
+            Path::new("").into(),
+        );
+        let database = Self {
+            data: Arc::new(
+                DatabaseData {
+                    base_path,
+                    folder,
+                    entries: HashMap::new(),
+                    path_to_entry_id: HashMap::new(),
+                    tags,
+                    root_tag_ids,
+                }
+                .into(),
+            ),
+            db: Arc::new(db.into()),
+            emitter: Arc::new(emitter),
+        };
 
-        Ok(Self {
-            base_path,
-            folder,
-            entries: Self::read_entries(entries, db_conn_pool.get()?)?,
-            tags,
-            root_tag_ids,
-            db_conn_pool,
-        })
+        database
+            .data
+            .write()
+            .unwrap()
+            .scan(&database.db.lock().unwrap())?;
+        database.watch_dir()?;
+
+        Ok(database)
     }
 
-    pub fn create(base_path: Box<Path>) -> Result<Database> {
+    pub fn create<E>(base_path: Box<Path>, emitter: E) -> Result<Database>
+    where
+        E: DatabaseEmitter + Send + Sync + 'static,
+    {
         let database_file = base_path.join(".soundmanager.db");
         if database_file.try_exists()? {
             // if database file already exists
@@ -87,10 +133,7 @@ impl Database {
             ));
         }
 
-        let manager = SqliteConnectionManager::file(database_file);
-        let db_conn_pool = r2d2::Pool::new(manager)?;
-
-        let db = db_conn_pool.get()?;
+        let db = Connection::open(database_file)?;
         db.execute(
             "CREATE TABLE IF NOT EXISTS entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,161 +162,39 @@ impl Database {
             (),
         )?;
 
-        let (entries, folder) = block_on(Self::read_dir(base_path.clone(), &db_conn_pool))?;
-        let (tags, root_tag_ids) = Self::read_tags(&db_conn_pool)?;
-
-        Ok(Self {
-            base_path,
-            folder,
-            entries: Self::read_entries(entries, db_conn_pool.get()?)?,
-            tags,
-            root_tag_ids,
-            db_conn_pool,
-        })
-    }
-
-    async fn read_dir(
-        path: Box<Path>,
-        db_conn_pool: &Pool<SqliteConnectionManager>,
-    ) -> Result<(Vec<Entry>, Folder)> {
-        debug!("Reading directory: {:?}", path);
-
-        let mut futures = Vec::new();
-        let mut entries = Vec::new();
-
-        for dir_entry in path.read_dir()? {
-            let dir_entry = match dir_entry {
-                Ok(dir_entry) => dir_entry,
-                Err(err) => {
-                    warn!("Failed to read directory entry: {:?}", err);
-                    continue;
+        let folder = Folder::new(
+            base_path.file_name().unwrap().to_string_lossy().to_string(),
+            Path::new("").into(),
+        );
+        let database = Self {
+            data: Arc::new(
+                DatabaseData {
+                    base_path,
+                    folder,
+                    entries: HashMap::new(),
+                    path_to_entry_id: HashMap::new(),
+                    tags: HashMap::new(),
+                    root_tag_ids: HashSet::new(),
                 }
-            };
-
-            // Skip hidden files and folders
-            if dir_entry.file_name().to_string_lossy().starts_with(".") {
-                continue;
-            }
-
-            let file_type = match dir_entry.file_type() {
-                Ok(file_type) => file_type,
-                Err(err) => {
-                    warn!("Failed to read file type: {:?}", err);
-                    continue;
-                }
-            };
-
-            if file_type.is_symlink() {
-                todo!("Handle symlink");
-            }
-
-            if file_type.is_dir() {
-                let path = dir_entry.path().as_path().into();
-                futures.push(Self::read_dir(path, db_conn_pool));
-            } else if file_type.is_file() {
-                let path = dir_entry.path();
-                if let Some(ext) = path.extension() {
-                    let ext = ext.to_string_lossy();
-                    if ext == "wav" || ext == "mp3" || ext == "flac" || ext == "ogg" {
-                        entries.push(Entry::new(dir_entry.path().as_path().into()));
-                    }
-                }
-            }
-        }
-
-        let results = join_all(futures).await;
-        let mut sub_folders = Vec::new();
-
-        for result in results {
-            if let Ok((sub_entries, sub_folder)) = result {
-                entries.extend(sub_entries);
-                sub_folders.push(sub_folder);
-            }
-        }
-
-        let name = path.file_name().unwrap().to_string_lossy().to_string();
-
-        Ok((
-            entries,
-            Folder {
-                path,
-                name,
-                sub_folders,
-            },
-        ))
-    }
-
-    fn read_entries(
-        mut entries: Vec<Entry>,
-        db: PooledConnection<SqliteConnectionManager>,
-    ) -> Result<HashMap<i32, Entry>> {
-        debug!("Reading entries");
-
-        // read entries in parallel
-        let futures_read = entries.iter_mut().map(|entry| entry.read());
-
-        // query all entries from database in one batch
-        let future_query = async {
-            let entries = db
-                .prepare("SELECT id, file_path FROM entries")?
-                .query_map([], |row| {
-                    Ok((row.get::<_, String>(1)?, row.get::<_, i32>(0)?))
-                })?
-                .filter_map(|result| result.ok())
-                .collect::<HashMap<_, _>>();
-
-            let entry_tag = db
-                .prepare("SELECT entry_id, tag_id FROM entry_tag")?
-                .query_map([], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)))?
-                .filter_map(|result| result.ok())
-                .collect::<Vec<_>>();
-
-            Ok::<_, Error>((entries, entry_tag))
+                .into(),
+            ),
+            db: Arc::new(db.into()),
+            emitter: Arc::new(emitter),
         };
 
-        // parallelly read and query
-        let (_, query) = block_on(join(join_all(futures_read), future_query));
+        database
+            .data
+            .write()
+            .unwrap()
+            .scan(&database.db.lock().unwrap())?;
+        database.watch_dir()?;
 
-        let (query_entries, query_entry_tag) = query?;
-
-        // match queried rows with entries and perform corresponding actions
-        let mut stmt = db.prepare("INSERT INTO entries (file_path) VALUES (?)")?;
-        for entry in entries.iter_mut() {
-            // find matching entry in queried rows
-            if let Some(path) = entry.path.to_str() {
-                let row = query_entries.get(path);
-                if let Some(id) = row {
-                    // if entry already exists in database, set id
-                    entry.id = *id;
-                } else {
-                    // if entry does not exist in database, insert entry and set id
-                    let id = stmt.insert(&[path])? as i32;
-                    entry.id = id;
-                }
-            }
-        }
-
-        let mut entries = entries
-            .into_iter()
-            .map(|entry| (entry.id, entry))
-            .collect::<HashMap<_, _>>();
-
-        for (entry_id, tag_id) in query_entry_tag {
-            if let Some(entry) = entries.get_mut(&entry_id) {
-                entry.tag_ids.insert(tag_id);
-            }
-        }
-
-        Ok(entries)
+        Ok(database)
     }
 
-    pub fn read_tags(
-        db_conn_pool: &Pool<SqliteConnectionManager>,
-    ) -> Result<(HashMap<i32, Tag>, HashSet<i32>)> {
-        let db = db_conn_pool.get()?;
-
-        let mut stmt = db.prepare("SELECT id, name, parent, position, color FROM tags")?;
-        let mut tags = stmt
+    pub fn read_tags(db: &Connection) -> Result<(HashMap<i32, Tag>, HashSet<i32>)> {
+        let mut tags = db
+            .prepare("SELECT id, name, parent, position, color FROM tags")?
             .query_map([], |row| {
                 Ok((
                     row.get(0)?,
@@ -309,8 +230,266 @@ impl Database {
 
     // ========== Folder ==========
 
-    pub fn get_folder(&self) -> &Folder {
+    // ========== Entry ==========
+
+    // ========== Tag ==========
+
+    // ========== Utils ==========
+}
+
+impl DatabaseData {
+    pub fn to_relative_path(&self, path: &Path) -> Result<Box<Path>> {
+        debug_assert!(path.is_absolute());
+        let relative_path = path.strip_prefix(&self.base_path)?;
+        Ok(relative_path.into())
+    }
+
+    pub fn to_absolute_path(&self, path: &Path) -> Box<Path> {
+        debug_assert!(path.is_relative());
+        let absolute_path = self.base_path.join(path);
+        absolute_path.into()
+    }
+
+    pub fn get_entry_id(&self, path: &Path) -> Option<i32> {
+        debug_assert!(path.is_relative(), "Path must be relative");
+        self.path_to_entry_id.get(path).copied()
+    }
+
+    fn read_dir(
+        folder: &mut Folder,
+        base_path: &Path,
+        path_to_entry: &HashMap<Box<Path>, i32>,
+    ) -> Result<(Vec<i32>, Vec<Box<Path>>)> {
+        info!("Reading directory: {:?}", base_path.join(&folder.path));
+
+        let mut existing_entries = Vec::new();
+        let mut new_entries = Vec::new();
+
+        for dir_entry in base_path.join(&folder.path).read_dir()? {
+            let dir_entry = match dir_entry {
+                Ok(dir_entry) => dir_entry,
+                Err(err) => {
+                    warn!("Failed to read directory entry: {:?}", err);
+                    continue;
+                }
+            };
+
+            let file_name = dir_entry.file_name();
+
+            // Skip hidden files and folders
+            if is_hidden_file(file_name.as_ref()) {
+                continue;
+            }
+
+            let file_type = match dir_entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(err) => {
+                    warn!("Failed to read file type: {:?}", err);
+                    continue;
+                }
+            };
+
+            if file_type.is_dir() {
+                let folder_name = file_name.to_string_lossy();
+                let sub_folder = folder
+                    .sub_folders
+                    .entry(folder_name.to_string())
+                    .or_insert_with(|| {
+                        Folder::new(folder_name.to_string(), folder.path.join(&file_name).into())
+                    });
+
+                match Self::read_dir(sub_folder, base_path, path_to_entry) {
+                    Ok((subdir_existing_entries, subdir_new_entries)) => {
+                        existing_entries.extend(subdir_existing_entries);
+                        new_entries.extend(subdir_new_entries);
+                    }
+                    Err(err) => warn!("Failed to read directory: {:?}", err),
+                };
+            } else if file_type.is_file() && is_audio_file(file_name.as_ref()) {
+                let relative_path = folder.path.join(&file_name);
+                match path_to_entry.get(relative_path.as_path()) {
+                    Some(entry_id) => existing_entries.push(*entry_id),
+                    None => new_entries.push(relative_path.into()),
+                }
+            } else {
+                warn!(
+                    "Failed to read file for path {:?}: unknown directory entry type.",
+                    dir_entry.path()
+                );
+            }
+        }
+
+        Ok((existing_entries, new_entries))
+    }
+
+    fn scan(&mut self, db: &Connection) -> Result<()> {
+        let (existing_entries, new_entries) =
+            Self::read_dir(&mut self.folder, &self.base_path, &self.path_to_entry_id)?;
+
+        let existing_entries: HashSet<i32> = existing_entries.into_iter().collect();
+
+        // remove deleted entries
+        let removed_entries = self
+            .path_to_entry_id
+            .iter()
+            .filter(|(_, entry_id)| !existing_entries.contains(entry_id))
+            .map(|(path, entry_id)| (path.clone(), *entry_id))
+            .collect::<Vec<_>>();
+        for (path, entry_id) in &removed_entries {
+            self.entries.remove(entry_id);
+            self.path_to_entry_id.remove(path);
+        }
+        info!("Removed entries: {:#?}", removed_entries);
+
+        // update existing entries metadata
+        for entry in self.entries.values_mut() {
+            entry.read_file(&self.base_path);
+        }
+
+        // read new entries
+        self.add_entries(new_entries, db)?;
+
+        Ok(())
+    }
+
+    fn scan_dir(&mut self, folder: &mut Folder, db: &Connection) -> Result<()> {
+        let (existing_entries, new_entries) =
+            Self::read_dir(folder, &self.base_path, &self.path_to_entry_id)?;
+
+        let existing_entries: HashSet<i32> = existing_entries.into_iter().collect();
+
+        // remove deleted entries
+        let removed_entries = self
+            .path_to_entry_id
+            .iter()
+            .filter(|(path, entry_id)| {
+                path.starts_with(&folder.path) && !existing_entries.contains(entry_id)
+            })
+            .map(|(path, entry_id)| (path.clone(), *entry_id))
+            .collect::<Vec<_>>();
+        for (path, entry_id) in &removed_entries {
+            self.entries.remove(entry_id);
+            self.path_to_entry_id.remove(path);
+        }
+        info!("Removed entries: {:#?}", removed_entries);
+
+        // update existing entries metadata
+        for entry in self.entries.values_mut() {
+            entry.read_file(&self.base_path);
+        }
+
+        // read new entries
+        self.add_entries(new_entries, db)?;
+
+        Ok(())
+    }
+
+    pub fn scan_folders(&mut self) -> Result<()> {
+        self.folder.scan_folder(&self.base_path)
+    }
+
+    // ========== Folder ==========
+
+    pub fn get_folders(&self) -> &Folder {
         &self.folder
+    }
+
+    fn add_folder(&mut self, path: &Path, db: &Connection) -> Result<()> {
+        debug_assert!(path.is_relative(), "Path must be relative");
+
+        let mut folder = Folder::new(
+            path.file_name().unwrap().to_string_lossy().to_string(),
+            path.into(),
+        );
+        self.scan_dir(&mut folder, db)?;
+        self.folder
+            .insert_sub_folder(path.components().peekable(), folder)?;
+        info!("Added folder: {:?}", path);
+
+        Ok(())
+    }
+
+    fn remove_folder(&mut self, path: &Path) -> Result<()> {
+        debug_assert!(path.is_relative(), "Path must be relative");
+
+        self.folder
+            .remove_sub_folder(path.components().peekable())
+            .ok_or_else(|| Error::FolderNotFound(path.to_string_lossy().to_string()))?;
+
+        info!("Removed folder: {:?}", path);
+
+        // Remove entries in the removed folder
+        let removed_entries = self
+            .path_to_entry_id
+            .iter()
+            .filter(|(entry_path, _)| entry_path.starts_with(path))
+            .map(|(entry_path, entry_id)| (entry_path.clone(), *entry_id))
+            .collect::<Vec<_>>();
+        for (entry_path, entry_id) in &removed_entries {
+            self.entries.remove(entry_id);
+            self.path_to_entry_id.remove(entry_path);
+        }
+        info!("Removed entries: {:#?}", removed_entries);
+
+        Ok(())
+    }
+
+    fn move_folder(&mut self, old_path: &Path, new_path: &Path, db: &Connection) -> Result<()> {
+        debug_assert!(old_path.is_relative(), "Path must be relative");
+        debug_assert!(new_path.is_relative(), "Path must be relative");
+
+        let folder = self
+            .folder
+            .remove_sub_folder(old_path.components().peekable());
+
+        let folder = match folder {
+            // folder exists
+            Some(mut folder) => {
+                folder.path = new_path.into();
+                folder.name = new_path.file_name().unwrap().to_string_lossy().to_string();
+
+                // move entries in the moved folder
+                let moved_entries = self
+                    .path_to_entry_id
+                    .iter()
+                    .filter(|(entry_path, _)| entry_path.starts_with(old_path))
+                    .map(|(entry_path, entry_id)| (entry_path.clone(), *entry_id))
+                    .collect::<Vec<_>>();
+                for (path, entry_id) in moved_entries {
+                    let new_entry_path = new_path.join(path.strip_prefix(old_path).unwrap());
+                    self.entries.get_mut(&entry_id).unwrap().path = new_entry_path.as_path().into();
+                    self.path_to_entry_id.remove(&path);
+                    self.path_to_entry_id
+                        .insert(new_entry_path.as_path().into(), entry_id);
+                    info!("Moved entry {:?} to {:?}", entry_id, new_entry_path);
+                }
+
+                db.execute(
+                    "UPDATE entries
+                    SET file_path = CONCAT(?2, SUBSTRING(file_path, LENGTH(?1) + 1))
+                    WHERE file_path LIKE CONCAT(?1, '%')",
+                    [&old_path.to_string_lossy(), &new_path.to_string_lossy()],
+                )?;
+
+                folder
+            }
+            // folder does not exist
+            None => {
+                let mut folder = Folder::new(
+                    new_path.file_name().unwrap().to_string_lossy().to_string(),
+                    new_path.into(),
+                );
+                self.scan_dir(&mut folder, db)?;
+                folder
+            }
+        };
+
+        self.folder
+            .insert_sub_folder(new_path.components().peekable(), folder)?;
+
+        info!("Moved folder from {:?} to {:?}", old_path, new_path);
+
+        Ok(())
     }
 
     // ========== Entry ==========
@@ -325,23 +504,172 @@ impl Database {
             .ok_or_else(|| Error::EntryNotFound(entry_id))
     }
 
-    // ========== Tag ==========
+    fn add_entries(&mut self, paths: Vec<Box<Path>>, db: &Connection) -> Result<()> {
+        info!("Adding entries: {:#?}", paths);
+
+        debug_assert!(
+            paths.iter().all(|path| path.is_relative()),
+            "All paths must be relative"
+        );
+
+        debug_assert!(
+            paths
+                .iter()
+                .all(|path| !self.path_to_entry_id.contains_key(path)),
+            "All new paths must not exist in the database"
+        );
+
+        // read entries file metadata
+        let mut new_entries = paths
+            .iter()
+            .map(|path| {
+                let mut entry = Entry::new(path.clone());
+                entry.read_file(&self.base_path);
+                entry
+            })
+            .collect::<Vec<_>>();
+
+        // use different strategy for different number of new entries
+        if paths.len() * 4 < self.entries.len() {
+            // small number of new entries
+            trace!("add_entries: small number of new entries: {}", paths.len());
+
+            for entry in new_entries.iter_mut() {
+                let path = entry.path.to_string_lossy();
+
+                let query_entry_id = db
+                    .query_row(
+                        "SELECT id FROM entries WHERE file_path = ?",
+                        [path.as_ref()],
+                        |row| row.get::<_, i32>(0),
+                    )
+                    .optional()?;
+
+                let mut stmt_insert = db.prepare("INSERT INTO entries (file_path) VALUES (?)")?;
+                if let Some(id) = query_entry_id {
+                    // entry exists in database
+                    entry.id = id;
+
+                    entry.tag_ids = db
+                        .prepare("SELECT tag_id FROM entry_tag WHERE entry_id = ?")?
+                        .query_map([&entry.id], |row| row.get::<_, i32>(0))?
+                        .filter_map(|result| result.ok())
+                        .collect();
+                } else {
+                    // entry does not exist in database
+                    let id = stmt_insert.insert([path.as_ref()])? as i32;
+                    entry.id = id;
+                }
+            }
+
+            self.path_to_entry_id.extend(
+                new_entries
+                    .iter()
+                    .map(|entry| (entry.path.clone(), entry.id)),
+            );
+            self.entries
+                .extend(new_entries.into_iter().map(|entry| (entry.id, entry)));
+        } else {
+            // large number of new entries
+            trace!("add_entries: large number of new entries: {}", paths.len());
+
+            // query all entry ids from database in one batch
+            // and store them into a path - entry_id map
+            let query_entry_ids = db
+                .prepare("SELECT id, file_path FROM entries")?
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(1)?, row.get::<_, i32>(0)?))
+                })?
+                .filter_map(|result| result.ok())
+                .collect::<HashMap<String, i32>>();
+
+            // match queried rows with entries and perform corresponding actions
+            let mut stmt_insert = db.prepare("INSERT INTO entries (file_path) VALUES (?)")?;
+            for entry in new_entries.iter_mut() {
+                // find matching entry in queried rows
+                let path = entry.path.to_string_lossy();
+                if let Some(id) = query_entry_ids.get(path.as_ref()) {
+                    // if entry already exists in database, set id
+                    entry.id = *id;
+                } else {
+                    // if entry does not exist in database, insert entry and set id
+                    let id = stmt_insert.insert([path.as_ref()])? as i32;
+                    entry.id = id;
+                }
+            }
+
+            self.path_to_entry_id.extend(
+                new_entries
+                    .iter()
+                    .map(|entry| (entry.path.clone(), entry.id)),
+            );
+            self.entries
+                .extend(new_entries.into_iter().map(|entry| (entry.id, entry)));
+
+            // query all entry_tag rows from database
+            // and store them into a entry_id - tag_id list
+            let query_entry_tags = db
+                .prepare("SELECT entry_id, tag_id FROM entry_tag")?
+                .query_map([], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)))?
+                .filter_map(|result| result.ok())
+                .collect::<Vec<(i32, i32)>>();
+
+            for (entry_id, tag_id) in query_entry_tags {
+                if let Some(entry) = self.entries.get_mut(&entry_id) {
+                    entry.tag_ids.insert(tag_id);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn move_entry(&mut self, entry_id: i32, new_path: Box<Path>, db: &Connection) -> Result<()> {
+        debug_assert!(new_path.is_relative(), "Path must be relative");
+
+        let entry = self.entries.get_mut(&entry_id).expect("Entry not found");
+
+        db.execute(
+            "UPDATE entries SET file_path = ? WHERE id = ?",
+            (&new_path.to_string_lossy(), &entry_id),
+        )?;
+
+        self.path_to_entry_id.remove(&entry.path);
+        self.path_to_entry_id.insert(new_path.clone(), entry.id);
+        entry.path = new_path;
+        entry.file_name = entry
+            .path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        info!("Moved entry {:?} to {:?}", entry_id, entry.path);
+
+        Ok(())
+    }
+
+    fn remove_entry(&mut self, entry_id: i32) {
+        let entry = self.entries.remove(&entry_id).expect("Entry not found");
+        self.path_to_entry_id.remove(&entry.path);
+    }
+
+    // ========= Tag ==========
 
     pub fn get_tags(&self) -> Vec<TagNode> {
         TagNode::build(&self.tags, &self.root_tag_ids)
     }
 
-    pub fn new_tag(&mut self, name: String) -> Result<i32> {
-        let db = self.db_conn_pool.get()?;
-
+    pub fn new_tag(&mut self, name: String, db: &Connection) -> Result<i32> {
         if self.tags.values().any(|tag| tag.name == name) {
             return Err(Error::TagAlreadyExists(name));
         }
 
         let position = self.root_tag_ids.len() as i32;
 
-        let mut stmt = db.prepare("INSERT INTO tags (name, position) VALUES (?, ?)")?;
-        let id = stmt.insert((&name, &position))? as i32;
+        let id = db
+            .prepare("INSERT INTO tags (name, position) VALUES (?, ?)")?
+            .insert((&name, &position))? as i32;
 
         self.tags.insert(
             id,
@@ -359,14 +687,13 @@ impl Database {
         Ok(id)
     }
 
-    pub fn delete_tag(&mut self, tag_id: i32) -> Result<()> {
+    pub fn delete_tag(&mut self, tag_id: i32, db: &Connection) -> Result<()> {
         let tag = self
             .tags
             .get(&tag_id)
             .ok_or_else(|| Error::TagNotFound(tag_id))?;
 
-        let db = self.db_conn_pool.get()?;
-        db.execute("DELETE FROM tags WHERE id = ?", &[&tag_id])?;
+        db.execute("DELETE FROM tags WHERE id = ?", [&tag_id])?;
 
         let parent_id = tag.parent_id;
         self.tags.remove(&tag_id);
@@ -387,9 +714,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn rename_tag(&mut self, tag_id: i32, name: String) -> Result<()> {
-        let db = self.db_conn_pool.get()?;
-
+    pub fn rename_tag(&mut self, tag_id: i32, name: String, db: &Connection) -> Result<()> {
         if self.tags.values().any(|tag| tag.name == name) {
             return Err(Error::TagAlreadyExists(name));
         }
@@ -406,7 +731,13 @@ impl Database {
         Ok(())
     }
 
-    pub fn reorder_tag(&mut self, tag_id: i32, to_parent_id: i32, to_pos: i32) -> Result<()> {
+    pub fn reorder_tag(
+        &mut self,
+        tag_id: i32,
+        to_parent_id: i32,
+        to_pos: i32,
+        db: &mut Connection,
+    ) -> Result<()> {
         let tag = self
             .tags
             .get(&tag_id)
@@ -423,8 +754,6 @@ impl Database {
             return Ok(());
         }
 
-        let mut db = self.db_conn_pool.get()?;
-
         if from_parent_id == to_parent_id {
             // move tag within the same parent
 
@@ -432,14 +761,14 @@ impl Database {
             let tx = db.transaction()?;
             if from_pos < to_pos {
                 // move downwards
-                tx.execute("UPDATE tags SET position = position - 1 WHERE parent = ? AND position > ? AND position <= ?", &[&from_parent_id, &from_pos, &to_pos])?;
+                tx.execute("UPDATE tags SET position = position - 1 WHERE parent = ? AND position > ? AND position <= ?", [&from_parent_id, &from_pos, &to_pos])?;
             } else {
                 // move upwards
-                tx.execute("UPDATE tags SET position = position + 1 WHERE parent = ? AND position < ? AND position >= ?", &[&from_parent_id, &from_pos, &to_pos])?;
+                tx.execute("UPDATE tags SET position = position + 1 WHERE parent = ? AND position < ? AND position >= ?", [&from_parent_id, &from_pos, &to_pos])?;
             }
             tx.execute(
                 "UPDATE tags SET position = ? WHERE id = ?",
-                &[&to_pos, &tag_id],
+                [&to_pos, &tag_id],
             )?;
             tx.commit()?;
 
@@ -475,15 +804,15 @@ impl Database {
             let tx = db.transaction()?;
             tx.execute(
                 "UPDATE tags SET position = position - 1 WHERE parent = ? AND position > ?",
-                &[&from_parent_id, &from_pos],
+                [&from_parent_id, &from_pos],
             )?;
             tx.execute(
                 "UPDATE tags SET position = position + 1 WHERE parent = ? AND position >= ?",
-                &[&to_parent_id, &to_pos],
+                [&to_parent_id, &to_pos],
             )?;
             tx.execute(
                 "UPDATE tags SET parent = ?, position = ? WHERE id = ?",
-                &[&to_parent_id, &to_pos, &tag_id],
+                [&to_parent_id, &to_pos, &tag_id],
             )?;
             tx.commit()?;
 
@@ -525,14 +854,13 @@ impl Database {
         Ok(())
     }
 
-    pub fn set_tag_color(&mut self, tag_id: i32, color: i32) -> Result<()> {
+    pub fn set_tag_color(&mut self, tag_id: i32, color: i32, db: &Connection) -> Result<()> {
         let tag = self
             .tags
             .get_mut(&tag_id)
             .ok_or_else(|| Error::TagNotFound(tag_id))?;
 
-        let db = self.db_conn_pool.get()?;
-        db.execute("UPDATE tags SET color = ? WHERE id = ?", &[&color, &tag_id])?;
+        db.execute("UPDATE tags SET color = ? WHERE id = ?", [&color, &tag_id])?;
 
         tag.color = color;
 
@@ -540,31 +868,6 @@ impl Database {
     }
 
     // ========== Entry-Tag ==========
-
-    pub fn add_tag_for_entry(&mut self, entry_id: i32, tag_id: i32) -> Result<()> {
-        let entry = self
-            .entries
-            .get_mut(&entry_id)
-            .ok_or_else(|| Error::EntryNotFound(entry_id))?;
-
-        if !self.tags.contains_key(&tag_id) {
-            return Err(Error::TagNotFound(tag_id));
-        }
-
-        if entry.tag_ids.contains(&tag_id) {
-            return Err(Error::TagAlreadyExistsForEntry(tag_id, entry_id));
-        }
-
-        let db = self.db_conn_pool.get()?;
-        db.execute(
-            "INSERT INTO entry_tag (entry_id, tag_id) VALUES (?, ?)",
-            &[&entry_id, &tag_id],
-        )?;
-
-        entry.tag_ids.insert(tag_id);
-
-        Ok(())
-    }
 
     pub fn get_tags_for_entry(&self, entry_id: i32) -> Result<Vec<&Tag>> {
         let entry = self.get_entry(entry_id)?;
@@ -584,7 +887,36 @@ impl Database {
         Ok(tags)
     }
 
-    pub fn remove_tag_for_entry(&mut self, entry_id: i32, tag_id: i32) -> Result<()> {
+    pub fn add_tag_for_entry(&mut self, entry_id: i32, tag_id: i32, db: &Connection) -> Result<()> {
+        if !self.tags.contains_key(&tag_id) {
+            return Err(Error::TagNotFound(tag_id));
+        }
+
+        let entry = self
+            .entries
+            .get_mut(&entry_id)
+            .ok_or_else(|| Error::EntryNotFound(entry_id))?;
+
+        if entry.tag_ids.contains(&tag_id) {
+            return Err(Error::TagAlreadyExistsForEntry(tag_id, entry_id));
+        }
+
+        db.execute(
+            "INSERT INTO entry_tag (entry_id, tag_id) VALUES (?, ?)",
+            [&entry_id, &tag_id],
+        )?;
+
+        entry.tag_ids.insert(tag_id);
+
+        Ok(())
+    }
+
+    pub fn remove_tag_for_entry(
+        &mut self,
+        entry_id: i32,
+        tag_id: i32,
+        db: &Connection,
+    ) -> Result<()> {
         let entry = self
             .entries
             .get_mut(&entry_id)
@@ -594,14 +926,27 @@ impl Database {
             return Err(Error::TagNotFoundForEntry(tag_id, entry_id));
         }
 
-        let db = self.db_conn_pool.get()?;
         db.execute(
             "DELETE FROM entry_tag WHERE entry_id = ? AND tag_id = ?",
-            &[&entry_id, &tag_id],
+            [&entry_id, &tag_id],
         )?;
 
         entry.tag_ids.remove(&tag_id);
 
         Ok(())
     }
+}
+
+fn is_audio_file(path: &Path) -> bool {
+    match path.extension() {
+        None => false,
+        Some(ext) => {
+            let ext = ext.to_string_lossy();
+            ext == "wav" || ext == "mp3" || ext == "flac" || ext == "ogg"
+        }
+    }
+}
+
+fn is_hidden_file(path: &Path) -> bool {
+    path.file_name().unwrap().to_string_lossy().starts_with('.')
 }

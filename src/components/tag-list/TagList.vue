@@ -21,22 +21,25 @@ import Tree from "./tree";
 
 const emit = defineEmits(["tags-changed"]);
 
-const { tags, filter } = defineProps<{
+const filter = defineModel<Filter>("filter", { required: true });
+
+const { tags } = defineProps<{
   tags: TreeNode[];
-  filter: Filter;
 }>();
 
 const selectedTags = computed({
   get: () => {
     const selectionKeys: TreeSelectionKeys = {};
-    for (const tagId of filter.tagIds) {
+    for (const tagId of filter.value.tagIds) {
       selectionKeys[tagId.toString()] = true;
     }
     return selectionKeys;
   },
   set: (selectionKeys: TreeSelectionKeys) => {
     console.debug("Set selected tag", selectionKeys);
-    filter.tagIds = Object.keys(selectionKeys).map((id) => Number.parseInt(id));
+    filter.value.tagIds = Object.keys(selectionKeys).map((id) =>
+      Number.parseInt(id),
+    );
   },
 });
 

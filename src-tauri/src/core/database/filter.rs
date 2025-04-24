@@ -1,4 +1,4 @@
-use super::Database;
+use super::DatabaseData;
 
 use std::collections::HashSet;
 use std::iter::Iterator;
@@ -11,7 +11,7 @@ pub struct Filter {
     pub folder_path: String,
 }
 
-impl Database {
+impl DatabaseData {
     pub fn filter(&self, filter: Filter) -> Option<Vec<i32>> {
         if filter.search.is_empty() && filter.tag_ids.is_empty() && filter.folder_path.is_empty() {
             return None;

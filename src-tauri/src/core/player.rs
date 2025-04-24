@@ -39,10 +39,14 @@ pub enum Error {
 pub struct Player {
     sink: Arc<RwLock<Option<Sink>>>,
     first_transit_pos: Duration,
-    on_state_updated: Option<Box<dyn Fn(PlayerState) + Send + Sync + 'static>>,
+    emitter: Arc<dyn PlayerEmitter + Send + Sync>,
 }
 
-#[derive(Clone, Serialize)]
+pub trait PlayerEmitter {
+    fn on_player_state_updated(&self, state: PlayerState);
+}
+
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerState {
     pub playing: bool,
@@ -50,21 +54,21 @@ pub struct PlayerState {
 }
 
 impl Player {
-    pub fn new() -> Self {
+    pub fn new<T>(emitter: T) -> Self
+    where
+        T: PlayerEmitter + Send + Sync + 'static,
+    {
         Self {
             sink: Arc::new(None.into()),
             first_transit_pos: Duration::default(),
-            on_state_updated: None,
+            emitter: Arc::new(emitter),
         }
     }
 
-    pub fn run<F>(&mut self, on_state_updated: F)
-    where
-        F: Fn(PlayerState) + Send + Sync + Clone + 'static,
-    {
-        self.on_state_updated = Some(Box::new(on_state_updated.clone()));
+    pub fn run(&mut self) {
+        let sink = self.sink.clone();
+        let emitter = self.emitter.clone();
 
-        let sink_ref = self.sink.clone();
         spawn(move || {
             debug!("start player thread");
 
@@ -72,8 +76,7 @@ impl Player {
             // because it needs to live as long as the sink
             let (_stream, handle) =
                 OutputStream::try_default().expect("failed to create output stream");
-            sink_ref
-                .write()
+            sink.write()
                 .unwrap()
                 .replace(Sink::try_new(&handle).expect("failed to create sink"));
 
@@ -82,7 +85,7 @@ impl Player {
                 // sleep should before break, to make sure it always sleep each loop
                 sleep(Duration::from_millis(100));
 
-                let empty = match sink_ref.read().unwrap().as_ref() {
+                let empty = match sink.read().unwrap().as_ref() {
                     Some(sink) => sink.empty(),
                     None => break, // <== break HERE
                 };
@@ -90,7 +93,7 @@ impl Player {
                 if had_source && empty {
                     // had source -> empty
                     debug!("source ended");
-                    on_state_updated(PlayerState {
+                    emitter.on_player_state_updated(PlayerState {
                         playing: false,
                         pos: 0.,
                     });
@@ -108,22 +111,23 @@ impl Player {
         self.sink.write().unwrap().take();
     }
 
-    pub async fn set_source(&mut self, path: Box<Path>) -> Result<(), Error> {
-        let sink_ref = self.sink.clone();
+    pub async fn set_source(&mut self, path: &Path) -> Result<(), Error> {
+        let sink = self.sink.clone();
+        let observer = self.emitter.clone();
 
         let set_sink_source = async {
             trace!("set_sink_source");
 
-            let sink = sink_ref.read().unwrap();
+            let sink = sink.read().unwrap();
             let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
 
             sink.clear();
 
-            let file = BufReader::new(File::open(&path)?);
+            let file = BufReader::new(File::open(path)?);
             let source = Decoder::new(file)?;
             sink.append(source);
 
-            self.on_state_updated.as_ref().unwrap()(PlayerState {
+            observer.on_player_state_updated(PlayerState {
                 playing: !sink.is_paused(),
                 pos: 0.,
             });
@@ -135,7 +139,7 @@ impl Player {
         let set_first_transit_pos = async {
             trace!("set_first_transit_pos");
 
-            let mut reader = get_format_reader(&path)?;
+            let mut reader = get_format_reader(path)?;
             let track = reader
                 .default_track()
                 .ok_or(Error::TracksNotFound(path.to_string_lossy().to_string()))?;
@@ -153,7 +157,7 @@ impl Player {
 
             let pos_frame = loop {
                 let pos_frame = match reader.next_packet() {
-                    Err(e) => break Err(e),
+                    Err(err) => break Err(err),
 
                     Ok(packet) => {
                         if packet.track_id() != track_id {
@@ -175,7 +179,7 @@ impl Player {
 
                                 (pos, packet_length)
                             }
-                            Err(e) => break Err(e),
+                            Err(err) => break Err(err),
                         };
 
                         match pos {
@@ -226,7 +230,7 @@ impl Player {
             sink.play();
         }
 
-        self.on_state_updated.as_ref().unwrap()(PlayerState {
+        self.emitter.on_player_state_updated(PlayerState {
             playing: true,
             pos: self.get_pos(),
         });
@@ -243,7 +247,7 @@ impl Player {
             }
         }
 
-        self.on_state_updated.as_ref().unwrap()(PlayerState {
+        self.emitter.on_player_state_updated(PlayerState {
             playing: false,
             pos: self.get_pos(),
         });
@@ -260,6 +264,7 @@ impl Player {
 
     pub fn get_pos(&self) -> f32 {
         let sink = self.sink.read().unwrap();
+
         match sink.as_ref() {
             Some(sink) => sink.get_pos().as_secs_f32(),
             None => 0.,
@@ -280,7 +285,7 @@ pub fn get_format_reader(
     let mss = MediaSourceStream::new(Box::new(src), Default::default());
     let mut hint = Hint::new();
     if let Some(ext) = path.extension() {
-        hint.with_extension(&ext.to_string_lossy().to_string());
+        hint.with_extension(ext.to_string_lossy().as_ref());
     }
     let meta_opts: MetadataOptions = Default::default();
     let fmt_opts: FormatOptions = Default::default();

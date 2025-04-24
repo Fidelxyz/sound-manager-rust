@@ -36,7 +36,7 @@ impl serde::Serialize for Error {
     {
         let error_message = self.to_string();
         let error_kind = match self {
-            Self::Database(e) => match e {
+            Self::Database(err) => match err {
                 crate::core::database::Error::DatabaseNotFound(_) => {
                     ErrorKind::DatabaseNotFound(error_message)
                 }
@@ -107,7 +107,7 @@ impl Serialize for Tag {
     }
 }
 
-impl<'a> Serialize for TagNode<'a> {
+impl Serialize for TagNode<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

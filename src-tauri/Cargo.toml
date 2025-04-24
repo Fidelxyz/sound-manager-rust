@@ -29,8 +29,6 @@ async-std = "1.13.0"
 log = "0.4.26"
 simplelog = "0.12.2"
 rusqlite = { version = "0.33.0", features = ["bundled"] }
-r2d2_sqlite = "0.26.0"
-r2d2 = "0.8.10"
 symphonia = { version = "0.5.4", features = ["mp3", "opt-simd"] }
 rodio = { version = "0.20.1", default-features = false, features = [
     "symphonia-wav",
@@ -38,6 +36,7 @@ rodio = { version = "0.20.1", default-features = false, features = [
     "symphonia-mp3",
     "symphonia-aac",
 ] }
+notify-debouncer-full = "0.5.0"
 
 [profile.release]
 codegen-units = 1

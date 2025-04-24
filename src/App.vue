@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { listen } from "@tauri-apps/api/event";
 
 import { Splitter, SplitterPanel, Toast } from "primevue";
 import type { TreeNode } from "primevue/treenode";
@@ -11,8 +12,9 @@ import FolderList from "./components/folder-list/FolderList.vue";
 import Startup from "./components/Startup.vue";
 import Player from "./components/player/Player.vue";
 
-import type { Entry, TagNode, Filter } from "@/api";
+import type { Entry, TagNode, Filter, Folder } from "@/api";
 import { api } from "@/api";
+import { error } from "@/utils/message";
 
 const emit = defineEmits(["database-updated"]);
 
@@ -21,9 +23,14 @@ const tagList = ref();
 const folderList = ref();
 const metadataPanel = ref();
 
+// data
+const entries = ref<Entry[]>([]);
+const folder = ref<Folder>();
+const tags = ref<TreeNode[]>([]);
+
+// state
 const loaded = ref(false);
 const activeEntry = ref<Entry>();
-const tags = ref<TreeNode[]>([]);
 const filter = ref<Filter>({
   search: "",
   tagIds: [],
@@ -32,6 +39,8 @@ const filter = ref<Filter>({
 
 function onDatabaseLoaded() {
   console.log("Database loaded");
+  loadEntries();
+  loadFolders();
   loadTags();
   loaded.value = true;
 }
@@ -42,8 +51,39 @@ function onTagsChanged() {
   metadataPanel.value?.refresh();
 }
 
-function onEntrySelected(entry: Entry) {
-  activeEntry.value = entry;
+function onFilesChanged() {
+  console.debug("Files changed");
+  loadEntries();
+  loadFolders();
+  metadataPanel.value?.refresh();
+}
+
+function loadEntries() {
+  console.log("Load entries");
+  api
+    .getEntries()
+    .then((data) => {
+      console.log(data);
+      entries.value = data;
+    })
+    .catch((e) => {
+      error("加载文件失败", e.message);
+      console.error(e);
+    });
+}
+
+async function loadFolders() {
+  console.log("Load folders");
+  api
+    .getFolder()
+    .then((data) => {
+      console.log(data);
+      folder.value = data;
+    })
+    .catch((e) => {
+      error("加载文件夹失败", e.message);
+      console.error(e);
+    });
 }
 
 function loadTags() {
@@ -71,6 +111,8 @@ function toTagTree(tags: TagNode[]): TreeNode[] {
     };
   });
 }
+
+listen("files_updated", onFilesChanged);
 </script>
 
 <template>
@@ -82,14 +124,18 @@ function toTagTree(tags: TagNode[]): TreeNode[] {
           <SplitterPanel class="min-w-2xs" :size="15">
             <Splitter layout="vertical" class="h-full" :gutterSize="2">
               <SplitterPanel :minSize="20">
-                <FolderList ref="folderList" :filter="filter" />
+                <FolderList
+                  ref="folderList"
+                  :folder="folder"
+                  v-model:filter="filter"
+                />
               </SplitterPanel>
 
               <SplitterPanel :minSize="20">
                 <TagList
                   ref="tagList"
                   :tags="tags"
-                  :filter="filter"
+                  v-model:filter="filter"
                   @tags-changed="onTagsChanged"
                 />
               </SplitterPanel>
@@ -99,9 +145,10 @@ function toTagTree(tags: TagNode[]): TreeNode[] {
           <SplitterPanel :size="65">
             <AudioList
               ref="audioList"
-              :filter="filter"
+              :entries="entries"
               :tags="tags"
-              @select="onEntrySelected"
+              v-model:filter="filter"
+              v-model:activeEntry="activeEntry"
             />
           </SplitterPanel>
 

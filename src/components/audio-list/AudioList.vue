@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { ref, watch } from "vue";
 
 import { FilterMatchMode } from "@primevue/core/api";
 import {
@@ -13,50 +13,21 @@ import DataTable from "./datatable";
 
 import type { Entry, Filter } from "@/api";
 import { api } from "@/api";
-import { error } from "@/utils/message";
 import { formatDuration } from "@/utils/utils";
 import FilterPanel from "./FilterPanel.vue";
 
-const entries = ref<Entry[]>([]);
-const activeEntry = ref<Entry>();
-
-const emit = defineEmits<{
-  select: [entry: Entry];
-}>();
-
-defineExpose({
-  refresh: loadEntries,
-});
-
-const { filter, tags } = defineProps<{
-  filter: Filter;
+const { entries, tags } = defineProps<{
+  entries: Entry[];
   tags: TreeNode[];
 }>();
 
-onMounted(() => {
-  loadEntries();
-});
-
-function loadEntries() {
-  console.log("Load entries");
-  api
-    .getEntries()
-    .then((data) => {
-      console.log(data);
-      entries.value = data;
-    })
-    .catch((e) => {
-      error("加载文件失败", e.message);
-      console.error(e);
-    });
-}
+const filter = defineModel<Filter>("filter", { required: true });
+const activeEntry = defineModel<Entry>("activeEntry");
 
 function selectEntry(event: DataTableRowSelectEvent) {
   const entry = event.data as Entry;
   console.debug("Select entry", entry);
-
   entry.viewed = true;
-  emit("select", entry);
 }
 
 // ========== Filter BEGIN ==========
@@ -68,7 +39,7 @@ const tableFilters = ref<DataTableFilterMeta>({
 watch(
   () => filter,
   async (filter) => {
-    let entry_ids = await api.filter(filter);
+    let entry_ids = await api.filter(filter.value);
     console.debug("Filtered entries", entry_ids);
     if (Array.isArray(entry_ids) && entry_ids.length === 0) {
       entry_ids = [-1];
@@ -86,7 +57,7 @@ function rowClass(data: Entry) {
 </script>
 
 <template>
-  <FilterPanel :filter="filter" :entries="entries" :tags="tags" />
+  <FilterPanel v-model="filter" :entries="entries" :tags="tags" />
 
   <DataTable
     :value="entries"

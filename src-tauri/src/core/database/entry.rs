@@ -1,11 +1,9 @@
-use super::player::get_format_reader;
+use crate::core::player::get_format_reader;
 
 use log::warn;
 use std::collections::HashSet;
 use std::path::Path;
 
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
 use symphonia::core::meta::StandardTagKey;
 
 pub struct Entry {
@@ -25,6 +23,8 @@ pub struct Metadata {
 
 impl Entry {
     pub fn new(path: Box<Path>) -> Self {
+        debug_assert!(path.is_relative(), "Path must be relative");
+
         let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
 
         Self {
@@ -36,16 +36,20 @@ impl Entry {
         }
     }
 
-    pub async fn read(&mut self) {
-        let metadata = self.read_metadata();
+    pub fn read_file(&mut self, base_path: &Path) {
+        let metadata = self.read_metadata(base_path);
 
         match metadata {
             Ok(metadata) => self.metadata = Some(metadata),
-            Err(err) => warn!("Failed to read metadata of file {:?}: {:?}", self.path, err),
+            Err(err) => warn!(
+                "Failed to read metadata of file {:?}: {:?}",
+                base_path.join(&self.path),
+                err
+            ),
         }
     }
 
-    fn read_metadata(&self) -> Result<Metadata, symphonia::core::errors::Error> {
+    fn read_metadata(&self, base_path: &Path) -> Result<Metadata, symphonia::core::errors::Error> {
         let mut ret = Metadata {
             title: None,
             artist: None,
@@ -54,7 +58,7 @@ impl Entry {
         };
 
         // Read metadata
-        let mut format = get_format_reader(&self.path)?;
+        let mut format = get_format_reader(&base_path.join(&self.path))?;
 
         let mut metadata = format.metadata();
         if let Some(metadata) = metadata.skip_to_latest() {
@@ -77,35 +81,5 @@ impl Entry {
         }
 
         Ok(ret)
-    }
-
-    async fn query_database(
-        &self,
-        db: PooledConnection<SqliteConnectionManager>,
-    ) -> Result<i32, rusqlite::Error> {
-        let ret_id;
-
-        // Query from database
-        match db.query_row(
-            "SELECT id FROM entries WHERE file_path = ?",
-            &[&self.path.to_str().unwrap()],
-            |row| row.get(0),
-        ) {
-            Ok(id) => {
-                // Entry already exists
-                ret_id = id;
-            }
-            Err(_) => {
-                // Create new entry in database
-                db.execute(
-                    "INSERT INTO entries (file_path) VALUES (?)",
-                    &[&self.path.to_str().unwrap()],
-                )?;
-
-                ret_id = db.last_insert_rowid() as i32;
-            }
-        };
-
-        Ok(ret_id)
     }
 }

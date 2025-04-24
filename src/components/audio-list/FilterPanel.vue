@@ -12,8 +12,9 @@ import type { TreeNode } from "primevue/treenode";
 
 import type { Filter, Entry } from "@/api";
 
-const { filter, entries, tags } = defineProps<{
-  filter: Filter;
+const filter = defineModel<Filter>({ required: true });
+
+const { entries, tags } = defineProps<{
   entries: Entry[];
   tags: TreeNode[];
 }>();
@@ -21,7 +22,7 @@ const { filter, entries, tags } = defineProps<{
 const selectedTags = computed({
   get: () => {
     const selectionKeys: TreeSelectionKeys = {};
-    for (const tagId of filter.tagIds) {
+    for (const tagId of filter.value.tagIds) {
       selectionKeys[tagId.toString()] = { checked: true };
     }
     return selectionKeys;
@@ -33,17 +34,17 @@ const selectedTags = computed({
         tagIds.push(Number.parseInt(tagId));
       }
     }
-    filter.tagIds = tagIds;
+    filter.value.tagIds = tagIds;
   },
 });
 
 const filterEnabled = computed(() => {
-  return filter.search.length > 0 || filter.tagIds.length > 0;
+  return filter.value.search.length > 0 || filter.value.tagIds.length > 0;
 });
 
 function clearFilter() {
-  filter.search = "";
-  filter.tagIds = [];
+  filter.value.search = "";
+  filter.value.tagIds = [];
 }
 
 function shuffle() {

@@ -3,7 +3,7 @@
 
 fn main() {
     #[cfg(debug_assertions)]
-    let log_level = log::LevelFilter::Trace;
+    let log_level = log::LevelFilter::Debug;
 
     #[cfg(not(debug_assertions))]
     let log_level = log::LevelFilter::Info;

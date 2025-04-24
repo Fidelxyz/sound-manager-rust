@@ -42,7 +42,7 @@ impl WaveformGenerator {
 
     fn get_default_track<'reader>(
         &self,
-        reader: &'reader Box<dyn FormatReader>,
+        reader: &'reader dyn FormatReader,
     ) -> Result<&'reader Track, Error> {
         let track = reader.default_track().ok_or_else(|| {
             Error::TracksNotFound(
@@ -63,7 +63,7 @@ impl WaveformGenerator {
         let path = path.as_ref().ok_or(Error::SourceNotSet)?;
         let reader = get_format_reader(path)?;
 
-        let track = self.get_default_track(&reader)?;
+        let track = self.get_default_track(reader.as_ref())?;
         let params = &track.codec_params;
         let n_frames = params.n_frames.unwrap();
         let waveform_samples_num = (n_frames / SAMPLING_STEP as u64) as u32;
@@ -85,7 +85,7 @@ impl WaveformGenerator {
                 .ok_or(Error::SourceNotSet)?,
         )?;
 
-        let track = self.get_default_track(&reader)?;
+        let track = self.get_default_track(reader.as_ref())?;
         let track_id = track.id;
 
         let params = &track.codec_params;
@@ -118,7 +118,7 @@ impl WaveformGenerator {
 
                 // loop for packets
                 let result = match reader.next_packet() {
-                    Err(e) => Err(e), // about to break
+                    Err(err) => Err(err), // about to break
 
                     Ok(packet) => {
                         // If the packet does not belong to the selected track, skip over it.
@@ -140,11 +140,11 @@ impl WaveformGenerator {
                                 samples.extend_from_slice(sample_buf.samples());
                                 Ok(()) // continue
                             }
-                            Err(symphonia::core::errors::Error::DecodeError(e)) => {
-                                warn!("decode error: {}", e);
+                            Err(symphonia::core::errors::Error::DecodeError(err)) => {
+                                warn!("decode error: {}", err);
                                 Ok(()) // continue
                             }
-                            Err(e) => Err(e), // about to break
+                            Err(err) => Err(err), // about to break
                         }
                     }
                 };
@@ -199,20 +199,20 @@ impl WaveformGenerator {
                 }
 
                 // handle break
-                if let Err(e) = result {
-                    break e.into();
+                if let Err(err) = result {
+                    break err.into();
                 }
             }; // loop
 
             match result {
-                Error::Symphonia(symphonia::core::errors::Error::IoError(e))
-                    if e.kind() == std::io::ErrorKind::UnexpectedEof
-                        && e.to_string() == "end of stream" =>
+                Error::Symphonia(symphonia::core::errors::Error::IoError(err))
+                    if err.kind() == std::io::ErrorKind::UnexpectedEof
+                        && err.to_string() == "end of stream" =>
                 {
                     // End of stream is expected
                 }
-                e => {
-                    warn!("waveform generator: {}", e);
+                err => {
+                    warn!("waveform generator: {}", err);
                 }
             }
 
