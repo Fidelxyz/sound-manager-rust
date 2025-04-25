@@ -5,6 +5,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("database not open")]
+    DatabaseNotOpen,
     #[error(transparent)]
     Database(#[from] crate::core::database::Error),
     #[error("player error: {0}")]
@@ -17,6 +19,7 @@ pub enum Error {
 #[serde(tag = "kind", content = "message")]
 #[serde(rename_all = "camelCase")]
 enum ErrorKind {
+    DatabaseNotOpen(String),
     DatabaseNotFound(String),
     DatabaseAlreadyExists(String),
     EntryNotFound(String),
@@ -36,6 +39,7 @@ impl serde::Serialize for Error {
     {
         let error_message = self.to_string();
         let error_kind = match self {
+            Self::DatabaseNotOpen => ErrorKind::DatabaseNotOpen(error_message),
             Self::Database(err) => match err {
                 crate::core::database::Error::DatabaseNotFound(_) => {
                     ErrorKind::DatabaseNotFound(error_message)

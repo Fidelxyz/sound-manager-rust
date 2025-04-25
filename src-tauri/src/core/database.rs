@@ -228,13 +228,11 @@ impl Database {
         Ok((tags, root_tag_ids))
     }
 
-    // ========== Folder ==========
-
-    // ========== Entry ==========
-
-    // ========== Tag ==========
-
-    // ========== Utils ==========
+    pub fn refresh(&self) -> Result<()> {
+        self.data.write().unwrap().scan(&self.db.lock().unwrap())?;
+        self.emitter.on_files_updated();
+        Ok(())
+    }
 }
 
 impl DatabaseData {

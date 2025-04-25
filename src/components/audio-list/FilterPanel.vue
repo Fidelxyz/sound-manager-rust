@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 import {
   InputText,
@@ -9,8 +9,12 @@ import {
   type TreeSelectionKeys,
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
+import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
+import { faShuffle } from "@fortawesome/free-solid-svg-icons";
 
 import type { Filter, Entry } from "@/api";
+import { api } from "@/api";
+import { error } from "@/utils/message";
 
 const filter = defineModel<Filter>({ required: true });
 
@@ -53,6 +57,21 @@ function shuffle() {
     [entries[i], entries[j]] = [entries[j], entries[i]];
   }
 }
+
+const refreshing = ref(false);
+
+function refresh() {
+  console.debug("Refreshing");
+  refreshing.value = true;
+  api
+    .refresh()
+    .catch((e) => {
+      error("刷新失败", e.message);
+    })
+    .finally(() => {
+      refreshing.value = false;
+    });
+}
 </script>
 
 <template>
@@ -71,10 +90,11 @@ function shuffle() {
       <FloatLabel variant="on">
         <TreeSelect
           id="filter-tags"
+          class="w-48"
           v-model="selectedTags"
           :options="tags"
           selectionMode="checkbox"
-          class="w-48"
+          emptyMessage="无可用标签"
           showClear
         />
         <label for="filter-tags">标签</label>
@@ -91,13 +111,20 @@ function shuffle() {
       />
     </div>
 
-    <div class="flex justify-end ml-auto">
+    <div class="flex justify-end ml-auto gap-2">
+      <Button label="打乱" severity="secondary" size="small" @click="shuffle">
+        <template #icon>
+          <FontAwesomeIcon :icon="faShuffle" />
+        </template>
+      </Button>
+
       <Button
-        icon="pi pi-refresh"
-        label="打乱"
+        icon="pi pi-sync"
+        label="刷新"
         severity="secondary"
         size="small"
-        @click="shuffle"
+        :loading="refreshing"
+        @click="refresh"
       />
     </div>
   </div>

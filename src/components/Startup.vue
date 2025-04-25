@@ -12,7 +12,7 @@ const emit = defineEmits(["database-loaded"]);
 
 const loading = ref(false);
 
-async function handleOpenDatabase() {
+async function openDatabase() {
   console.log("Open Database");
   const path = await open({
     multiple: false,
@@ -39,7 +39,7 @@ async function handleOpenDatabase() {
     });
 }
 
-async function handleCreateDatabase() {
+async function createDatabase() {
   console.log("Create Database");
   const path = await open({
     multiple: false,
@@ -73,12 +73,12 @@ async function handleCreateDatabase() {
       <Button
         label="打开数据库"
         :loading="loading"
-        @click="handleOpenDatabase"
+        @click="openDatabase"
       ></Button>
       <Button
         label="创建数据库"
         :loading="loading"
-        @click="handleCreateDatabase"
+        @click="createDatabase"
       ></Button>
     </div>
   </div>

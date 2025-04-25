@@ -14,7 +14,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use tauri::ipc::{Channel, InvokeResponseBody, Response};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{
+    AppHandle, Emitter, Manager, State, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
+};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 struct AppData {
     database: RwLock<Option<Database>>,
@@ -96,9 +99,22 @@ async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
 }
 
 #[tauri::command]
+async fn refresh(state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("refresh");
+
+    let database = state.database.read().await;
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    database.refresh()?;
+
+    trace!("refresh done");
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_entries(state: State<'_, AppData>) -> Result<Response, Error> {
     let database = state.database.read().await;
-    let data = database.as_ref().unwrap().data.read().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    let data = database.data.read().unwrap();
     let entries = data.get_entries().values().collect::<Vec<_>>();
     let response = serde_json::to_string(&entries).unwrap();
     Ok(Response::new(response))
@@ -107,7 +123,8 @@ async fn get_entries(state: State<'_, AppData>) -> Result<Response, Error> {
 #[tauri::command]
 async fn get_tags(state: State<'_, AppData>) -> Result<Response, Error> {
     let database = state.database.read().await;
-    let data = database.as_ref().unwrap().data.read().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    let data = database.data.read().unwrap();
     let tags = data.get_tags();
     let response = serde_json::to_string(&tags).unwrap();
     Ok(Response::new(response))
@@ -116,7 +133,8 @@ async fn get_tags(state: State<'_, AppData>) -> Result<Response, Error> {
 #[tauri::command]
 async fn get_folder(state: State<'_, AppData>) -> Result<Response, Error> {
     let database = state.database.read().await;
-    let data = database.as_ref().unwrap().data.read().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    let data = database.data.read().unwrap();
     let folder = data.get_folders();
     let response = serde_json::to_string(folder).unwrap();
     Ok(Response::new(response))
@@ -127,7 +145,7 @@ async fn new_tag(name: String, state: State<'_, AppData>) -> Result<i32, Error> 
     trace!("new_tag: {:?}", name);
 
     let database = state.database.read().await;
-    let database = database.as_ref().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     let tag_id = data.new_tag(name, &database.db.lock().unwrap())?;
 
@@ -140,7 +158,7 @@ async fn delete_tag(tag_id: i32, state: State<'_, AppData>) -> Result<(), Error>
     trace!("delete_tag: {:?}", tag_id);
 
     let database = state.database.read().await;
-    let database = database.as_ref().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.delete_tag(tag_id, &database.db.lock().unwrap())?;
 
@@ -153,7 +171,7 @@ async fn rename_tag(tag_id: i32, name: String, state: State<'_, AppData>) -> Res
     trace!("rename_tag: tag_id = {:?}, name = {:?}", tag_id, name);
 
     let database = state.database.read().await;
-    let database = database.as_ref().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.rename_tag(tag_id, name, &database.db.lock().unwrap())?;
 
@@ -176,7 +194,7 @@ async fn reorder_tag(
     );
 
     let database = state.database.read().await;
-    let database = database.as_ref().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.reorder_tag(
         tag_id,
@@ -194,7 +212,7 @@ async fn set_tag_color(tag_id: i32, color: i32, state: State<'_, AppData>) -> Re
     trace!("set_tag_color: tag_id = {:?}, color = {:?}", tag_id, color);
 
     let database = state.database.read().await;
-    let database = database.as_ref().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.set_tag_color(tag_id, color, &database.db.lock().unwrap())?;
 
@@ -207,7 +225,8 @@ async fn get_tags_for_entry(entry_id: i32, state: State<'_, AppData>) -> Result<
     trace!("get_tags_for_entry: {:?}", entry_id);
 
     let database = state.database.read().await;
-    let data = database.as_ref().unwrap().data.read().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    let data = database.data.read().unwrap();
     let tags = data.get_tags_for_entry(entry_id)?;
     let response = serde_json::to_string(&tags).unwrap();
 
@@ -228,7 +247,7 @@ async fn add_tag_for_entry(
     );
 
     let database = state.database.read().await;
-    let database = database.as_ref().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.add_tag_for_entry(entry_id, tag_id, &database.db.lock().unwrap())?;
 
@@ -249,7 +268,7 @@ async fn remove_tag_for_entry(
     );
 
     let database = state.database.read().await;
-    let database = database.as_ref().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.remove_tag_for_entry(entry_id, tag_id, &database.db.lock().unwrap())?;
 
@@ -262,7 +281,8 @@ async fn filter(filter: Filter, state: State<'_, AppData>) -> Result<Option<Vec<
     trace!("filter: {:?}", filter);
 
     let database = state.database.read().await;
-    let data = database.as_ref().unwrap().data.read().unwrap();
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    let data = database.data.read().unwrap();
     let entry_ids = data.filter(filter);
 
     trace!("filter done");
@@ -302,7 +322,8 @@ async fn set_player_source(entry_id: i32, state: State<'_, AppData>) -> Result<(
 
     let path = {
         let database = state.database.read().await;
-        let data = database.as_ref().unwrap().data.read().unwrap();
+        let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+        let data = database.data.read().unwrap();
         data.to_absolute_path(&data.get_entry(entry_id)?.path)
     };
     debug!("path: {:?}", path);
@@ -371,8 +392,36 @@ async fn get_playing_pos(state: State<'_, AppData>) -> Result<f32, Error> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                .title("Sound Manager")
+                .inner_size(1600.0, 1000.0)
+                .theme(Some(Theme::Dark));
+
+            // set transparent title bar only when building for macOS
+            #[cfg(target_os = "macos")]
+            let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
+
+            let window = win_builder.build().unwrap();
+
+            // set background color only when building for macOS
+            #[cfg(target_os = "macos")]
+            {
+                use cocoa::appkit::{NSColor, NSWindow};
+                use cocoa::base::{id, nil};
+
+                let ns_window = window.ns_window().unwrap() as id;
+                unsafe {
+                    let bg_color =
+                        NSColor::colorWithRed_green_blue_alpha_(nil, 0.12, 0.12, 0.12, 1.0);
+                    ns_window.setBackgroundColor_(bg_color);
+                }
+            }
+
+            app.handle().save_window_state(StateFlags::all())?;
+
             let emitter = AppEmitter::new(app.handle().clone());
             app.manage(AppData {
                 database: None.into(),
@@ -387,6 +436,7 @@ pub fn run() {
             open_database,
             create_database,
             close_database,
+            refresh,
             get_entries,
             get_tags,
             get_folder,

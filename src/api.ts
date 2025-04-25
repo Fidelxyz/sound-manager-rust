@@ -2,6 +2,7 @@ import { invoke, type Channel } from "@tauri-apps/api/core";
 
 export type ErrorKind = {
   kind:
+    | "databaseNotOpen"
     | "databaseNotFound"
     | "databaseAlreadyExists"
     | "entryNotFound"
@@ -61,6 +62,14 @@ export const api = {
 
   createDatabase(path: string): Promise<void> {
     return invoke("create_database", { path });
+  },
+
+  closeDatabase(): Promise<void> {
+    return invoke("close_database");
+  },
+
+  refresh(): Promise<void> {
+    return invoke("refresh");
   },
 
   getEntries(): Promise<Entry[]> {

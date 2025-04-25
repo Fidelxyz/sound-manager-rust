@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
+import { Menu, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import { Splitter, SplitterPanel, Toast } from "primevue";
 import type { TreeNode } from "primevue/treenode";
@@ -12,7 +14,7 @@ import FolderList from "./components/folder-list/FolderList.vue";
 import Startup from "./components/Startup.vue";
 import Player from "./components/player/Player.vue";
 
-import type { Entry, TagNode, Filter, Folder } from "@/api";
+import type { Entry, TagNode, Filter, Folder, ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 
@@ -29,7 +31,7 @@ const folder = ref<Folder>();
 const tags = ref<TreeNode[]>([]);
 
 // state
-const loaded = ref(false);
+const databaseOpen = ref(false);
 const activeEntry = ref<Entry>();
 const filter = ref<Filter>({
   search: "",
@@ -37,12 +39,133 @@ const filter = ref<Filter>({
   folderPath: "",
 });
 
+onMounted(async () => {
+  const titleSubmenu = await Submenu.new({
+    text: "Sound Manager",
+    items: [
+      await PredefinedMenuItem.new({
+        text: "服务",
+        item: "Services",
+      }),
+      await PredefinedMenuItem.new({
+        item: "Separator",
+      }),
+      await PredefinedMenuItem.new({
+        text: "隐藏 Sound Manager",
+        item: "Hide",
+      }),
+      await PredefinedMenuItem.new({
+        text: "隐藏其他",
+        item: "HideOthers",
+      }),
+      await PredefinedMenuItem.new({
+        text: "全部显示",
+        item: "ShowAll",
+      }),
+      await PredefinedMenuItem.new({
+        item: "Separator",
+      }),
+      await PredefinedMenuItem.new({
+        text: "退出 Sound Manager",
+        item: "Quit",
+      }),
+    ],
+  });
+  const fileSubmenu = await Submenu.new({
+    text: "文件",
+    items: [
+      {
+        id: "open",
+        text: "打开数据库",
+        action: openDatabase,
+      },
+      {
+        id: "create",
+        text: "创建数据库",
+        action: createDatabase,
+      },
+      {
+        id: "refresh",
+        text: "刷新",
+        action: refresh,
+      },
+    ],
+  });
+  const menu = await Menu.new({
+    items: [titleSubmenu, fileSubmenu],
+  });
+  menu.setAsAppMenu();
+});
+
+async function openDatabase() {
+  console.log("Open Database");
+  const path = await open({
+    multiple: false,
+    directory: true,
+  });
+  if (!path) return;
+
+  if (databaseOpen.value) {
+    await api.closeDatabase();
+    databaseOpen.value = false;
+  }
+
+  api
+    .openDatabase(path)
+    .then(() => {
+      onDatabaseLoaded();
+    })
+    .catch((e: ErrorKind) => {
+      console.error(e);
+      if (e.kind === "databaseNotFound") {
+        error("数据库不存在", "请创建数据库");
+      } else {
+        error("打开数据库错误", e.message);
+      }
+    });
+}
+
+async function createDatabase() {
+  console.log("Create Database");
+  const path = await open({
+    multiple: false,
+    directory: true,
+  });
+  if (!path) return;
+
+  if (databaseOpen.value) {
+    await api.closeDatabase();
+    databaseOpen.value = false;
+  }
+
+  api
+    .createDatabase(path)
+    .then(() => {
+      onDatabaseLoaded();
+    })
+    .catch((e: ErrorKind) => {
+      console.error(e);
+      if (e.kind === "databaseAlreadyExists") {
+        error("数据库已存在", "请打开数据库");
+      } else {
+        error("创建数据库错误", e.message);
+      }
+    });
+}
+
+function refresh() {
+  console.debug("Refreshing");
+  api.refresh().catch((e) => {
+    error("刷新失败", e.message);
+  });
+}
+
 function onDatabaseLoaded() {
   console.log("Database loaded");
   loadEntries();
   loadFolders();
   loadTags();
-  loaded.value = true;
+  databaseOpen.value = true;
 }
 
 function onTagsChanged() {
@@ -118,7 +241,7 @@ listen("files_updated", onFilesChanged);
 <template>
   <main class="container max-w-none h-screen">
     <Toast />
-    <div v-if="loaded" class="h-full flex flex-col">
+    <div v-if="databaseOpen" class="h-full flex flex-col">
       <div class="flex-1 min-h-0">
         <Splitter class="h-full rounded-none!" :gutterSize="2">
           <SplitterPanel class="min-w-2xs" :size="15">
