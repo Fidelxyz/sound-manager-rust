@@ -2,6 +2,7 @@ mod entry;
 mod file_watcher;
 mod filter;
 mod folder;
+mod spotter;
 mod tag;
 
 pub use entry::Entry;
@@ -39,6 +40,8 @@ pub enum Error {
     TagNotFoundForEntry(i32, i32),
     #[error("tag {0} already exists for entry {1}")]
     TagAlreadyExistsForEntry(i32, i32),
+    #[error("file already exists: {0}")]
+    FileAlreadyExists(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("path strip prefix error: {0}")]

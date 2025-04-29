@@ -10,6 +10,7 @@ export type ErrorKind = {
     | "tagAlreadyExists"
     | "tagNotFoundForEntry"
     | "tagAlreadyExistsForEntry"
+    | "fileAlreadyExists"
     | "database"
     | "player"
     | "waveform";
@@ -150,5 +151,19 @@ export const api = {
 
   requestWaveform(channel: Channel<ArrayBuffer>): Promise<number> {
     return invoke<number>("request_waveform", { channel });
+  },
+
+  spot(
+    entryId: number,
+    savePath?: string,
+    openInApplication?: string,
+    force = false,
+  ): Promise<void> {
+    return invoke<void>("spot", {
+      entryId,
+      savePath,
+      openInApplication,
+      force,
+    });
   },
 };

@@ -10,7 +10,7 @@ use async_std::sync::RwLock;
 use futures::try_join;
 use log::{debug, trace};
 use std::option::Option;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tauri::ipc::{Channel, InvokeResponseBody, Response};
@@ -50,6 +50,8 @@ impl DatabaseEmitter for AppEmitter {
         self.app.emit("files_updated", ()).unwrap();
     }
 }
+
+// ========== Database ==========
 
 #[tauri::command]
 async fn open_database(
@@ -289,6 +291,8 @@ async fn filter(filter: Filter, state: State<'_, AppData>) -> Result<Option<Vec<
     Ok(entry_ids)
 }
 
+// ========== Waveform ==========
+
 #[tauri::command]
 async fn prepare_waveform(state: State<'_, AppData>) -> Result<u32, Error> {
     trace!("prepare_waveform");
@@ -315,6 +319,8 @@ async fn request_waveform(
     trace!("request_waveform done");
     Ok(())
 }
+
+// ========== Player ==========
 
 #[tauri::command]
 async fn set_player_source(entry_id: i32, state: State<'_, AppData>) -> Result<(), Error> {
@@ -389,6 +395,33 @@ async fn get_playing_pos(state: State<'_, AppData>) -> Result<f32, Error> {
     Ok(state.player.read().await.get_pos())
 }
 
+// ========== Spotter ==========
+
+#[tauri::command]
+async fn spot(
+    entry_id: i32,
+    save_path: Option<&str>,
+    open_in_application: Option<&str>,
+    force: bool,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
+    trace!("spot: {:?}", entry_id);
+
+    let database = state.database.read().await;
+    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    let data = database.data.read().unwrap();
+
+    data.spot(
+        entry_id,
+        save_path.map(Path::new),
+        open_in_application.map(Path::new),
+        force,
+    )?;
+
+    trace!("spot done");
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -455,7 +488,8 @@ pub fn run() {
             play,
             pause,
             set_volume,
-            get_playing_pos
+            get_playing_pos,
+            spot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

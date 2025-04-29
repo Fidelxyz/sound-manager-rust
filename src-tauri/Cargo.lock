@@ -4089,6 +4089,7 @@ dependencies = [
  "futures",
  "log",
  "notify-debouncer-full",
+ "open",
  "rodio",
  "rusqlite",
  "serde",

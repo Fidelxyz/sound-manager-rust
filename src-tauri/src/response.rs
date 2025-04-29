@@ -27,6 +27,7 @@ enum ErrorKind {
     TagAlreadyExists(String),
     TagNotFoundForEntry(String),
     TagAlreadyExistsForEntry(String),
+    FileAlreadyExists(String),
     Database(String),
     Player(String),
     Waveform(String),
@@ -61,6 +62,9 @@ impl serde::Serialize for Error {
                 }
                 crate::core::database::Error::TagAlreadyExistsForEntry(_, _) => {
                     ErrorKind::TagAlreadyExistsForEntry(error_message)
+                }
+                crate::core::database::Error::FileAlreadyExists(_) => {
+                    ErrorKind::FileAlreadyExists(error_message)
                 }
                 _ => ErrorKind::Database(error_message),
             },

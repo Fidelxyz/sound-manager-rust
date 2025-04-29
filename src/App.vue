@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { Menu, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -95,6 +95,12 @@ onMounted(async () => {
     items: [titleSubmenu, fileSubmenu],
   });
   menu.setAsAppMenu();
+});
+
+onUnmounted(() => {
+  api.closeDatabase().catch((e) => {
+    console.error(e);
+  });
 });
 
 async function openDatabase() {

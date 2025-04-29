@@ -4,12 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 
 import { Button, Slider, ToggleSwitch } from "primevue";
 import Waveform from "./Waveform.vue";
+import Spotter from "./Spotter.vue";
 
 import type { Entry, PlayerState } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 
-const props = defineProps<{
+const { entry } = defineProps<{
   entry?: Entry;
 }>();
 
@@ -26,7 +27,7 @@ let playingPos = 0;
 let seeking = false;
 
 watch(
-  () => props.entry,
+  () => entry,
 
   // on entry changed
   async (entry) => {
@@ -37,6 +38,8 @@ watch(
       error("设置播放源失败", e.message);
       console.error(e);
     });
+    // activeEntry needs to be set after setPlayerSource,
+    // bacause setPlayerSource should be called before generating waveform
     activeEntry.value = { ...entry };
     playingPos = 0;
     if (autoPlay.value) play();
@@ -124,12 +127,9 @@ listen<PlayerState>("player_state_updated", (event) => {
     <div class="flex">
       <div class="flex flex-1 align-center justify-start items-center gap-4">
         <label for="auto-play">自动播放</label>
-        <ToggleSwitch v-model="autoPlay" inputId="auto-play"></ToggleSwitch>
-        <label for="auto-play">跳过无声</label>
-        <ToggleSwitch
-          v-model="skipSilence"
-          inputId="skip-silence"
-        ></ToggleSwitch>
+        <ToggleSwitch v-model="autoPlay" inputId="auto-play" />
+        <label for="skip-silence">跳过无声</label>
+        <ToggleSwitch v-model="skipSilence" inputId="skip-silence" />
       </div>
 
       <div class="flex flex-1 align-center justify-center">
@@ -142,14 +142,14 @@ listen<PlayerState>("player_state_updated", (event) => {
         />
       </div>
 
-      <div class="flex flex-1 align-center justify-end">
+      <div class="flex flex-1 align-center justify-end gap-8">
         <div class="flex items-center gap-4">
           <i class="pi pi-volume-up" />
           <Slider class="w-48" v-model="volume" @change="setVolume" />
         </div>
+
+        <Spotter :entry="entry" />
       </div>
     </div>
   </div>
 </template>
-
-<style scoped></style>
