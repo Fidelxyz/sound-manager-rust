@@ -6,10 +6,10 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::thread::{sleep, spawn};
-use symphonia::core::audio::SampleBuffer;
 
 use rodio::{Decoder, OutputStream, Sink};
 use serde::Serialize;
+use symphonia::core::audio::SampleBuffer;
 use symphonia::core::formats::{FormatOptions, FormatReader};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;

@@ -3,7 +3,6 @@ import { ref, computed } from "vue";
 
 import {
   Button,
-  ConfirmDialog,
   ContextMenu,
   IconField,
   InputIcon,
@@ -317,7 +316,6 @@ function setTagColor(event: MenuItemCommandEvent) {
 
     <div class="h-full overflow-auto">
       <ContextMenu ref="contextMenu" :model="contextMenuItems" />
-      <ConfirmDialog />
       <Tree
         class="p-0!"
         :value="tags"

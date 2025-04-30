@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Menu, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { Splitter, SplitterPanel, Toast } from "primevue";
+import { Splitter, SplitterPanel, Toast, ConfirmDialog } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
 import AudioList from "./components/audio-list/AudioList.vue";
@@ -247,6 +247,7 @@ listen("files_updated", onFilesChanged);
 <template>
   <main class="container max-w-none h-screen">
     <Toast />
+    <ConfirmDialog />
     <div v-if="databaseOpen" class="h-full flex flex-col">
       <div class="flex-1 min-h-0">
         <Splitter class="h-full rounded-none!" :gutterSize="2">
@@ -298,8 +299,6 @@ listen("files_updated", onFilesChanged);
   </main>
 </template>
 
-<style scoped></style>
-
 <style>
 @import "tailwindcss";
 @import "tailwindcss-primeui";
@@ -311,5 +310,18 @@ html {
   user-select: none !important;
   font-size: 14px;
   font-weight: 300;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--p-surface-500);
+  border-radius: 4px;
 }
 </style>

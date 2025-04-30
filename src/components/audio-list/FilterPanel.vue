@@ -75,7 +75,7 @@ function refresh() {
 </script>
 
 <template>
-  <div class="flex p-4">
+  <div class="flex p-4 gap-4">
     <div class="flex items-center gap-4">
       <FloatLabel variant="on">
         <InputText
@@ -111,7 +111,7 @@ function refresh() {
       />
     </div>
 
-    <div class="flex justify-end ml-auto gap-2">
+    <div class="flex justify-end ml-auto gap-2 text-nowrap">
       <Button label="打乱" severity="secondary" size="small" @click="shuffle">
         <template #icon>
           <FontAwesomeIcon :icon="faShuffle" />

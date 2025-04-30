@@ -2,7 +2,7 @@ mod core;
 mod response;
 
 use core::database::DatabaseEmitter;
-use core::migrator::{migrate_from, MigrateFrom};
+use core::migrator::{MigrateFrom, migrate_from};
 use core::player::{PlayerEmitter, PlayerState};
 use core::{Database, Filter, Player, WaveformGenerator};
 use response::Error;
@@ -214,9 +214,7 @@ async fn reorder_tag(
 ) -> Result<(), Error> {
     trace!(
         "reorder_tag: tag_id = {:?}, new_parent_id = {:?}, new_pos = {:?}",
-        tag_id,
-        new_parent_id,
-        new_pos
+        tag_id, new_parent_id, new_pos
     );
 
     let database = state.database.read().await;
@@ -268,8 +266,7 @@ async fn add_tag_for_entry(
 ) -> Result<(), Error> {
     trace!(
         "add_tag_for_entry: entry_id = {:?}, tag_id = {:?}",
-        entry_id,
-        tag_id
+        entry_id, tag_id
     );
 
     let database = state.database.read().await;
@@ -289,8 +286,7 @@ async fn remove_tag_for_entry(
 ) -> Result<(), Error> {
     trace!(
         "remove_tag_for_entry: entry_id = {:?}, tag_id = {:?}",
-        entry_id,
-        tag_id
+        entry_id, tag_id
     );
 
     let database = state.database.read().await;

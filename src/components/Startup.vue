@@ -3,7 +3,7 @@ import { ref } from "vue";
 
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { Button } from "primevue";
+import { Button, useConfirm } from "primevue";
 
 import type { MigrateFrom, ErrorKind } from "@/api";
 import { api } from "@/api";
@@ -12,6 +12,8 @@ import { error } from "@/utils/message";
 const emit = defineEmits(["database-loaded"]);
 
 const loading = ref(false);
+
+const confirm = useConfirm();
 
 async function openDatabase() {
   console.log("Open Database");
@@ -28,10 +30,31 @@ async function openDatabase() {
       emit("database-loaded");
     })
     .catch((e: ErrorKind) => {
-      console.error(e);
       if (e.kind === "databaseNotFound") {
-        error("数据库不存在", "请创建数据库");
+        console.warn(e);
+
+        const match_folder_name = path.match(/([^\\/]+)[\\/]*$/);
+        const folder_name = match_folder_name ? match_folder_name[1] : path;
+        confirm.require({
+          header: "数据库不存在",
+          message: `是否为 ${folder_name} 创建数据库？`,
+          icon: "pi pi-question-circle",
+          rejectProps: { label: "取消", severity: "secondary", outlined: true },
+          acceptProps: { label: "创建数据库", severity: "success" },
+          accept: () => {
+            api
+              .createDatabase(path)
+              .then(() => {
+                emit("database-loaded");
+              })
+              .catch((e: ErrorKind) => {
+                console.error(e);
+                error("创建数据库错误", e.message);
+              });
+          },
+        });
       } else {
+        console.error(e);
         error("打开数据库错误", e.message);
       }
     })

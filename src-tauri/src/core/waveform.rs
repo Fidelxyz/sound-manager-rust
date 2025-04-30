@@ -10,8 +10,8 @@ use symphonia::core::audio::SampleBuffer;
 use symphonia::core::formats::{FormatReader, Track};
 use thiserror::Error;
 
-static BATCH_SAMPLES: usize = 1024;
-static SAMPLING_STEP: usize = 512;
+const BATCH_SAMPLES: usize = 1024;
+const SAMPLING_STEP: usize = 512;
 
 #[derive(Error, Debug)]
 pub enum Error {
