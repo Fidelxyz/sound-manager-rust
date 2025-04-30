@@ -12,13 +12,15 @@ pub use tag::{Tag, TagNode};
 
 use file_watcher::notify;
 
-use log::{debug, info, trace, warn};
+use log::{info, trace, warn};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 
 use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
+
+static DATABASE_VERSION: i32 = 1;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -136,34 +138,40 @@ impl Database {
             ));
         }
 
-        let db = Connection::open(database_file)?;
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS entries (
+        let mut db = Connection::open(database_file)?;
+        let tx = db.transaction()?;
+        tx.execute(
+            "CREATE TABLE metadata (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_path TEXT NOT NULL
+                version INTEGER NOT NULL
             )",
             (),
         )?;
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS tags (
+        tx.execute(
+            "INSERT INTO metadata (version) VALUES (?)",
+            [DATABASE_VERSION],
+        )?;
+        tx.execute_batch(
+            "CREATE TABLE entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL
+            );
+            CREATE TABLE tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 color INTEGER DEFAULT 0,
                 parent INTEGER DEFAULT -1,
                 position INTEGER NOT NULL
-            )",
-            (),
-        )?;
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS entry_tag (
+            );
+            CREATE TABLE entry_tag (
                 entry_id INTEGER NOT NULL,
                 tag_id INTEGER NOT NULL,
                 PRIMARY KEY (entry_id, tag_id),
                 FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE,
                 FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-            )",
-            (),
+            );",
         )?;
+        tx.commit()?;
 
         let folder = Folder::new(
             base_path.file_name().unwrap().to_string_lossy().to_string(),
@@ -732,6 +740,7 @@ impl DatabaseData {
         Ok(())
     }
 
+    /// NOTE: Set `to_pos` to -1 to move to the end.
     pub fn reorder_tag(
         &mut self,
         tag_id: i32,
@@ -749,6 +758,16 @@ impl DatabaseData {
         if to_parent_id != -1 && !self.tags.contains_key(&to_parent_id) {
             return Err(Error::TagNotFound(to_parent_id));
         }
+
+        let to_pos = if to_pos == -1 {
+            if to_parent_id == -1 {
+                self.root_tag_ids.len() as i32
+            } else {
+                self.tags.get(&to_parent_id).unwrap().children_ids.len() as i32
+            }
+        } else {
+            to_pos
+        };
 
         // if position is not changed
         if from_parent_id == to_parent_id && from_pos == to_pos {
@@ -850,7 +869,10 @@ impl DatabaseData {
             }
         }
 
-        debug!("tags: {:?}", self.tags);
+        info!(
+            "Reordered tag {} from parent {} position {} to parent {} position {}",
+            tag_id, from_parent_id, from_pos, to_parent_id, to_pos
+        );
 
         Ok(())
     }

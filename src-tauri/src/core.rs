@@ -1,4 +1,5 @@
 pub mod database;
+pub mod migrator;
 pub mod player;
 pub mod waveform;
 

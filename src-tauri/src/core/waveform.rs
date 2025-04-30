@@ -1,6 +1,6 @@
 use super::player::get_format_reader;
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 use std::path::Path;
 use std::slice::from_raw_parts;
 use std::sync::{Arc, RwLock};
@@ -210,6 +210,9 @@ impl WaveformGenerator {
                         && err.to_string() == "end of stream" =>
                 {
                     // End of stream is expected
+                }
+                Error::SourceReset => {
+                    info!("source reset");
                 }
                 err => {
                     warn!("waveform generator: {}", err);

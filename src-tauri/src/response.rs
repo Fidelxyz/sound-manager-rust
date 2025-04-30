@@ -13,6 +13,8 @@ pub enum Error {
     Player(#[from] crate::core::player::Error),
     #[error("waveform error: {0}")]
     Waveform(#[from] crate::core::waveform::Error),
+    #[error("migrator error: {0}")]
+    Migrator(#[from] crate::core::migrator::Error),
 }
 
 #[derive(serde::Serialize)]
@@ -70,6 +72,7 @@ impl serde::Serialize for Error {
             },
             Self::Player(_) => ErrorKind::Player(error_message),
             Self::Waveform(_) => ErrorKind::Waveform(error_message),
+            Self::Migrator(_) => ErrorKind::Database(error_message),
         };
         error_kind.serialize(serializer)
     }

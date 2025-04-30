@@ -8,11 +8,15 @@ fn main() {
     #[cfg(not(debug_assertions))]
     let log_level = log::LevelFilter::Info;
 
+    let log_config = simplelog::ConfigBuilder::new()
+        .add_filter_allow_str("sound_manager_rust_lib")
+        .build();
+
     simplelog::TermLogger::init(
         log_level,
-        simplelog::Config::default(),
-        simplelog::TerminalMode::Mixed,
-        simplelog::ColorChoice::Auto,
+        log_config,
+        Default::default(),
+        Default::default(),
     )
     .unwrap();
 

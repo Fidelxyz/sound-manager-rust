@@ -56,6 +56,8 @@ export type Filter = {
   folderPath: string;
 };
 
+export type MigrateFrom = "billfish";
+
 export const api = {
   openDatabase(path: string): Promise<void> {
     return invoke("open_database", { path });
@@ -67,6 +69,10 @@ export const api = {
 
   closeDatabase(): Promise<void> {
     return invoke("close_database");
+  },
+
+  migrateDatabase(path: string, fromType: MigrateFrom): Promise<void> {
+    return invoke("migrate_database", { path, fromType });
   },
 
   refresh(): Promise<void> {

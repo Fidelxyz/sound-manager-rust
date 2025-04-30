@@ -2,6 +2,7 @@ mod core;
 mod response;
 
 use core::database::DatabaseEmitter;
+use core::migrator::{migrate_from, MigrateFrom};
 use core::player::{PlayerEmitter, PlayerState};
 use core::{Database, Filter, Player, WaveformGenerator};
 use response::Error;
@@ -97,6 +98,29 @@ async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
     state.player.read().await.stop();
 
     trace!("close_database done");
+    Ok(())
+}
+
+#[tauri::command]
+async fn migrate_database(
+    path: String,
+    from_type: MigrateFrom,
+    state: State<'_, AppData>,
+    app: AppHandle,
+) -> Result<(), Error> {
+    trace!("migrate_database: {:?}", path);
+
+    let path = PathBuf::from(path);
+    migrate_from(&path, from_type)?;
+
+    state
+        .database
+        .write()
+        .await
+        .replace(Database::open(path.into(), AppEmitter::new(app))?);
+    state.player.write().await.run();
+
+    trace!("migrate_database done");
     Ok(())
 }
 
@@ -469,6 +493,7 @@ pub fn run() {
             open_database,
             create_database,
             close_database,
+            migrate_database,
             refresh,
             get_entries,
             get_tags,
