@@ -14,8 +14,6 @@ const { entry, allTags } = defineProps<{
 }>();
 const metadataTagEditor = ref();
 
-const emit = defineEmits(["update"]);
-
 function refresh() {
   metadataTagEditor.value?.refresh();
 }

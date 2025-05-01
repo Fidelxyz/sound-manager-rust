@@ -18,7 +18,9 @@ import { api } from "@/api";
 import { error } from "@/utils/message";
 import Tree from "./tree";
 
-const emit = defineEmits(["tags-changed"]);
+const emit = defineEmits<{
+  "tags-changed": [];
+}>();
 
 const filter = defineModel<Filter>("filter", { required: true });
 

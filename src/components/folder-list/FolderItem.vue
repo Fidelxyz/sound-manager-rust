@@ -17,7 +17,9 @@ defineProps({
   selectedPath: String,
 });
 
-const emit = defineEmits(["select"]);
+const emit = defineEmits<{
+  select: [folder: Folder];
+}>();
 
 const selectFolder = (folder: Folder) => {
   emit("select", folder);

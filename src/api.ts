@@ -56,7 +56,19 @@ export type Filter = {
   folderPath: string;
 };
 
+// ========== Migrator ==========
+
 export type MigrateFrom = "billfish";
+
+export type MigratorLog = {
+  kind: "warn" | "error";
+  message: string;
+};
+
+export type MigratorResult = {
+  success: boolean;
+  logs: MigratorLog[];
+};
 
 export const api = {
   openDatabase(path: string): Promise<void> {
@@ -71,7 +83,10 @@ export const api = {
     return invoke("close_database");
   },
 
-  migrateDatabase(path: string, fromType: MigrateFrom): Promise<void> {
+  migrateDatabase(
+    path: string,
+    fromType: MigrateFrom,
+  ): Promise<MigratorResult> {
     return invoke("migrate_database", { path, fromType });
   },
 

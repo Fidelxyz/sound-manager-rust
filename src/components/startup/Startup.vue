@@ -3,13 +3,16 @@ import { ref } from "vue";
 
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { Button, useConfirm } from "primevue";
+import { Button, useConfirm, Dialog } from "primevue";
 
-import type { MigrateFrom, ErrorKind } from "@/api";
+import type { MigrateFrom, MigratorResult, ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
+import MigrationMessage from "./MigrationMessage.vue";
 
-const emit = defineEmits(["database-loaded"]);
+const emit = defineEmits<{
+  "database-loaded": [];
+}>();
 
 const loading = ref(false);
 
@@ -90,6 +93,10 @@ async function createDatabase() {
     });
 }
 
+const migrationMessageVisible = ref(false);
+const migratorResult = ref<MigratorResult>();
+const migratedPath = ref<string>();
+
 async function migrateFrom(from: MigrateFrom) {
   console.log("Migrate From Billfish");
   const path = await open({
@@ -99,18 +106,40 @@ async function migrateFrom(from: MigrateFrom) {
   if (!path) return;
 
   loading.value = true;
-  api
-    .migrateDatabase(path, from)
-    .then(() => {
-      emit("database-loaded");
-    })
-    .catch((e: ErrorKind) => {
-      console.error(e);
-      error("迁移数据库错误", e.message);
-    })
-    .finally(() => {
-      loading.value = false;
-    });
+  try {
+    migratorResult.value = await api.migrateDatabase(path, from);
+    migratedPath.value = path;
+
+    // show migration message if there are any logs
+    if (migratorResult.value.logs.length > 0) {
+      showMigrationMessage();
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+function showMigrationMessage() {
+  migrationMessageVisible.value = true;
+}
+
+function closeMigrationMessage() {
+  migrationMessageVisible.value = false;
+  if (migratorResult.value?.success && migratedPath.value) {
+    loading.value = true;
+    api
+      .openDatabase(migratedPath.value)
+      .then(() => {
+        emit("database-loaded");
+      })
+      .catch((e: ErrorKind) => {
+        console.error(e);
+        error("打开数据库错误", e.message);
+      })
+      .finally(() => {
+        loading.value = false;
+      });
+  }
 }
 </script>
 
@@ -135,4 +164,10 @@ async function migrateFrom(from: MigrateFrom) {
       @click="migrateFrom('billfish')"
     />
   </div>
+
+  <MigrationMessage
+    v-model:visible="migrationMessageVisible"
+    :result="migratorResult"
+    @close="closeMigrationMessage"
+  />
 </template>

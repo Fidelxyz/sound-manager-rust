@@ -11,14 +11,12 @@ import AudioList from "./components/audio-list/AudioList.vue";
 import MetadataPanel from "./components/metadata-panel/MetadataPanel.vue";
 import TagList from "./components/tag-list/TagList.vue";
 import FolderList from "./components/folder-list/FolderList.vue";
-import Startup from "./components/Startup.vue";
+import Startup from "./components/startup/Startup.vue";
 import Player from "./components/player/Player.vue";
 
 import type { Entry, TagNode, Filter, Folder, ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
-
-const emit = defineEmits(["database-updated"]);
 
 const audioList = ref();
 const tagList = ref();

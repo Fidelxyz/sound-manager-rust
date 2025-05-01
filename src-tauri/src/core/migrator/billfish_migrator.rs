@@ -1,10 +1,10 @@
-use super::Migrator;
+use super::{Migrator, MigratorResult};
 use crate::core::{database::DatabaseEmitter, Database};
+use crate::warn;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
 
-use log::warn;
 use rusqlite::{Connection, OpenFlags};
 use thiserror::Error;
 
@@ -43,7 +43,7 @@ struct Tag {
 pub struct BillfishMigrator {}
 
 impl Migrator<Error> for BillfishMigrator {
-    fn migrate(base_path: &Path) -> Result<(), Error> {
+    fn migrate(base_path: &Path, result: &mut MigratorResult) -> Result<(), Error> {
         let database = Database::create(base_path.into(), NullEmitter {})?;
         let mut data = database.data.write().unwrap();
         let mut db = database.db.as_ref().lock().unwrap();
@@ -66,7 +66,7 @@ impl Migrator<Error> for BillfishMigrator {
             })?
             .filter_map(|folder| {
                 folder.map_err(|err| {
-                    warn!("Failed to read folder record: {:?}", err);
+                    warn!(result, "Failed to read folder record: {:?}", err);
                 })
                 .ok()
             })
@@ -83,7 +83,7 @@ impl Migrator<Error> for BillfishMigrator {
             })?
             .filter_map(|file| {
                 file.map_err(|err| {
-                    warn!("Failed to read file record: {:?}", err);
+                    warn!(result, "Failed to read file record: {:?}", err);
                 })
                 .ok()
             })
@@ -101,7 +101,7 @@ impl Migrator<Error> for BillfishMigrator {
             })?
             .filter_map(|tag| {
                 tag.map_err(|err| {
-                    warn!("Failed to read tag record: {:?}", err);
+                    warn!(result, "Failed to read tag record: {:?}", err);
                 })
                 .ok()
             })
@@ -116,7 +116,7 @@ impl Migrator<Error> for BillfishMigrator {
             })?
             .filter_map(|tag| {
                 tag.map_err(|err| {
-                    warn!("Failed to read file to tag record: {:?}", err);
+                    warn!(result, "Failed to read file to tag record: {:?}", err);
                 })
                 .ok()
             })
@@ -142,8 +142,10 @@ impl Migrator<Error> for BillfishMigrator {
 
             if id != 0 {
                 warn!(
+                    result,
                     "Failed to parse path for folder {:?}: parent folder of id {} not found",
-                    bf_folder.name, id
+                    bf_folder.name,
+                    id
                 );
                 continue;
             }
@@ -159,7 +161,7 @@ impl Migrator<Error> for BillfishMigrator {
             let tag_id = match data.new_tag(bf_tag.name.clone(), &db) {
                 Ok(tag_id) => tag_id,
                 Err(err) => {
-                    warn!("Failed to create tag {:?}: {:?}", &bf_tag.name, err);
+                    warn!(result, "Failed to create tag {:?}: {:?}", &bf_tag.name, err);
                     continue;
                 }
             };
@@ -167,7 +169,10 @@ impl Migrator<Error> for BillfishMigrator {
 
             // set the color of the tag
             if let Err(err) = data.set_tag_color(tag_id, bf_tag.color, &db) {
-                warn!("Failed to set color of tag {:?}: {:?}", &bf_tag.name, err);
+                warn!(
+                    result,
+                    "Failed to set color of tag {:?}: {:?}", &bf_tag.name, err
+                );
                 continue;
             }
         }
@@ -181,23 +186,27 @@ impl Migrator<Error> for BillfishMigrator {
 
             let Some(&tag_id) = new_tag_ids.get(&bf_tag.id) else {
                 warn!(
+                    result,
                     "Failed to set parent tag for tag {:?}: tag of id {} not found",
-                    bf_tag.name, bf_tag.id
+                    bf_tag.name,
+                    bf_tag.id
                 );
                 continue;
             };
             let Some(&parent_tag_id) = new_tag_ids.get(&bf_tag.pid) else {
                 warn!(
+                    result,
                     "Failed to set parent tag for tag {:?}: parent tag of id {} not found",
-                    bf_tag.name, bf_tag.pid
+                    bf_tag.name,
+                    bf_tag.pid
                 );
                 continue;
             };
 
             if let Err(err) = data.reorder_tag(tag_id, parent_tag_id, -1, &mut db) {
                 warn!(
-                    "Failed to set parent tag for tag {}: {:?}",
-                    &bf_tag.name, err
+                    result,
+                    "Failed to set parent tag for tag {}: {:?}", &bf_tag.name, err
                 );
                 continue;
             }
@@ -208,15 +217,17 @@ impl Migrator<Error> for BillfishMigrator {
         for file in &bf_files {
             let Some(folder_path) = folder_id_to_path.get(&file.pid) else {
                 warn!(
+                    result,
                     "Failed to parse path for file {}: parent folder of id {} not found",
-                    file.name, file.pid
+                    file.name,
+                    file.pid
                 );
                 continue;
             };
             let file_path = folder_path.join(&file.name);
 
             let Some(entry_id) = data.get_entry_id(&file_path) else {
-                warn!("File of path {:?} not found", file_path);
+                warn!(result, "File of path {:?} not found", file_path);
                 continue;
             };
             new_entry_ids.insert(file.id, entry_id);
@@ -230,8 +241,10 @@ impl Migrator<Error> for BillfishMigrator {
                     None => String::from("unknown"),
                 };
                 warn!(
+                    result,
                     "Failed to set tag for file {:?}: file of id {} not found",
-                    file_name, bf_file_id
+                    file_name,
+                    bf_file_id
                 );
                 continue;
             };
@@ -241,8 +254,8 @@ impl Migrator<Error> for BillfishMigrator {
                     None => String::from("unknown"),
                 };
                 warn!(
-                    "Failed to set tag for file {:?}: tag of id {} not found",
-                    file_name, bf_tag_id
+                    result,
+                    "Failed to set tag for file {:?}: tag of id {} not found", file_name, bf_tag_id
                 );
                 continue;
             };
@@ -252,7 +265,10 @@ impl Migrator<Error> for BillfishMigrator {
                     Some(file) => file.name.clone(),
                     None => String::from("unknown"),
                 };
-                warn!("Failed to set tag for file {:?}: {:?}", file_name, err);
+                warn!(
+                    result,
+                    "Failed to set tag for file {:?}: {:?}", file_name, err
+                );
                 continue;
             }
         }
