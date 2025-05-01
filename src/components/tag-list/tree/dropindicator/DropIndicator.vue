@@ -11,9 +11,9 @@ const { instruction } = defineProps<{
 }>();
 
 // TODO strokeColor is determined by isBlocked
-const isBlocked = computed(() => {
-  return instruction?.type === "instruction-blocked";
-});
+// const isBlocked = computed(() => {
+//   return instruction?.type === "instruction-blocked";
+// });
 const indent = computed(() => {
   switch (instruction?.type) {
     case "reorder-above":
