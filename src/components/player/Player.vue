@@ -132,9 +132,9 @@ onKeyStroke(" ", (event) => {
 
     <div class="flex">
       <div class="flex flex-1 align-center justify-start items-center gap-4">
-        <label for="auto-play">自动播放</label>
+        <label class="leading-none" for="auto-play">自动播放</label>
         <ToggleSwitch v-model="autoPlay" inputId="auto-play" />
-        <label for="skip-silence">跳过无声</label>
+        <label class="leading-none" for="skip-silence">跳过无声</label>
         <ToggleSwitch v-model="skipSilence" inputId="skip-silence" />
       </div>
 

@@ -136,6 +136,7 @@ async function selectOpenInApplication() {
 }
 
 onKeyStroke("s", () => {
+  if (!entry) return;
   spot();
 });
 </script>
