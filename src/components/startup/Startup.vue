@@ -3,9 +3,9 @@ import { ref } from "vue";
 
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { Button, useConfirm, Dialog } from "primevue";
+import { Button, useConfirm } from "primevue";
 
-import type { MigrateFrom, MigratorResult, ErrorKind } from "@/api";
+import type { ErrorKind, MigrateFrom, MigratorResult } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 import MigrationMessage from "./MigrationMessage.vue";

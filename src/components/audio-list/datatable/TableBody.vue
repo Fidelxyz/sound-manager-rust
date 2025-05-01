@@ -87,8 +87,9 @@
   </tbody>
 </template>
 
-<script lang="ts">
+<script>
 import { defineComponent } from "vue";
+
 import { cn } from "@primeuix/utils";
 import { getOuterHeight } from "@primeuix/utils/dom";
 import { resolveFieldData } from "@primeuix/utils/object";

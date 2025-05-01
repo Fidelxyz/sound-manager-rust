@@ -1,8 +1,10 @@
-<script lang="ts">
+<script>
+import { defineComponent } from "vue";
+
 import BaseComponent from "@primevue/core/basecomponent";
 import TreeStyle from "primevue/tree/style";
 
-export default {
+export default defineComponent({
   name: "BaseTree",
   extends: BaseComponent,
   props: {
@@ -86,5 +88,5 @@ export default {
       $parentInstance: this,
     };
   },
-};
+});
 </script>

@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
+import { faShuffle } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import {
-  InputText,
-  FloatLabel,
-  TreeSelect,
   Button,
+  FloatLabel,
+  InputText,
+  TreeSelect,
   type TreeSelectionKeys,
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
-import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import { faShuffle } from "@fortawesome/free-solid-svg-icons";
 
-import type { Filter, Entry } from "@/api";
+import type { Entry, Filter } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 

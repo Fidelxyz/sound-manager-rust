@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ref, onUnmounted, watch } from "vue";
 import { listen } from "@tauri-apps/api/event";
+import { onUnmounted, ref, watch } from "vue";
 
 import { Button, Slider, ToggleSwitch } from "primevue";
-import Waveform from "./Waveform.vue";
 import Spotter from "./Spotter.vue";
+import Waveform from "./Waveform.vue";
 
 import type { Entry, PlayerState } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
+import { onKeyStroke } from "@vueuse/core";
 
 const { entry } = defineProps<{
   entry?: Entry;
@@ -117,6 +118,11 @@ listen<PlayerState>("player_state_updated", (event) => {
   console.debug("player_state_updated", event.payload);
   playing.value = event.payload.playing;
   playingPos = event.payload.pos;
+});
+
+onKeyStroke(" ", (event) => {
+  togglePlayPause();
+  event.preventDefault();
 });
 </script>
 

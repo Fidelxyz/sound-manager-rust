@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { useTemplateRef } from "vue";
 
 import { InputText } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
-import MetadataTagEditor from "./MetadataTagEditor.vue";
-import { formatDuration } from "@/utils/utils";
 import type { Entry } from "@/api";
+import { formatDuration } from "@/utils/utils";
+import MetadataTagEditor from "./MetadataTagEditor.vue";
 
 const { entry, allTags } = defineProps<{
   entry?: Entry;
   allTags: TreeNode[];
 }>();
-const metadataTagEditor = ref();
+const metadataTagEditor = useTemplateRef("metadataTagEditor");
 
 function refresh() {
   metadataTagEditor.value?.refresh();

@@ -437,8 +437,9 @@
   </div>
 </template>
 
-<script lang="ts">
+<script>
 import { defineComponent } from "vue";
+
 import { cn } from "@primeuix/utils";
 import {
   addClass,
@@ -536,6 +537,7 @@ export default defineComponent({
     "row-edit-save",
     "row-edit-cancel",
   ],
+  expose: ["selectRow", "selectPrevRow", "selectNextRow"],
   provide() {
     return {
       $columns: this.d_columns,
@@ -806,7 +808,7 @@ export default defineComponent({
 
       return data;
     },
-    multisortField(data1, data2, index: number) {
+    multisortField(data1, data2, index) {
       const value1 = resolveFieldData(data1, this.d_multiSortMeta[index].field);
       const value2 = resolveFieldData(data2, this.d_multiSortMeta[index].field);
       const comparer = localeComparator();
@@ -962,7 +964,7 @@ export default defineComponent({
           }
         }
 
-        let matches: boolean;
+        let matches;
 
         if (activeFilters.global) {
           matches = localFiltered
@@ -1189,9 +1191,9 @@ export default defineComponent({
             this.onEnterKey(event, rowData, rowIndex);
             break;
 
-          case "Space":
-            this.onSpaceKey(event, rowData, rowIndex, slotProps);
-            break;
+          // case "Space":
+          //   this.onSpaceKey(event, rowData, rowIndex, slotProps);
+          //   break;
 
           case "Tab":
             this.onTabKey(event, rowIndex);
@@ -1222,6 +1224,7 @@ export default defineComponent({
 
       nextRow && this.focusRowChange(row, nextRow);
 
+      /*
       if (event.shiftKey) {
         const data = this.dataToRender(slotProps.rows);
         const nextRowIndex =
@@ -1233,6 +1236,7 @@ export default defineComponent({
           index: nextRowIndex,
         });
       }
+      */
 
       event.preventDefault();
     },
@@ -1241,6 +1245,7 @@ export default defineComponent({
 
       prevRow && this.focusRowChange(row, prevRow);
 
+      /*
       if (event.shiftKey) {
         const data = this.dataToRender(slotProps.rows);
         const prevRowIndex = rowIndex - 1 <= 0 ? 0 : rowIndex - 1;
@@ -1251,6 +1256,7 @@ export default defineComponent({
           index: prevRowIndex,
         });
       }
+      */
 
       event.preventDefault();
     },
@@ -1284,6 +1290,7 @@ export default defineComponent({
       this.onRowClick({ originalEvent: event, data: rowData, index: rowIndex });
       event.preventDefault();
     },
+    /*
     onSpaceKey(event, rowData, rowIndex, slotProps) {
       this.onEnterKey(event, rowData, rowIndex);
 
@@ -1320,6 +1327,7 @@ export default defineComponent({
         this.$emit("update:selection", _selection);
       }
     },
+    */
     onTabKey(event, rowIndex) {
       const body = this.$refs.bodyRef?.$el;
       const rows = find(body, 'tr[data-p-selectable-row="true"]');
@@ -2550,6 +2558,7 @@ export default defineComponent({
 
       return cloned;
     },
+
     updateReorderableColumns() {
       const columnOrder = [];
 
@@ -2592,6 +2601,151 @@ export default defineComponent({
     },
     hasSpacerStyle(style) {
       return isNotEmpty(style);
+    },
+
+    // ========== Global Hotkey Methods ==========
+    onRowSelected(e) {
+      const event = e.originalEvent;
+      const body = this.$refs.bodyRef?.$el;
+      const focusedItem = findSingle(
+        body,
+        'tr[data-p-selectable-row="true"][tabindex="0"]',
+      );
+
+      // this.$emit("row-click", e);
+
+      if (this.selectionMode) {
+        const rowData = e.data;
+        const rowIndex = this.d_first + e.index;
+
+        const selected = this.isSelected(rowData);
+        const metaSelection = this.rowTouched ? false : this.metaKeySelection;
+
+        this.anchorRowIndex = rowIndex;
+        this.rangeRowIndex = rowIndex;
+
+        if (metaSelection) {
+          if (this.isSingleSelectionMode()) {
+            this.$emit("update:selection", rowData);
+          } else if (this.isMultipleSelectionMode()) {
+            let _selection = metaKey ? this.selection || [] : [];
+
+            _selection = [..._selection, rowData];
+            this.$emit("update:selection", _selection);
+          }
+
+          this.$emit("row-select", {
+            originalEvent: event,
+            data: rowData,
+            index: rowIndex,
+            type: "row",
+          });
+        } else {
+          if (this.selectionMode === "single") {
+            if (selected) {
+              this.$emit("update:selection", null);
+              this.$emit("row-unselect", {
+                originalEvent: event,
+                data: rowData,
+                index: rowIndex,
+                type: "row",
+              });
+            } else {
+              this.$emit("update:selection", rowData);
+              this.$emit("row-select", {
+                originalEvent: event,
+                data: rowData,
+                index: rowIndex,
+                type: "row",
+              });
+            }
+          } else if (this.selectionMode === "multiple") {
+            if (selected) {
+              const selectionIndex = this.findIndexInSelection(rowData);
+              const _selection = this.selection.filter(
+                (val, i) => i !== selectionIndex,
+              );
+
+              this.$emit("update:selection", _selection);
+              this.$emit("row-unselect", {
+                originalEvent: event,
+                data: rowData,
+                index: rowIndex,
+                type: "row",
+              });
+            } else {
+              const _selection = this.selection
+                ? [...this.selection, rowData]
+                : [rowData];
+
+              this.$emit("update:selection", _selection);
+              this.$emit("row-select", {
+                originalEvent: event,
+                data: rowData,
+                index: rowIndex,
+                type: "row",
+              });
+            }
+          }
+        }
+      }
+
+      this.rowTouched = false;
+
+      if (focusedItem) {
+        focusedItem.tabIndex = "-1";
+      }
+    },
+    selectRow(event, index) {
+      const data = this.dataToRender();
+      if (!data || data.length === 0) return;
+
+      if (index < 0 || index >= data.length) return;
+
+      this.onRowSelected({
+        originalEvent: event,
+        data: data[index],
+        index: index,
+      });
+    },
+    selectPrevRow(event) {
+      if (this.selection) {
+        const data = this.dataToRender();
+        if (!data || data.length === 0) return;
+
+        const selection = Array.isArray(this.selection)
+          ? this.selection[this.selection.length - 1]
+          : this.selection;
+        const rowIndex = this.findIndex(this.selection, data);
+
+        const prevRowIndex = rowIndex - 1 <= 0 ? 0 : rowIndex - 1;
+
+        this.onRowSelected({
+          originalEvent: event,
+          data: data[prevRowIndex],
+          index: prevRowIndex,
+        });
+      }
+    },
+    selectNextRow(event) {
+      if (this.selection) {
+        const data = this.dataToRender();
+        if (!data || data.length === 0) return;
+
+        const selection = Array.isArray(this.selection)
+          ? this.selection[this.selection.length - 1]
+          : this.selection;
+        const rowIndex = this.findIndex(this.selection, data);
+
+        const nextRowIndex =
+          rowIndex + 1 >= data.length ? data.length - 1 : rowIndex + 1;
+
+        this.onRowSelected({
+          originalEvent: event,
+          data: data[nextRowIndex],
+          index: nextRowIndex,
+        });
+      }
     },
   },
   computed: {

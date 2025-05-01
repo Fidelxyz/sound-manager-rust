@@ -90,23 +90,20 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent } from "vue";
+<script>
 import { resolveFieldData } from "@primeuix/utils/object";
 import SearchIcon from "@primevue/icons/search";
 import SpinnerIcon from "@primevue/icons/spinner";
 import IconField from "primevue/iconfield";
 import InputIcon from "primevue/inputicon";
 import InputText from "primevue/inputtext";
+import { defineComponent } from "vue";
 import BaseTree from "./BaseTree.vue";
 import TreeNode from "./TreeNode.vue";
-import type { TreeNode as TreeNodeType } from "primevue/treenode";
-import type { TreeSelectionKeys, TreeState } from "./Tree";
 
-import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
-import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
 export default defineComponent({
   name: "Tree",
@@ -123,7 +120,7 @@ export default defineComponent({
     "node-reorder",
     "add-tag-to-entry",
   ],
-  data(): TreeState & { unregisterDraggingMonitor: CleanupFn } {
+  data() {
     return {
       d_expandedKeys: this.expandedKeys || {},
       filterValue: null,
@@ -142,7 +139,7 @@ export default defineComponent({
     this.unregisterDraggingMonitor();
   },
   methods: {
-    onNodeToggle(node: TreeNodeType) {
+    onNodeToggle(node) {
       const key = node.key;
 
       if (this.d_expandedKeys[key]) {
@@ -156,11 +153,7 @@ export default defineComponent({
       this.d_expandedKeys = { ...this.d_expandedKeys };
       this.$emit("update:expandedKeys", this.d_expandedKeys);
     },
-    onNodeClick(event: {
-      originalEvent: UIEvent;
-      nodeTouched: boolean;
-      node: TreeNodeType;
-    }) {
+    onNodeClick(event) {
       if (this.selectionMode != null && event.node.selectable !== false) {
         const metaSelection = event.nodeTouched ? false : this.metaKeySelection;
         const _selectionKeys = metaSelection
@@ -170,26 +163,18 @@ export default defineComponent({
         this.$emit("update:selectionKeys", _selectionKeys);
       }
     },
-    onCheckboxChange(event: {
-      selectionKeys: TreeSelectionKeys;
-      check: boolean;
-      node: TreeNodeType;
-    }) {
+    onCheckboxChange(event) {
       this.$emit("update:selectionKeys", event.selectionKeys);
 
       if (event.check) this.$emit("node-select", event.node);
       else this.$emit("node-unselect", event.node);
     },
-    handleSelectionWithMetaKey(event: {
-      originalEvent: UIEvent;
-      nodeTouched: boolean;
-      node: TreeNodeType;
-    }) {
-      const originalEvent = event.originalEvent as MouseEvent;
+    handleSelectionWithMetaKey(event) {
+      const originalEvent = event.originalEvent;
       const node = event.node;
       const metaKey = originalEvent.metaKey || originalEvent.ctrlKey;
       const selected = this.isNodeSelected(node);
-      let _selectionKeys: TreeSelectionKeys = {};
+      let _selectionKeys = {};
 
       if (selected && metaKey) {
         if (this.isSingleSelectionMode()) {
@@ -217,14 +202,10 @@ export default defineComponent({
 
       return _selectionKeys;
     },
-    handleSelectionWithoutMetaKey(event: {
-      selectionKeys: TreeSelectionKeys;
-      check: boolean;
-      node: TreeNodeType;
-    }) {
+    handleSelectionWithoutMetaKey(event) {
       const node = event.node;
       const selected = this.isNodeSelected(node);
-      let _selectionKeys: TreeSelectionKeys;
+      let _selectionKeys;
 
       if (this.isSingleSelectionMode()) {
         if (selected) {
@@ -257,20 +238,20 @@ export default defineComponent({
     isMultipleSelectionMode() {
       return this.selectionMode === "multiple";
     },
-    isNodeSelected(node: TreeNodeType) {
+    isNodeSelected(node) {
       return this.selectionMode && this.selectionKeys
         ? this.selectionKeys[node.key] === true
         : false;
     },
-    isChecked(node: TreeNodeType) {
+    isChecked(node) {
       return this.selectionKeys
         ? this.selectionKeys[node.key] && this.selectionKeys[node.key].checked
         : false;
     },
-    isNodeLeaf(node: TreeNodeType) {
+    isNodeLeaf(node) {
       return node.leaf === false ? false : !node.children?.length;
     },
-    onFilterKeyup(event: KeyboardEvent) {
+    onFilterKeyup(event) {
       if (event.code === "Enter" || event.code === "NumpadEnter") {
         event.preventDefault();
       }
@@ -280,14 +261,7 @@ export default defineComponent({
         value: event.target?.value,
       });
     },
-    findFilteredNodes(
-      node: TreeNodeType,
-      paramsWithoutNode: {
-        searchFields: string[];
-        filterText: string;
-        strict: boolean;
-      },
-    ) {
+    findFilteredNodes(node, paramsWithoutNode) {
       if (node) {
         let matched = false;
 
@@ -311,14 +285,7 @@ export default defineComponent({
         }
       }
     },
-    isFilterMatched(
-      node: TreeNodeType,
-      {
-        searchFields,
-        filterText,
-        strict,
-      }: { searchFields: string[]; filterText: string; strict: boolean },
-    ) {
+    isFilterMatched(node, { searchFields, filterText, strict }) {
       let matched = false;
 
       for (const field of searchFields) {
@@ -346,19 +313,17 @@ export default defineComponent({
         monitorForElements({
           canMonitor: ({ source }) => source.data.type === "tag",
           onDrop({ location, source }) {
-            // console.debug("onDrop", location, source);
             if (location.current.dropTargets.length === 0) return;
 
             const sourceData = source.data;
             const targetData = location.current.dropTargets[0].data;
             const instruction = extractInstruction(targetData);
-            // console.debug("onDrop", sourceData.key, targetData.key, instruction);
 
-            const sourceKey = sourceData.key as string;
-            const targetKey = targetData.key as string;
+            const sourceKey = sourceData.key;
+            const targetKey = targetData.key;
 
             // take the source node from the tree
-            let sourceNode: TreeNodeType | null = null;
+            let sourceNode = null;
             if (
               instruction?.type === "reorder-above" ||
               instruction?.type === "reorder-below" ||
@@ -369,10 +334,7 @@ export default defineComponent({
             if (!sourceNode) return;
 
             // insert the source node into the target node
-            let inserted: {
-              parentKey: string | null | undefined;
-              location: number;
-            } | null;
+            let inserted;
             switch (instruction?.type) {
               case "reorder-above":
                 inserted = tree.insertNodeAbove(sourceNode, targetKey);
@@ -398,22 +360,21 @@ export default defineComponent({
         monitorForElements({
           canMonitor: ({ source }) => source.data.type === "entry",
           onDrop({ location, source }) {
-            // console.debug("onDrop", location, source);
             if (location.current.dropTargets.length === 0) return;
 
             const sourceData = source.data;
             const targetData = location.current.dropTargets[0].data;
 
-            const entryKey = sourceData.key as number;
-            const tagKey = targetData.key as string;
+            const entryKey = sourceData.key;
+            const tagKey = targetData.key;
 
             tree.$emit("add-tag-to-entry", { tagKey, entryKey });
           },
         }),
       );
     },
-    takeNode(key: string): TreeNodeType | null {
-      const takeNode = (nodes: TreeNodeType[]): TreeNodeType | null => {
+    takeNode(key) {
+      const takeNode = (nodes) => {
         for (let i = 0; i < nodes.length; i++) {
           const node = nodes[i];
           if (node.key === key) {
@@ -430,14 +391,8 @@ export default defineComponent({
       };
       return takeNode(this.value);
     },
-    insertNodeAbove(
-      node: TreeNodeType,
-      targetKey: string,
-    ): { parentKey: string | null | undefined; location: number } | null {
-      const insertNodeAbove = (
-        nodes: TreeNodeType[],
-        parent?: TreeNodeType,
-      ): { parentKey: string | null | undefined; location: number } | null => {
+    insertNodeAbove(node, targetKey) {
+      const insertNodeAbove = (nodes, parent) => {
         for (let i = 0; i < nodes.length; i++) {
           const current = nodes[i];
           if (current.key === targetKey) {
@@ -455,14 +410,8 @@ export default defineComponent({
       };
       return insertNodeAbove(this.value);
     },
-    insertNodeBelow(
-      node: TreeNodeType,
-      targetKey: string,
-    ): { parentKey: string | null | undefined; location: number } | null {
-      const insertNodeBelow = (
-        nodes: TreeNodeType[],
-        parent?: TreeNodeType,
-      ): { parentKey: string | null | undefined; location: number } | null => {
+    insertNodeBelow(node, targetKey) {
+      const insertNodeBelow = (nodes, parent) => {
         for (let i = 0; i < nodes.length; i++) {
           const current = nodes[i];
           if (current.key === targetKey) {
@@ -480,13 +429,8 @@ export default defineComponent({
       };
       return insertNodeBelow(this.value);
     },
-    appendChildNode(
-      node: TreeNodeType,
-      targetKey: string,
-    ): { parentKey: string | undefined; location: number } | null {
-      const appendChildNode = (
-        nodes: TreeNodeType[],
-      ): { parentKey: string | undefined; location: number } | null => {
+    appendChildNode(node, targetKey) {
+      const appendChildNode = (nodes) => {
         for (let i = 0; i < nodes.length; i++) {
           const current = nodes[i];
           if (current.key === targetKey) {

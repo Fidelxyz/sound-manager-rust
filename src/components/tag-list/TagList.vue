@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 
 import {
   Button,
@@ -10,10 +10,10 @@ import {
   type TreeSelectionKeys,
   useConfirm,
 } from "primevue";
-import type { TreeNode } from "primevue/treenode";
 import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
+import type { TreeNode } from "primevue/treenode";
 
-import type { Tag, Filter, ErrorKind } from "@/api";
+import type { ErrorKind, Filter, Tag } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 import Tree from "./tree";
@@ -164,7 +164,7 @@ function addTagToEntry({
 // ========== Context Menu BEGIN ==========
 
 const confirm = useConfirm();
-const contextMenu = ref();
+const contextMenu = useTemplateRef("contextMenu");
 const contextMenuSelectedTag = ref<Tag>();
 const contextMenuItems = ref<MenuItem[]>([
   {
@@ -241,7 +241,7 @@ const contextMenuItems = ref<MenuItem[]>([
 
 function onTagRightClick(event: MouseEvent, tag: Tag) {
   contextMenuSelectedTag.value = tag;
-  contextMenu.value.show(event);
+  contextMenu.value?.show(event);
 }
 
 function renameTag() {

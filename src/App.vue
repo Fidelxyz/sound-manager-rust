@@ -1,27 +1,24 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { Menu, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
+import { onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 
-import { Splitter, SplitterPanel, Toast, ConfirmDialog } from "primevue";
+import { ConfirmDialog, Splitter, SplitterPanel, Toast } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
 import AudioList from "./components/audio-list/AudioList.vue";
-import MetadataPanel from "./components/metadata-panel/MetadataPanel.vue";
-import TagList from "./components/tag-list/TagList.vue";
 import FolderList from "./components/folder-list/FolderList.vue";
-import Startup from "./components/startup/Startup.vue";
+import MetadataPanel from "./components/metadata-panel/MetadataPanel.vue";
 import Player from "./components/player/Player.vue";
+import Startup from "./components/startup/Startup.vue";
+import TagList from "./components/tag-list/TagList.vue";
 
-import type { Entry, TagNode, Filter, Folder, ErrorKind } from "@/api";
+import type { Entry, ErrorKind, Filter, Folder, TagNode } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 
-const audioList = ref();
-const tagList = ref();
-const folderList = ref();
-const metadataPanel = ref();
+const metadataPanel = useTemplateRef("metadataPanel");
 
 // data
 const entries = ref<Entry[]>([]);
@@ -252,16 +249,11 @@ listen("files_updated", onFilesChanged);
           <SplitterPanel class="min-w-2xs" :size="15">
             <Splitter layout="vertical" class="h-full" :gutterSize="2">
               <SplitterPanel :minSize="20">
-                <FolderList
-                  ref="folderList"
-                  :folder="folder"
-                  v-model:filter="filter"
-                />
+                <FolderList :folder="folder" v-model:filter="filter" />
               </SplitterPanel>
 
               <SplitterPanel :minSize="20">
                 <TagList
-                  ref="tagList"
                   :tags="tags"
                   v-model:filter="filter"
                   @tags-changed="onTagsChanged"
@@ -272,7 +264,6 @@ listen("files_updated", onFilesChanged);
 
           <SplitterPanel :size="65">
             <AudioList
-              ref="audioList"
               :entries="entries"
               :tags="tags"
               v-model:filter="filter"
@@ -321,5 +312,10 @@ html {
 *::-webkit-scrollbar-thumb {
   background: var(--p-surface-500);
   border-radius: 4px;
+}
+
+/* Hide outline when pressing arrow keys */
+.p-splitterpanel {
+  outline: none;
 }
 </style>

@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
+import { onKeyStroke } from "@vueuse/core";
+import { ref } from "vue";
 
 import {
   Button,
   ButtonGroup,
   Dialog,
-  InputText,
   InputGroup,
+  InputText,
   ToggleSwitch,
   useConfirm,
 } from "primevue";
@@ -133,6 +134,10 @@ async function selectOpenInApplication() {
 
   tempSettings.value.openInApplication = path;
 }
+
+onKeyStroke("s", () => {
+  spot();
+});
 </script>
 
 <template>

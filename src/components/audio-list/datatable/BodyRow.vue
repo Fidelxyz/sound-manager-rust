@@ -181,7 +181,7 @@
   </tr>
 </template>
 
-<script lang="ts">
+<script>
 import { equals, isNotEmpty, resolveFieldData } from "@primeuix/utils/object";
 import BaseComponent from "@primevue/core/basecomponent";
 import { getVNodeProp } from "@primevue/core/utils";
@@ -192,7 +192,6 @@ import BodyCell from "./BodyCell.vue";
 
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
-import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 
 export default defineComponent({
   name: "BodyRow",
@@ -368,10 +367,7 @@ export default defineComponent({
       default: null,
     },
   },
-  data(): {
-    d_rowExpanded: boolean;
-    unregisterDraggable: CleanupFn;
-  } {
+  data() {
     return {
       d_rowExpanded: false,
       unregisterDraggable: () => {},
@@ -603,7 +599,7 @@ export default defineComponent({
     },
     // ========== Drag and Drop BEGIN ==========
     registerDraggable() {
-      const draggableArgs: Parameters<typeof draggable>[0] = {
+      const draggableArgs = {
         element: this.$refs.row,
         getInitialData: () => ({
           type: "entry",
@@ -613,10 +609,6 @@ export default defineComponent({
         }),
       };
       if (this.dragPreviewKey) {
-        console.debug(
-          "previewContent",
-          resolveFieldData(this.rowData, this.dragPreviewKey),
-        );
         draggableArgs.onGenerateDragPreview = ({ nativeSetDragImage }) => {
           setCustomNativeDragPreview({
             getOffset: ({ container }) => {

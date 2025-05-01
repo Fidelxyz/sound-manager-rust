@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { onMounted, ref, useTemplateRef, watch } from "vue";
 
 import { Button, Popover, Tree, type TreeSelectionKeys } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
-import type { Entry, Tag, ErrorKind } from "@/api";
+import type { Entry, ErrorKind, Tag } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 
@@ -13,8 +13,7 @@ const { entry, allTags } = defineProps<{
   allTags: TreeNode[];
 }>();
 
-const popover = ref();
-const tree = ref();
+const popover = useTemplateRef("popover");
 
 const tags = ref<Tag[]>([]);
 const selectedTag = ref<TreeSelectionKeys>();
@@ -131,7 +130,6 @@ function onTagSelectorHide() {
       @hide="onTagSelectorHide"
     >
       <Tree
-        ref="tree"
         v-model:selectionKeys="selectedTag"
         :value="allTags"
         selectionMode="single"

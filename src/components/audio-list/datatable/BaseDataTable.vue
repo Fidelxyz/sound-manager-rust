@@ -1,8 +1,10 @@
 <script>
+import { defineComponent } from "vue";
+
 import BaseComponent from "@primevue/core/basecomponent";
 import DataTableStyle from "primevue/datatable/style";
 
-export default {
+export default defineComponent({
   name: "BaseDataTable",
   extends: BaseComponent,
   props: {
@@ -310,5 +312,5 @@ export default {
       $parentInstance: this,
     };
   },
-};
+});
 </script>

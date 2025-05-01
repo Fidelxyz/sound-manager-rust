@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { onKeyStroke } from "@vueuse/core";
+import { ref, useTemplateRef, watch } from "vue";
 
 import { FilterMatchMode } from "@primevue/core/api";
 import {
   Column,
-  type DataTableRowSelectEvent,
   type DataTableFilterMeta,
   type DataTableFilterMetaData,
+  type DataTableRowSelectEvent,
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 import DataTable from "./datatable";
@@ -29,6 +30,24 @@ function selectEntry(event: DataTableRowSelectEvent) {
   console.debug("Select entry", entry);
   entry.viewed = true;
 }
+
+const dataTable = useTemplateRef("dataTable");
+onKeyStroke("ArrowUp", (event) => {
+  if (activeEntry.value) {
+    dataTable.value?.selectPrevRow(event);
+  } else {
+    dataTable.value?.selectRow(event, 0);
+  }
+  event.preventDefault();
+});
+onKeyStroke("ArrowDown", (event) => {
+  if (activeEntry.value) {
+    dataTable.value?.selectNextRow(event);
+  } else {
+    dataTable.value?.selectRow(event, 0);
+  }
+  event.preventDefault();
+});
 
 // ========== Filter BEGIN ==========
 
@@ -61,6 +80,7 @@ function rowClass(data: Entry) {
     <FilterPanel v-model="filter" :entries="entries" :tags="tags" />
 
     <DataTable
+      ref="dataTable"
       :value="entries"
       v-model:selection="activeEntry"
       v-model:filters="tableFilters"

@@ -27,7 +27,7 @@ import type {
   VirtualScrollerPassThroughOptionType,
   VirtualScrollerProps,
 } from "primevue/virtualscroller";
-import {
+import type {
   InputHTMLAttributes,
   TableHTMLAttributes,
   TransitionProps,
@@ -1777,7 +1777,7 @@ declare const DataTable: DefineComponent<
   DataTableProps,
   DataTableSlots,
   DataTableEmits,
-  DataTableMethods
+  DataTableMethodsz
 >;
 
 declare module "vue" {
