@@ -301,6 +301,10 @@ html {
   font-weight: 300;
 }
 
+body {
+  overflow: hidden;
+}
+
 *::-webkit-scrollbar {
   width: 8px;
 }

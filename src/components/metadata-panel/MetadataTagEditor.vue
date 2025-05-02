@@ -134,6 +134,7 @@ function onTagSelectorHide() {
         :value="allTags"
         selectionMode="single"
         class="p-0!"
+        scrollHeight="36rem"
         filter
         @update:selectionKeys="addTag"
       />
