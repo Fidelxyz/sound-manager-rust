@@ -3,12 +3,12 @@ import { ref } from "vue";
 
 import FolderItem from "./FolderItem.vue";
 
-import type { Folder, Filter } from "@/api";
+import type { Filter, Folder, FolderNode } from "@/api";
 
 const filter = defineModel<Filter>("filter", { required: true });
 
 const { folder } = defineProps<{
-  folder?: Folder;
+  folder: FolderNode | null;
 }>();
 
 const selectedFolder = ref<Folder>();
@@ -17,12 +17,12 @@ function selectFolder(folder: Folder) {
   if (selectedFolder.value === folder) {
     console.log("Unselect folder:", folder.name);
     selectedFolder.value = undefined;
-    filter.value.folderPath = "";
+    filter.value.folderId = null;
     return;
   }
   console.log("Select folder:", folder.name);
   selectedFolder.value = folder;
-  filter.value.folderPath = folder.path;
+  filter.value.folderId = folder.id;
 }
 </script>
 
@@ -32,9 +32,8 @@ function selectFolder(folder: Folder) {
     <ul>
       <FolderItem
         v-if="folder"
-        :key="folder.path"
-        :folder="folder"
-        :selected-path="selectedFolder?.path"
+        :folderNode="folder"
+        :selectedFolder="selectedFolder"
         @select="selectFolder"
       />
     </ul>

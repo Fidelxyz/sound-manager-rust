@@ -96,8 +96,9 @@ function syncPlayingPos() {
 }
 
 function togglePlayPause() {
+  if (!entry) return;
+
   console.debug("togglePlayPause");
-  if (!activeEntry.value?.path) return;
   if (playing.value) {
     pause();
     syncPlayingPos();

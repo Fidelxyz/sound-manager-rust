@@ -1,4 +1,4 @@
-use super::DatabaseData;
+use super::{DatabaseData, EntryId, TagId};
 
 use std::collections::HashSet;
 use std::iter::Iterator;
@@ -7,13 +7,13 @@ use std::iter::Iterator;
 #[serde(rename_all = "camelCase")]
 pub struct Filter {
     pub search: String,
-    pub tag_ids: Vec<i32>,
-    pub folder_path: String,
+    pub tag_ids: Vec<TagId>,
+    pub folder_id: Option<i32>,
 }
 
 impl DatabaseData {
-    pub fn filter(&self, filter: Filter) -> Option<Vec<i32>> {
-        if filter.search.is_empty() && filter.tag_ids.is_empty() && filter.folder_path.is_empty() {
+    pub fn filter(&self, filter: &Filter) -> Option<Vec<EntryId>> {
+        if filter.search.is_empty() && filter.tag_ids.is_empty() && filter.folder_id.is_none() {
             return None;
         }
 
@@ -27,7 +27,11 @@ impl DatabaseData {
 
                     let mut match_search = false;
 
-                    match_search |= entry.file_name.to_lowercase().contains(&search);
+                    match_search |= entry
+                        .file_name
+                        .to_string_lossy()
+                        .to_lowercase()
+                        .contains(&search);
 
                     if let Some(metadata) = &entry.metadata {
                         if let Some(title) = &metadata.title {
@@ -42,21 +46,17 @@ impl DatabaseData {
                     }
 
                     keep &= match_search;
-                };
+                }
 
-                if !filter.folder_path.is_empty() {
-                    keep &= entry
-                        .path
-                        .to_str()
-                        .unwrap()
-                        .starts_with(&filter.folder_path);
-                };
+                if let Some(folder_id) = filter.folder_id {
+                    keep &= entry.folder_id == folder_id;
+                }
 
                 if !filter.tag_ids.is_empty() {
                     keep &= entry
                         .tag_ids
-                        .is_superset(&HashSet::from_iter(filter.tag_ids.iter().cloned()));
-                };
+                        .is_superset(&filter.tag_ids.iter().copied().collect::<HashSet<_>>());
+                }
 
                 if keep {
                     Some(entry.id)

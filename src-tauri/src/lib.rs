@@ -4,14 +4,14 @@ mod response;
 use core::database::DatabaseEmitter;
 use core::migrator::{migrate_from, MigrateFrom, MigratorResult};
 use core::player::{PlayerEmitter, PlayerState};
-use core::{Database, Filter, Player, WaveformGenerator};
+use core::{Database, EntryId, Filter, Player, TagId, WaveformGenerator};
 use response::Error;
 
-use async_std::sync::RwLock;
 use futures::try_join;
 use log::{debug, trace};
 use std::option::Option;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 
 use tauri::ipc::{Channel, InvokeResponseBody, Response};
@@ -22,8 +22,8 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 struct AppData {
     database: RwLock<Option<Database>>,
-    player: RwLock<Player>,
-    waveform_generator: RwLock<WaveformGenerator>,
+    player: async_std::sync::RwLock<Player>,
+    waveform_generator: Mutex<WaveformGenerator>,
     emitter: AppEmitter,
 }
 
@@ -40,7 +40,7 @@ impl AppEmitter {
 
 impl PlayerEmitter for AppEmitter {
     fn on_player_state_updated(&self, state: PlayerState) {
-        trace!("Emit: player_state_updated, {:?}", state);
+        trace!("Emit: player_state_updated, {state:?}");
         self.app.emit("player_state_updated", state).unwrap();
     }
 }
@@ -60,14 +60,14 @@ async fn open_database(
     app: AppHandle,
     state: State<'_, AppData>,
 ) -> Result<(), Error> {
-    trace!("open_database: {:?}", path);
+    trace!("open_database: {path:?}");
 
     let path = PathBuf::from(path);
     state
         .database
         .write()
-        .await
-        .replace(Database::open(path.into(), AppEmitter::new(app))?);
+        .unwrap()
+        .replace(Database::open(path, AppEmitter::new(app))?);
     state.player.write().await.run();
 
     trace!("open_database done");
@@ -76,14 +76,14 @@ async fn open_database(
 
 #[tauri::command]
 async fn create_database(path: String, state: State<'_, AppData>) -> Result<(), Error> {
-    trace!("create_database: {:?}", path);
+    trace!("create_database: {path:?}");
 
     let path = PathBuf::from(path);
     state
         .database
         .write()
-        .await
-        .replace(Database::create(path.into(), state.emitter.clone())?);
+        .unwrap()
+        .replace(Database::create(path, state.emitter.clone())?);
     state.player.write().await.run();
 
     trace!("create_database done");
@@ -94,8 +94,9 @@ async fn create_database(path: String, state: State<'_, AppData>) -> Result<(), 
 async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
     trace!("close_database");
 
-    state.database.write().await.take();
+    state.database.write().unwrap().take();
     state.player.read().await.stop();
+    state.waveform_generator.lock().unwrap().set_source(None);
 
     trace!("close_database done");
     Ok(())
@@ -103,10 +104,10 @@ async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
 
 #[tauri::command]
 async fn migrate_database(path: String, from_type: MigrateFrom) -> MigratorResult {
-    trace!("migrate_database: {:?}", path);
+    trace!("migrate_database: {path:?}");
 
     let path = PathBuf::from(path);
-    let result = migrate_from(&path, from_type);
+    let result = migrate_from(&path, &from_type);
 
     trace!("migrate_database done");
     result
@@ -116,7 +117,7 @@ async fn migrate_database(path: String, from_type: MigrateFrom) -> MigratorResul
 async fn refresh(state: State<'_, AppData>) -> Result<(), Error> {
     trace!("refresh");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     database.refresh()?;
 
@@ -126,7 +127,7 @@ async fn refresh(state: State<'_, AppData>) -> Result<(), Error> {
 
 #[tauri::command]
 async fn get_entries(state: State<'_, AppData>) -> Result<Response, Error> {
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let data = database.data.read().unwrap();
     let entries = data.get_entries().values().collect::<Vec<_>>();
@@ -136,7 +137,7 @@ async fn get_entries(state: State<'_, AppData>) -> Result<Response, Error> {
 
 #[tauri::command]
 async fn get_tags(state: State<'_, AppData>) -> Result<Response, Error> {
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let data = database.data.read().unwrap();
     let tags = data.get_tags();
@@ -146,19 +147,19 @@ async fn get_tags(state: State<'_, AppData>) -> Result<Response, Error> {
 
 #[tauri::command]
 async fn get_folder(state: State<'_, AppData>) -> Result<Response, Error> {
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let data = database.data.read().unwrap();
     let folder = data.get_folders();
-    let response = serde_json::to_string(folder).unwrap();
+    let response = serde_json::to_string(&folder).unwrap();
     Ok(Response::new(response))
 }
 
 #[tauri::command]
-async fn new_tag(name: String, state: State<'_, AppData>) -> Result<i32, Error> {
-    trace!("new_tag: {:?}", name);
+async fn new_tag(name: String, state: State<'_, AppData>) -> Result<EntryId, Error> {
+    trace!("new_tag: {name:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     let tag_id = data.new_tag(name, &database.db.lock().unwrap())?;
@@ -168,10 +169,10 @@ async fn new_tag(name: String, state: State<'_, AppData>) -> Result<i32, Error> 
 }
 
 #[tauri::command]
-async fn delete_tag(tag_id: i32, state: State<'_, AppData>) -> Result<(), Error> {
-    trace!("delete_tag: {:?}", tag_id);
+async fn delete_tag(tag_id: TagId, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("delete_tag: {tag_id:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.delete_tag(tag_id, &database.db.lock().unwrap())?;
@@ -181,10 +182,10 @@ async fn delete_tag(tag_id: i32, state: State<'_, AppData>) -> Result<(), Error>
 }
 
 #[tauri::command]
-async fn rename_tag(tag_id: i32, name: String, state: State<'_, AppData>) -> Result<(), Error> {
-    trace!("rename_tag: tag_id = {:?}, name = {:?}", tag_id, name);
+async fn rename_tag(tag_id: TagId, name: String, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("rename_tag: tag_id = {tag_id:?}, name = {name:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.rename_tag(tag_id, name, &database.db.lock().unwrap())?;
@@ -195,19 +196,16 @@ async fn rename_tag(tag_id: i32, name: String, state: State<'_, AppData>) -> Res
 
 #[tauri::command]
 async fn reorder_tag(
-    tag_id: i32,
-    new_parent_id: i32,
+    tag_id: TagId,
+    new_parent_id: TagId,
     new_pos: i32,
     state: State<'_, AppData>,
 ) -> Result<(), Error> {
     trace!(
-        "reorder_tag: tag_id = {:?}, new_parent_id = {:?}, new_pos = {:?}",
-        tag_id,
-        new_parent_id,
-        new_pos
+        "reorder_tag: tag_id = {tag_id:?}, new_parent_id = {new_parent_id:?}, new_pos = {new_pos:?}"
     );
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.reorder_tag(
@@ -222,10 +220,10 @@ async fn reorder_tag(
 }
 
 #[tauri::command]
-async fn set_tag_color(tag_id: i32, color: i32, state: State<'_, AppData>) -> Result<(), Error> {
-    trace!("set_tag_color: tag_id = {:?}, color = {:?}", tag_id, color);
+async fn set_tag_color(tag_id: TagId, color: i32, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("set_tag_color: tag_id = {tag_id:?}, color = {color:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.set_tag_color(tag_id, color, &database.db.lock().unwrap())?;
@@ -235,13 +233,16 @@ async fn set_tag_color(tag_id: i32, color: i32, state: State<'_, AppData>) -> Re
 }
 
 #[tauri::command]
-async fn get_tags_for_entry(entry_id: i32, state: State<'_, AppData>) -> Result<Response, Error> {
-    trace!("get_tags_for_entry: {:?}", entry_id);
+async fn get_tags_for_entry(
+    entry_id: EntryId,
+    state: State<'_, AppData>,
+) -> Result<Response, Error> {
+    trace!("get_tags_for_entry: {entry_id:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let data = database.data.read().unwrap();
-    let tags = data.get_tags_for_entry(entry_id)?;
+    let tags = data.get_tags_for_entry(entry_id);
     let response = serde_json::to_string(&tags).unwrap();
 
     trace!("get_tags_for_entry done");
@@ -250,17 +251,13 @@ async fn get_tags_for_entry(entry_id: i32, state: State<'_, AppData>) -> Result<
 
 #[tauri::command]
 async fn add_tag_for_entry(
-    entry_id: i32,
-    tag_id: i32,
+    entry_id: EntryId,
+    tag_id: TagId,
     state: State<'_, AppData>,
 ) -> Result<(), Error> {
-    trace!(
-        "add_tag_for_entry: entry_id = {:?}, tag_id = {:?}",
-        entry_id,
-        tag_id
-    );
+    trace!("add_tag_for_entry: entry_id = {entry_id:?}, tag_id = {tag_id:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.add_tag_for_entry(entry_id, tag_id, &database.db.lock().unwrap())?;
@@ -271,17 +268,13 @@ async fn add_tag_for_entry(
 
 #[tauri::command]
 async fn remove_tag_for_entry(
-    entry_id: i32,
-    tag_id: i32,
+    entry_id: EntryId,
+    tag_id: TagId,
     state: State<'_, AppData>,
 ) -> Result<(), Error> {
-    trace!(
-        "remove_tag_for_entry: entry_id = {:?}, tag_id = {:?}",
-        entry_id,
-        tag_id
-    );
+    trace!("remove_tag_for_entry: entry_id = {entry_id:?}, tag_id = {tag_id:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let mut data = database.data.write().unwrap();
     data.remove_tag_for_entry(entry_id, tag_id, &database.db.lock().unwrap())?;
@@ -291,13 +284,13 @@ async fn remove_tag_for_entry(
 }
 
 #[tauri::command]
-async fn filter(filter: Filter, state: State<'_, AppData>) -> Result<Option<Vec<i32>>, Error> {
-    trace!("filter: {:?}", filter);
+async fn filter(filter: Filter, state: State<'_, AppData>) -> Result<Option<Vec<EntryId>>, Error> {
+    trace!("filter: {filter:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let data = database.data.read().unwrap();
-    let entry_ids = data.filter(filter);
+    let entry_ids = data.filter(&filter);
 
     trace!("filter done");
     Ok(entry_ids)
@@ -308,7 +301,7 @@ async fn filter(filter: Filter, state: State<'_, AppData>) -> Result<Option<Vec<
 #[tauri::command]
 async fn prepare_waveform(state: State<'_, AppData>) -> Result<u32, Error> {
     trace!("prepare_waveform");
-    let waveform_generator = state.waveform_generator.read().await;
+    let waveform_generator = state.waveform_generator.lock().unwrap();
     let data_length = waveform_generator.prepare_waveform()?;
     trace!("prepare_waveform done");
     Ok(data_length)
@@ -321,7 +314,7 @@ async fn request_waveform(
 ) -> Result<(), Error> {
     trace!("request_waveform");
 
-    let waveform_generator = state.waveform_generator.read().await;
+    let waveform_generator = state.waveform_generator.lock().unwrap();
     waveform_generator.request_waveform(move |data| {
         debug!("send waveform data, len: {}", data.len());
         let response = InvokeResponseBody::Raw(data.to_vec());
@@ -335,16 +328,16 @@ async fn request_waveform(
 // ========== Player ==========
 
 #[tauri::command]
-async fn set_player_source(entry_id: i32, state: State<'_, AppData>) -> Result<(), Error> {
-    trace!("set_player_source: {:?}", entry_id);
+async fn set_player_source(entry_id: EntryId, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("set_player_source: {entry_id:?}");
 
     let path = {
-        let database = state.database.read().await;
+        let database = state.database.read().unwrap();
         let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
         let data = database.data.read().unwrap();
-        data.to_absolute_path(&data.get_entry(entry_id)?.path)
+        data.to_absolute_path(&data.get_entry(entry_id).unwrap().path)
     };
-    debug!("path: {:?}", path);
+    debug!("path: {path:?}");
 
     let mut player = state.player.write().await;
     let set_player_source = player.set_source(&path);
@@ -352,9 +345,9 @@ async fn set_player_source(entry_id: i32, state: State<'_, AppData>) -> Result<(
     let set_waveform_source = async {
         state
             .waveform_generator
-            .write()
-            .await
-            .set_source(path.clone());
+            .lock()
+            .unwrap()
+            .set_source(path.clone().into());
         Ok(())
     };
 
@@ -370,7 +363,7 @@ async fn play(
     skip_silence: bool,
     state: State<'_, AppData>,
 ) -> Result<(), Error> {
-    trace!("play: {:?}", seek);
+    trace!("play: {seek:?}");
 
     state
         .player
@@ -394,7 +387,7 @@ async fn pause(state: State<'_, AppData>) -> Result<(), Error> {
 
 #[tauri::command]
 async fn set_volume(volume: f32, state: State<'_, AppData>) -> Result<(), Error> {
-    trace!("set_volume: {:?}", volume);
+    trace!("set_volume: {volume:?}");
 
     state.player.write().await.set_volume(volume)?;
 
@@ -411,15 +404,15 @@ async fn get_playing_pos(state: State<'_, AppData>) -> Result<f32, Error> {
 
 #[tauri::command]
 async fn spot(
-    entry_id: i32,
+    entry_id: EntryId,
     save_path: Option<&str>,
     open_in_application: Option<&str>,
     force: bool,
     state: State<'_, AppData>,
 ) -> Result<(), Error> {
-    trace!("spot: {:?}", entry_id);
+    trace!("spot: {entry_id:?}");
 
-    let database = state.database.read().await;
+    let database = state.database.read().unwrap();
     let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
     let data = database.data.read().unwrap();
 
@@ -443,7 +436,8 @@ pub fn run() {
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Sound Manager")
                 .inner_size(1600.0, 1000.0)
-                .theme(Some(Theme::Dark));
+                .theme(Some(Theme::Dark))
+                .disable_drag_drop_handler();
 
             // set transparent title bar only when building for macOS
             #[cfg(target_os = "macos")]

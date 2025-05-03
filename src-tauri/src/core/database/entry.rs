@@ -1,17 +1,24 @@
+use super::folder::FolderId;
+use super::tag::TagId;
 use crate::core::player::get_format_reader;
 
 use log::warn;
 use std::collections::HashSet;
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 use symphonia::core::meta::StandardTagKey;
 
+pub type EntryId = i32;
+
 pub struct Entry {
-    pub id: i32,
-    pub path: Box<Path>,
-    pub file_name: String,
+    pub id: EntryId,
+    pub folder_id: FolderId,
+    /// Relative path to the file
+    pub path: PathBuf,
+    pub file_name: OsString,
     pub metadata: Option<Metadata>,
-    pub tag_ids: HashSet<i32>,
+    pub tag_ids: HashSet<TagId>,
 }
 
 pub struct Metadata {
@@ -22,13 +29,14 @@ pub struct Metadata {
 }
 
 impl Entry {
-    pub fn new(path: Box<Path>) -> Self {
+    pub fn new(path: PathBuf, folder_id: FolderId) -> Self {
         debug_assert!(path.is_relative(), "Path must be relative");
 
-        let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
+        let file_name = path.file_name().unwrap().to_owned();
 
         Self {
             id: -1,
+            folder_id,
             path,
             file_name,
             metadata: None,
@@ -49,6 +57,8 @@ impl Entry {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_possible_truncation)]
     fn read_metadata(&self, base_path: &Path) -> Result<Metadata, symphonia::core::errors::Error> {
         let mut ret = Metadata {
             title: None,

@@ -1,31 +1,34 @@
-import { invoke, type Channel } from "@tauri-apps/api/core";
+import { type Channel, invoke } from "@tauri-apps/api/core";
 
 export type ErrorKind = {
   kind:
-    | "databaseNotOpen"
     | "databaseNotFound"
     | "databaseAlreadyExists"
-    | "entryNotFound"
-    | "tagNotFound"
     | "tagAlreadyExists"
-    | "tagNotFoundForEntry"
     | "tagAlreadyExistsForEntry"
     | "fileAlreadyExists"
-    | "database"
-    | "player"
-    | "waveform";
+    | "other";
   message: string;
 };
 
 export type Entry = {
   id: number;
-  path: string;
   fileName: string;
   title?: string;
   artist?: string;
   album?: string;
   duration?: number;
   viewed?: boolean;
+};
+
+export type Folder = {
+  id: number;
+  name: string;
+};
+
+export type FolderNode = {
+  folder: Folder;
+  subFolders: FolderNode[];
 };
 
 export type Tag = {
@@ -39,12 +42,6 @@ export type TagNode = {
   children: TagNode[];
 };
 
-export type Folder = {
-  path: string;
-  name: string;
-  subFolders: Folder[];
-};
-
 export type PlayerState = {
   playing: boolean;
   pos: number;
@@ -53,7 +50,7 @@ export type PlayerState = {
 export type Filter = {
   search: string;
   tagIds: number[];
-  folderPath: string;
+  folderId: number | null;
 };
 
 // ========== Migrator ==========
@@ -102,8 +99,8 @@ export const api = {
     return invoke<TagNode[]>("get_tags");
   },
 
-  getFolder(): Promise<Folder> {
-    return invoke<Folder>("get_folder");
+  getFolder(): Promise<FolderNode> {
+    return invoke<FolderNode>("get_folder");
   },
 
   newTag(name: string): Promise<number> {

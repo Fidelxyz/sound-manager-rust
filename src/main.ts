@@ -1,7 +1,7 @@
+import { ConfirmationService, ToastService } from "primevue";
+import PrimeVue from "primevue/config";
 import { createApp } from "vue";
 import App from "./App.vue";
-import PrimeVue from "primevue/config";
-import { ToastService, ConfirmationService } from "primevue";
 import { Preset } from "./style";
 
 const app = createApp(App);

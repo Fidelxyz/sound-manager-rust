@@ -1,27 +1,39 @@
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug)]
+use serde::Serialize;
+
+use super::ROOT_TAG_ID;
+
+pub type TagId = i32;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Tag {
-    pub id: i32,
-    pub parent_id: i32,
-    pub position: i32,
-    pub children_ids: HashSet<i32>,
+    pub id: TagId,
     pub name: String,
     pub color: i32,
+
+    #[serde(skip)]
+    pub parent_id: TagId,
+    #[serde(skip)]
+    pub position: i32,
+    #[serde(skip)]
+    pub children: HashSet<TagId>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TagNode<'a> {
     pub tag: &'a Tag,
     pub children: Vec<TagNode<'a>>,
 }
 
 impl TagNode<'_> {
-    fn new(id: i32, tags: &HashMap<i32, Tag>) -> TagNode {
+    fn new(id: TagId, tags: &HashMap<TagId, Tag>) -> TagNode {
         let tag = tags.get(&id).unwrap();
 
         let mut children = tag
-            .children_ids
+            .children
             .iter()
             .map(|child_id| TagNode::new(*child_id, tags))
             .collect::<Vec<_>>();
@@ -31,17 +43,8 @@ impl TagNode<'_> {
         TagNode { tag, children }
     }
 
-    pub fn build<'a>(
-        tags: &HashMap<i32, Tag>,
-        root_tag_ids: impl IntoIterator<Item = &'a i32>,
-    ) -> Vec<TagNode> {
-        let mut root_tags = root_tag_ids
-            .into_iter()
-            .map(|root_tag_id| TagNode::new(*root_tag_id, tags))
-            .collect::<Vec<_>>();
-
-        root_tags.sort_by_key(|root_tag| root_tag.tag.position);
-
-        root_tags
+    pub fn build(tags: &HashMap<TagId, Tag>) -> Vec<TagNode> {
+        let root = TagNode::new(ROOT_TAG_ID, tags);
+        root.children
     }
 }

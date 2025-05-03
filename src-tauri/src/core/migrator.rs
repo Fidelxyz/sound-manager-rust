@@ -66,13 +66,12 @@ pub enum MigrateFrom {
     Billfish,
 }
 
-pub fn migrate_from(path: &Path, from: MigrateFrom) -> MigratorResult {
+pub fn migrate_from(path: &Path, from: &MigrateFrom) -> MigratorResult {
     let mut result = MigratorResult::new();
 
     let impl_result: Result<_, MigratorImplError> = match from {
-        MigrateFrom::Billfish => {
-            billfish_migrator::BillfishMigrator::migrate(path, &mut result).map_err(|e| e.into())
-        }
+        MigrateFrom::Billfish => billfish_migrator::BillfishMigrator::migrate(path, &mut result)
+            .map_err(std::convert::Into::into),
     };
 
     if let Err(err) = impl_result {

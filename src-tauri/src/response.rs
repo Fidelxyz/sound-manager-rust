@@ -1,4 +1,6 @@
-use super::core::{Entry, Folder, Tag, TagNode};
+use std::ffi::OsStr;
+
+use super::core::Entry;
 
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use thiserror::Error;
@@ -19,18 +21,12 @@ pub enum Error {
 #[serde(tag = "kind", content = "message")]
 #[serde(rename_all = "camelCase")]
 enum ErrorKind {
-    DatabaseNotOpen(String),
     DatabaseNotFound(String),
     DatabaseAlreadyExists(String),
-    EntryNotFound(String),
-    TagNotFound(String),
     TagAlreadyExists(String),
-    TagNotFoundForEntry(String),
     TagAlreadyExistsForEntry(String),
     FileAlreadyExists(String),
-    Database(String),
-    Player(String),
-    Waveform(String),
+    Other(String),
 }
 
 impl serde::Serialize for Error {
@@ -40,7 +36,6 @@ impl serde::Serialize for Error {
     {
         let error_message = self.to_string();
         let error_kind = match self {
-            Self::DatabaseNotOpen => ErrorKind::DatabaseNotOpen(error_message),
             Self::Database(err) => match err {
                 crate::core::database::Error::DatabaseNotFound(_) => {
                     ErrorKind::DatabaseNotFound(error_message)
@@ -48,28 +43,18 @@ impl serde::Serialize for Error {
                 crate::core::database::Error::DatabaseAlreadyExists(_) => {
                     ErrorKind::DatabaseAlreadyExists(error_message)
                 }
-                crate::core::database::Error::EntryNotFound(_) => {
-                    ErrorKind::EntryNotFound(error_message)
-                }
-                crate::core::database::Error::TagNotFound(_) => {
-                    ErrorKind::TagNotFound(error_message)
-                }
                 crate::core::database::Error::TagAlreadyExists(_) => {
                     ErrorKind::TagAlreadyExists(error_message)
                 }
-                crate::core::database::Error::TagNotFoundForEntry(_, _) => {
-                    ErrorKind::TagNotFoundForEntry(error_message)
-                }
-                crate::core::database::Error::TagAlreadyExistsForEntry(_, _) => {
+                crate::core::database::Error::TagAlreadyExistsForEntry(..) => {
                     ErrorKind::TagAlreadyExistsForEntry(error_message)
                 }
                 crate::core::database::Error::FileAlreadyExists(_) => {
                     ErrorKind::FileAlreadyExists(error_message)
                 }
-                _ => ErrorKind::Database(error_message),
+                _ => ErrorKind::Other(error_message),
             },
-            Self::Player(_) => ErrorKind::Player(error_message),
-            Self::Waveform(_) => ErrorKind::Waveform(error_message),
+            _ => ErrorKind::Other(error_message),
         };
         error_kind.serialize(serializer)
     }
@@ -82,8 +67,7 @@ impl Serialize for Entry {
     {
         let mut state = serializer.serialize_struct("Entry", 8)?;
         state.serialize_field("id", &self.id)?;
-        state.serialize_field("path", &self.path)?;
-        state.serialize_field("fileName", &self.file_name)?;
+        state.serialize_field("fileName", &self.file_name.to_string_lossy())?;
         if let Some(metadata) = &self.metadata {
             if let Some(title) = &metadata.title {
                 state.serialize_field("title", title)?;
@@ -102,40 +86,9 @@ impl Serialize for Entry {
     }
 }
 
-impl Serialize for Tag {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Tag", 3)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("color", &self.color)?;
-        state.end()
-    }
-}
-
-impl Serialize for TagNode<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("TagNode", 2)?;
-        state.serialize_field("tag", &self.tag)?;
-        state.serialize_field("children", &self.children)?;
-        state.end()
-    }
-}
-
-impl Serialize for Folder {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Folder", 3)?;
-        state.serialize_field("path", &self.path)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("subFolders", &self.sub_folders)?;
-        state.end()
-    }
+pub fn serialize_os_string<S>(str: &OsStr, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    str.to_string_lossy().serialize(serializer)
 }

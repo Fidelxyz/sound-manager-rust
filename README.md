@@ -2,6 +2,6 @@
 
 - Hotkeys hint
 - Deleted date for entries and auto purge
-- Refactor folder data structure
+- Persistent settings
 - Testing
 - Fix filter

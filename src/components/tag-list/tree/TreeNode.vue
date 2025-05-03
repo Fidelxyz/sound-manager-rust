@@ -645,7 +645,6 @@ export default defineComponent({
           (source.data.type === "tag" && source.data.key !== this.node.key) ||
           source.data.type === "entry",
         onDrag: ({ self, source }) => {
-          console.debug(source.data.type);
           let instruction = null;
           if (source.data.type === "tag") {
             instruction = extractInstruction(self.data);

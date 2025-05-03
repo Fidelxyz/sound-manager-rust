@@ -1,29 +1,28 @@
 <script setup lang="ts">
-import type { PropType } from "vue";
-
 import { Button } from "primevue";
 
-import type { Folder } from "@/api";
+import type { Folder, FolderNode } from "@/api";
+import { computed } from "vue";
 
-defineProps({
-  folder: {
-    type: Object as PropType<Folder>,
-    required: true,
-  },
-  depth: {
-    type: Number,
-    default: 0,
-  },
-  selectedPath: String,
-});
+const {
+  folderNode,
+  selectedFolder,
+  depth = 0,
+} = defineProps<{
+  folderNode: FolderNode;
+  selectedFolder?: Folder;
+  depth?: number;
+}>();
+
+const folder = computed(() => folderNode.folder);
 
 const emit = defineEmits<{
   select: [folder: Folder];
 }>();
 
-const selectFolder = (folder: Folder) => {
+function selectFolder(folder: Folder) {
   emit("select", folder);
-};
+}
 </script>
 
 <template>
@@ -31,7 +30,7 @@ const selectFolder = (folder: Folder) => {
     <Button
       variant="text"
       class="w-full justify-start!"
-      :class="{ active: folder.path === selectedPath }"
+      :class="{ active: folder === selectedFolder }"
       :style="{
         paddingLeft: `calc(var(--p-button-padding-x) + ${depth * 1}rem)`,
       }"
@@ -53,11 +52,10 @@ const selectFolder = (folder: Folder) => {
     </Button>
   </li>
   <FolderItem
-    v-for="subFolder in folder.subFolders"
-    :key="subFolder.path"
-    :folder="subFolder"
+    v-for="subFolder in folderNode.subFolders"
+    :folderNode="subFolder"
     :depth="depth + 1"
-    :selected-path="selectedPath"
+    :selectedFolder="selectedFolder"
     @select="selectFolder"
   />
 </template>

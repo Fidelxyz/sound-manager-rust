@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use simplelog::{ColorChoice, TerminalMode};
+
 fn main() {
     #[cfg(debug_assertions)]
     let log_level = log::LevelFilter::Debug;
@@ -15,10 +17,10 @@ fn main() {
     simplelog::TermLogger::init(
         log_level,
         log_config,
-        Default::default(),
-        Default::default(),
+        TerminalMode::default(),
+        ColorChoice::default(),
     )
     .unwrap();
 
-    sound_manager_rust_lib::run()
+    sound_manager_rust_lib::run();
 }

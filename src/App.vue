@@ -14,7 +14,7 @@ import Player from "./components/player/Player.vue";
 import Startup from "./components/startup/Startup.vue";
 import TagList from "./components/tag-list/TagList.vue";
 
-import type { Entry, ErrorKind, Filter, Folder, TagNode } from "@/api";
+import type { Entry, ErrorKind, Filter, FolderNode, TagNode } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 
@@ -22,7 +22,7 @@ const metadataPanel = useTemplateRef("metadataPanel");
 
 // data
 const entries = ref<Entry[]>([]);
-const folder = ref<Folder>();
+const folder = ref<FolderNode | null>(null);
 const tags = ref<TreeNode[]>([]);
 
 // state
@@ -31,7 +31,7 @@ const activeEntry = ref<Entry>();
 const filter = ref<Filter>({
   search: "",
   tagIds: [],
-  folderPath: "",
+  folderId: null,
 });
 
 onMounted(async () => {
@@ -90,12 +90,13 @@ onMounted(async () => {
     items: [titleSubmenu, fileSubmenu],
   });
   menu.setAsAppMenu();
+
+  // make sure database unloaded after refresh
+  closeDatabase();
 });
 
 onUnmounted(() => {
-  api.closeDatabase().catch((e) => {
-    console.error(e);
-  });
+  closeDatabase();
 });
 
 async function openDatabase() {
@@ -154,6 +155,13 @@ async function createDatabase() {
     });
 }
 
+function closeDatabase() {
+  api.closeDatabase().catch((e) => {
+    console.error(e);
+    error("关闭数据库失败", e.message);
+  });
+}
+
 function refresh() {
   console.debug("Refreshing");
   api.refresh().catch((e) => {
@@ -187,7 +195,7 @@ function loadEntries() {
   api
     .getEntries()
     .then((data) => {
-      console.log(data);
+      console.log("Entries", data);
       entries.value = data;
     })
     .catch((e) => {
@@ -201,7 +209,7 @@ async function loadFolders() {
   api
     .getFolder()
     .then((data) => {
-      console.log(data);
+      console.log("Folder", data);
       folder.value = data;
     })
     .catch((e) => {
@@ -215,7 +223,7 @@ function loadTags() {
   api
     .getTags()
     .then((tagNodes) => {
-      console.log(tagNodes);
+      console.log("Tags", tagNodes);
       tags.value = toTagTree(tagNodes);
     })
     .catch((e) => {

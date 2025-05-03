@@ -132,9 +132,8 @@ impl Migrator<Error> for BillfishMigrator {
             let mut path = vec![bf_folder.name.clone()];
             let mut id = bf_folder.pid;
             while id != 0 {
-                let folder = match bf_folders.get(&id) {
-                    Some(folder) => folder,
-                    None => break,
+                let Some(folder) = bf_folders.get(&id) else {
+                    break;
                 };
                 path.push(folder.name.clone());
                 id = folder.pid;
@@ -173,7 +172,6 @@ impl Migrator<Error> for BillfishMigrator {
                     result,
                     "Failed to set color of tag {:?}: {:?}", &bf_tag.name, err
                 );
-                continue;
             }
         }
 
@@ -208,7 +206,6 @@ impl Migrator<Error> for BillfishMigrator {
                     result,
                     "Failed to set parent tag for tag {}: {:?}", &bf_tag.name, err
                 );
-                continue;
             }
         }
 
@@ -269,7 +266,6 @@ impl Migrator<Error> for BillfishMigrator {
                     result,
                     "Failed to set tag for file {:?}: {:?}", file_name, err
                 );
-                continue;
             }
         }
 

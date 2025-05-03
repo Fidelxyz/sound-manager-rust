@@ -6,12 +6,13 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::thread::{sleep, spawn};
+use symphonia::core::codecs::DecoderOptions;
 
 use rodio::{Decoder, OutputStream, Sink};
 use serde::Serialize;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::formats::{FormatOptions, FormatReader};
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use thiserror::Error;
@@ -136,6 +137,7 @@ impl Player {
             Ok::<_, Error>(())
         };
 
+        #[allow(clippy::cast_precision_loss)]
         let set_first_transit_pos = async {
             trace!("set_first_transit_pos");
 
@@ -149,8 +151,8 @@ impl Player {
             let n_channels = params.channels.unwrap().count();
             let sample_rate = params.sample_rate.unwrap();
 
-            let mut decoder =
-                symphonia::default::get_codecs().make(&track.codec_params, &Default::default())?;
+            let mut decoder = symphonia::default::get_codecs()
+                .make(&track.codec_params, &DecoderOptions::default())?;
             let mut sample_buf = None;
 
             let mut current_pos: usize = 0;
@@ -182,15 +184,12 @@ impl Player {
                             Err(err) => break Err(err),
                         };
 
-                        match pos {
-                            Some(pos) => {
-                                let pos_frame = (current_pos + pos) / n_channels;
-                                Some(pos_frame)
-                            }
-                            None => {
-                                current_pos += packet_length; // continue
-                                None
-                            }
+                        if let Some(pos) = pos {
+                            let pos_frame = (current_pos + pos) / n_channels;
+                            Some(pos_frame)
+                        } else {
+                            current_pos += packet_length; // continue
+                            None
                         }
                     }
                 };
@@ -257,7 +256,7 @@ impl Player {
         let sink = self.sink.read().unwrap();
         let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
 
-        debug!("set volume to {}", volume);
+        debug!("set volume to {volume}");
         sink.set_volume(volume);
         Ok(())
     }
@@ -282,13 +281,13 @@ pub fn get_format_reader(
     path: &Path,
 ) -> Result<Box<dyn FormatReader>, symphonia::core::errors::Error> {
     let src = std::fs::File::open(path)?;
-    let mss = MediaSourceStream::new(Box::new(src), Default::default());
+    let mss = MediaSourceStream::new(Box::new(src), MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
     if let Some(ext) = path.extension() {
         hint.with_extension(ext.to_string_lossy().as_ref());
     }
-    let meta_opts: MetadataOptions = Default::default();
-    let fmt_opts: FormatOptions = Default::default();
+    let meta_opts: MetadataOptions = MetadataOptions::default();
+    let fmt_opts: FormatOptions = FormatOptions::default();
     let probed = symphonia::default::get_probe().format(&hint, mss, &fmt_opts, &meta_opts)?;
     Ok(probed.format)
 }

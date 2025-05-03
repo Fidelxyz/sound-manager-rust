@@ -65,6 +65,8 @@ function addTag(value: TreeSelectionKeys) {
       refresh();
     })
     .catch((e: ErrorKind) => {
+      if (e.kind === "tagAlreadyExistsForEntry") return;
+
       console.error(e);
       error("添加标签失败", e.message);
     });
