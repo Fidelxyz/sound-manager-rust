@@ -92,12 +92,12 @@ async fn open_database(
 ) -> Result<(), Error> {
     trace!("open_database: {path:?}");
 
-    let path = PathBuf::from(path);
-    state
-        .database
-        .write()
-        .unwrap()
-        .replace(Database::open(path, AppEmitter::new(app))?);
+    let mut database = state.database.write().unwrap();
+    if let Some(database) = database.as_ref() {
+        database.close();
+    }
+    database.replace(Database::open(path.into(), AppEmitter::new(app))?);
+
     state.player.write().unwrap().run();
 
     trace!("open_database done");
@@ -108,12 +108,12 @@ async fn open_database(
 async fn create_database(path: String, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("create_database: {path:?}");
 
-    let path = PathBuf::from(path);
-    state
-        .database
-        .write()
-        .unwrap()
-        .replace(Database::create(path, state.emitter.clone())?);
+    let mut database = state.database.write().unwrap();
+    if let Some(database) = database.as_ref() {
+        database.close();
+    }
+    database.replace(Database::create(path.into(), state.emitter.clone())?);
+
     state.player.write().unwrap().run();
 
     trace!("create_database done");
@@ -124,7 +124,11 @@ async fn create_database(path: String, state: State<'_, AppData>) -> Result<(), 
 async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
     trace!("close_database");
 
-    state.database.write().unwrap().take();
+    let database = state.database.write().unwrap().take();
+    if let Some(database) = database {
+        database.close();
+    }
+
     state.player.read().unwrap().stop();
     state.waveform_generator.lock().unwrap().set_source(None);
 

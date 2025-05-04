@@ -13,12 +13,11 @@ pub use filter::Filter;
 pub use folder::{Folder, FolderId, FolderNode};
 pub use tag::{Tag, TagId, TagNode};
 
-use file_watcher::notify;
-
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
+use crossbeam_channel;
 use log::{info, trace, warn};
 use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
@@ -30,6 +29,7 @@ pub struct Database<E> {
     pub db: Mutex<Connection>,
 
     emitter: E,
+    stop_tx: crossbeam_channel::Sender<()>,
 }
 
 pub struct DatabaseData {
@@ -75,7 +75,7 @@ pub enum Error {
     #[error("symphonia error: {0}")]
     Symphonia(#[from] symphonia::core::errors::Error),
     #[error("notify error: {0}")]
-    Notify(#[from] notify::Error),
+    Notify(#[from] notify_debouncer_full::notify::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -91,6 +91,8 @@ where
     // ========== Constructor ==========
 
     pub fn open(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
+        info!("Opening database {base_path:?}");
+
         let database_file = base_path.join(".soundmanager.db");
         if !database_file.try_exists()? {
             // if database file does not exist
@@ -112,6 +114,8 @@ where
             ),
         )]);
 
+        let (stop_tx, stop_rx) = crossbeam_channel::bounded(1);
+
         let database = Self {
             data: RwLock::new(DatabaseData {
                 base_path,
@@ -121,6 +125,7 @@ where
             }),
             db: Mutex::new(db),
             emitter,
+            stop_tx,
         };
 
         database
@@ -130,12 +135,14 @@ where
             .scan(&mut database.db.lock().unwrap())?;
 
         let database = Arc::new(database);
-        Self::watch_dir(database.clone())?;
+        database.clone().watch_dir(stop_rx)?;
 
         Ok(database)
     }
 
     pub fn create(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
+        info!("Creating database {base_path:?}");
+
         let database_file = base_path.join(".soundmanager.db");
         if database_file.try_exists()? {
             // if database file already exists
@@ -218,6 +225,8 @@ where
             },
         )]);
 
+        let (stop_tx, stop_rx) = crossbeam_channel::bounded(1);
+
         let database = Self {
             data: RwLock::new(DatabaseData {
                 base_path,
@@ -227,6 +236,7 @@ where
             }),
             db: Mutex::new(db),
             emitter,
+            stop_tx,
         };
 
         database
@@ -236,7 +246,7 @@ where
             .scan(&mut database.db.lock().unwrap())?;
 
         let database = Arc::new(database);
-        Self::watch_dir(database.clone())?;
+        database.clone().watch_dir(stop_rx)?;
 
         Ok(database)
     }
@@ -252,6 +262,10 @@ where
 }
 
 impl<E> Database<E> {
+    pub fn close(&self) {
+        let _ = self.stop_tx.send(());
+    }
+
     fn read_tags(db: &Connection) -> Result<HashMap<TagId, Tag>> {
         let mut tags = db
             .prepare("SELECT id, name, parent, position, color FROM tags")?
@@ -285,6 +299,12 @@ impl<E> Database<E> {
         }
 
         Ok(tags)
+    }
+}
+
+impl<E> Drop for Database<E> {
+    fn drop(&mut self) {
+        info!("database closed");
     }
 }
 

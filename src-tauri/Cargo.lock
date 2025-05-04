@@ -2564,6 +2564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fee8403b3d66ac7b26aee6e40a897d85dc5ce26f44da36b8b73e987cc52e943"
 dependencies = [
  "bitflags 2.9.0",
+ "crossbeam-channel",
  "filetime",
  "fsevent-sys",
  "inotify",
@@ -2582,6 +2583,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2d88b1a7538054351c8258338df7c931a590513fb3745e8c15eb9ff4199b8d1"
 dependencies = [
+ "crossbeam-channel",
  "file-id",
  "log",
  "notify",
@@ -4008,6 +4010,7 @@ name = "sound-manager-rust"
 version = "0.1.0"
 dependencies = [
  "cocoa",
+ "crossbeam-channel",
  "log",
  "notify-debouncer-full",
  "open",

@@ -2,14 +2,16 @@ use super::{is_audio_file, is_hidden_file, Database, DatabaseEmitter, Result};
 
 use log::{debug, trace, warn};
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 use std::thread::spawn;
 use std::time::Duration;
 
+use crossbeam_channel;
+use crossbeam_channel::select;
 use notify_debouncer_full::new_debouncer;
-pub use notify_debouncer_full::notify;
 use notify_debouncer_full::notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify_debouncer_full::notify::EventKind::{Create, Modify, Remove};
+use notify_debouncer_full::notify::RecursiveMode;
 use notify_debouncer_full::DebouncedEvent;
 use thiserror::Error;
 
@@ -31,59 +33,63 @@ impl<E> Database<E>
 where
     E: DatabaseEmitter + Send + Sync + 'static,
 {
-    pub fn watch_dir(self: Arc<Self>) -> Result<()> {
-        let (tx, rx) = mpsc::channel();
-        let mut watcher = new_debouncer(Duration::from_secs(1), None, tx)?;
+    pub fn watch_dir(self: Arc<Self>, stop_rx: crossbeam_channel::Receiver<()>) -> Result<()> {
+        let (watcher_tx, watcher_rx) = crossbeam_channel::unbounded();
+        let mut watcher = new_debouncer(Duration::from_secs(1), None, watcher_tx)?;
         watcher.watch(
             &self.data.read().unwrap().base_path,
-            notify::RecursiveMode::Recursive,
+            RecursiveMode::Recursive,
         )?;
         debug!("watch directory: {:?}", self.data.read().unwrap().base_path);
 
         spawn(move || {
             debug!("start directory watcher thread");
 
-            // FIXME: stop when database is dropped
-
             // keep watcher alive
             let _watcher = watcher;
 
-            for result in rx {
-                let events = match result {
-                    Ok(events) => events,
-                    Err(err) => {
-                        warn!("Error watching directory: {err:?}");
-                        continue;
-                    }
-                };
+            loop {
+                select! {
+                    recv(stop_rx) -> _ => break,
 
-                let mut updated = false;
+                    recv(watcher_rx) -> result => {
+                        let events = match result.unwrap() {
+                            Ok(events) => events,
+                            Err(err) => {
+                                warn!("Error watching directory: {err:?}");
+                                continue;
+                            }
+                        };
 
-                for event in events {
-                    if event.need_rescan() {
-                        debug!("Rescanning directory");
+                        let mut updated = false;
 
-                        self.data
-                            .write()
-                            .unwrap()
-                            .scan(&mut self.db.lock().unwrap())
-                            .unwrap_or_else(|err| {
-                                warn!("Failed to scan directory: {err:?}");
+                        for event in events {
+                            if event.need_rescan() {
+                                debug!("Rescanning directory");
+
+                                self.data
+                                    .write()
+                                    .unwrap()
+                                    .scan(&mut self.db.lock().unwrap())
+                                    .unwrap_or_else(|err| {
+                                        warn!("Failed to scan directory: {err:?}");
+                                    });
+
+                                break; // skip the rest of the events
+                            }
+
+                            trace!("File event: {event:?}");
+
+                            updated |= handle_file_event(&event, &self).unwrap_or_else(|err| {
+                                warn!("Failed to process file change event: {err:?}");
+                                false
                             });
+                        }
 
-                        break; // skip the rest of the events
+                        if updated {
+                            self.emitter.on_files_updated();
+                        }
                     }
-
-                    trace!("File event: {event:?}");
-
-                    updated |= handle_file_event(&event, &self).unwrap_or_else(|err| {
-                        warn!("Failed to process file change event: {err:?}");
-                        false
-                    });
-                }
-
-                if updated {
-                    self.emitter.on_files_updated();
                 }
             }
 

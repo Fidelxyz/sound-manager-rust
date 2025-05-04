@@ -34,7 +34,8 @@ rodio = { version = "0.20.1", default-features = false, features = [
     "symphonia-mp3",
     "symphonia-aac",
 ] }
-notify-debouncer-full = "0.5.0"
+crossbeam-channel = "0.5.15"
+notify-debouncer-full = { version = "0.5.0", features = ["crossbeam-channel"] }
 open = "5.3.2"
 
 [dev-dependencies]
