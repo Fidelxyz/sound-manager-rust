@@ -241,7 +241,7 @@ impl Database {
         Ok(database)
     }
 
-    pub fn read_tags(db: &Connection) -> Result<HashMap<TagId, Tag>> {
+    fn read_tags(db: &Connection) -> Result<HashMap<TagId, Tag>> {
         let mut tags = db
             .prepare("SELECT id, name, parent, position, color FROM tags")?
             .query_map([], |row| {
@@ -352,7 +352,7 @@ impl DatabaseData {
                 if let Some(folder_id) = sub_folder_id {
                     existing_folders.insert(folder_id);
                 } else {
-                    new_folders.push(self.to_relative_path(path));
+                    new_folders.push(self.to_relative_path(&sub_folder_path));
                 }
 
                 // Read the sub-folder
@@ -601,6 +601,8 @@ impl DatabaseData {
     }
 
     fn add_folders(&mut self, paths: Vec<PathBuf>, db: &Connection) {
+        info!("Adding folders: {paths:#?}");
+
         for path in paths {
             self.add_folder(&path, db).unwrap_or_else(|err| {
                 warn!("Failed to add folder for {path:?}: {err:?}");
