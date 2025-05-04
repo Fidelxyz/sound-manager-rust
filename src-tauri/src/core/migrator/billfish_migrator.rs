@@ -46,7 +46,7 @@ impl Migrator<Error> for BillfishMigrator {
     fn migrate(base_path: &Path, result: &mut MigratorResult) -> Result<(), Error> {
         let database = Database::create(base_path.into(), NullEmitter {})?;
         let mut data = database.data.write().unwrap();
-        let mut db = database.db.as_ref().lock().unwrap();
+        let mut db = database.db.lock().unwrap();
 
         // read from the billfish database
         let bf_db = Connection::open_with_flags(

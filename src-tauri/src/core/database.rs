@@ -23,11 +23,13 @@ use log::{info, trace, warn};
 use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
-pub struct Database {
-    pub data: Arc<RwLock<DatabaseData>>,
-    pub db: Arc<Mutex<Connection>>,
+pub struct Database<E> {
+    // Two seperate locks are required
+    // due to the need of the interior mutability of data and db seperately
+    pub data: RwLock<DatabaseData>,
+    pub db: Mutex<Connection>,
 
-    emitter: Arc<dyn DatabaseEmitter + Send + Sync>,
+    emitter: E,
 }
 
 pub struct DatabaseData {
@@ -82,13 +84,13 @@ pub trait DatabaseEmitter {
     fn on_files_updated(&self);
 }
 
-impl Database {
+impl<E> Database<E>
+where
+    E: DatabaseEmitter + Send + Sync + 'static,
+{
     // ========== Constructor ==========
 
-    pub fn open<E>(base_path: PathBuf, emitter: E) -> Result<Database>
-    where
-        E: DatabaseEmitter + Send + Sync + 'static,
-    {
+    pub fn open(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
         let database_file = base_path.join(".soundmanager.db");
         if !database_file.try_exists()? {
             // if database file does not exist
@@ -111,17 +113,14 @@ impl Database {
         )]);
 
         let database = Self {
-            data: Arc::new(
-                DatabaseData {
-                    base_path,
-                    folders,
-                    entries: HashMap::new(),
-                    tags,
-                }
-                .into(),
-            ),
-            db: Arc::new(db.into()),
-            emitter: Arc::new(emitter),
+            data: RwLock::new(DatabaseData {
+                base_path,
+                folders,
+                entries: HashMap::new(),
+                tags,
+            }),
+            db: Mutex::new(db),
+            emitter,
         };
 
         database
@@ -129,15 +128,14 @@ impl Database {
             .write()
             .unwrap()
             .scan(&mut database.db.lock().unwrap())?;
-        database.watch_dir()?;
+
+        let database = Arc::new(database);
+        Self::watch_dir(database.clone())?;
 
         Ok(database)
     }
 
-    pub fn create<E>(base_path: PathBuf, emitter: E) -> Result<Database>
-    where
-        E: DatabaseEmitter + Send + Sync + 'static,
-    {
+    pub fn create(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
         let database_file = base_path.join(".soundmanager.db");
         if database_file.try_exists()? {
             // if database file already exists
@@ -221,17 +219,14 @@ impl Database {
         )]);
 
         let database = Self {
-            data: Arc::new(
-                DatabaseData {
-                    base_path,
-                    folders,
-                    entries: HashMap::new(),
-                    tags,
-                }
-                .into(),
-            ),
-            db: Arc::new(db.into()),
-            emitter: Arc::new(emitter),
+            data: RwLock::new(DatabaseData {
+                base_path,
+                folders,
+                entries: HashMap::new(),
+                tags,
+            }),
+            db: Mutex::new(db),
+            emitter,
         };
 
         database
@@ -239,11 +234,24 @@ impl Database {
             .write()
             .unwrap()
             .scan(&mut database.db.lock().unwrap())?;
-        database.watch_dir()?;
+
+        let database = Arc::new(database);
+        Self::watch_dir(database.clone())?;
 
         Ok(database)
     }
 
+    pub fn refresh(&self) -> Result<()> {
+        self.data
+            .write()
+            .unwrap()
+            .scan(&mut self.db.lock().unwrap())?;
+        self.emitter.on_files_updated();
+        Ok(())
+    }
+}
+
+impl<E> Database<E> {
     fn read_tags(db: &Connection) -> Result<HashMap<TagId, Tag>> {
         let mut tags = db
             .prepare("SELECT id, name, parent, position, color FROM tags")?
@@ -277,15 +285,6 @@ impl Database {
         }
 
         Ok(tags)
-    }
-
-    pub fn refresh(&self) -> Result<()> {
-        self.data
-            .write()
-            .unwrap()
-            .scan(&mut self.db.lock().unwrap())?;
-        self.emitter.on_files_updated();
-        Ok(())
     }
 }
 

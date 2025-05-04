@@ -1,6 +1,5 @@
 use core::time::Duration;
-use futures::try_join;
-use log::{debug, trace};
+use log::debug;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -112,103 +111,24 @@ impl Player {
         self.sink.write().unwrap().take();
     }
 
-    pub async fn set_source(&mut self, path: &Path) -> Result<(), Error> {
-        let sink = self.sink.clone();
-        let observer = self.emitter.clone();
+    pub fn set_source(&mut self, path: &Path) -> Result<(), Error> {
+        let sink = self.sink.read().unwrap();
+        let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
 
-        let set_sink_source = async {
-            trace!("set_sink_source");
+        sink.clear();
 
-            let sink = sink.read().unwrap();
-            let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
+        let file = BufReader::new(File::open(path)?);
+        let source = Decoder::new(file)?;
+        sink.append(source);
 
-            sink.clear();
+        debug!("set source: {path:?}");
+        self.emitter.on_player_state_updated(PlayerState {
+            playing: !sink.is_paused(),
+            pos: 0.,
+        });
 
-            let file = BufReader::new(File::open(path)?);
-            let source = Decoder::new(file)?;
-            sink.append(source);
-
-            observer.on_player_state_updated(PlayerState {
-                playing: !sink.is_paused(),
-                pos: 0.,
-            });
-
-            trace!("set_sink_source done");
-            Ok::<_, Error>(())
-        };
-
-        #[allow(clippy::cast_precision_loss)]
-        let set_first_transit_pos = async {
-            trace!("set_first_transit_pos");
-
-            let mut reader = get_format_reader(path)?;
-            let track = reader
-                .default_track()
-                .ok_or(Error::TracksNotFound(path.to_string_lossy().to_string()))?;
-            let track_id = track.id;
-
-            let params = &track.codec_params;
-            let n_channels = params.channels.unwrap().count();
-            let sample_rate = params.sample_rate.unwrap();
-
-            let mut decoder = symphonia::default::get_codecs()
-                .make(&track.codec_params, &DecoderOptions::default())?;
-            let mut sample_buf = None;
-
-            let mut current_pos: usize = 0;
-
-            let pos_frame = loop {
-                let pos_frame = match reader.next_packet() {
-                    Err(err) => break Err(err),
-
-                    Ok(packet) => {
-                        if packet.track_id() != track_id {
-                            continue;
-                        }
-
-                        let (pos, packet_length) = match decoder.decode(&packet) {
-                            Ok(audio_buf) => {
-                                let sample_buf = sample_buf.get_or_insert_with(|| {
-                                    let spec = *audio_buf.spec();
-                                    let capacity = audio_buf.capacity() as u64;
-                                    SampleBuffer::<i16>::new(capacity, spec)
-                                });
-
-                                sample_buf.copy_interleaved_ref(audio_buf);
-
-                                let pos = sample_buf.samples().iter().position(|&x| x != 0);
-                                let packet_length = sample_buf.len();
-
-                                (pos, packet_length)
-                            }
-                            Err(err) => break Err(err),
-                        };
-
-                        if let Some(pos) = pos {
-                            let pos_frame = (current_pos + pos) / n_channels;
-                            Some(pos_frame)
-                        } else {
-                            current_pos += packet_length; // continue
-                            None
-                        }
-                    }
-                };
-
-                if let Some(pos_frame) = pos_frame {
-                    break Ok(pos_frame);
-                }
-            }; // loop
-
-            self.first_transit_pos =
-                Duration::from_secs_f32(pos_frame.unwrap_or(0) as f32 / sample_rate as f32);
-            debug!("first transit pos: {:?}", self.first_transit_pos);
-
-            trace!("set_first_transit_pos done");
-
-            Ok::<_, Error>(())
-        };
-
-        try_join!(set_sink_source, set_first_transit_pos)?;
+        self.first_transit_pos = get_first_transit_pos(path)?;
+        debug!("first transit pos: {:?}", self.first_transit_pos);
 
         Ok(())
     }
@@ -290,4 +210,69 @@ pub fn get_format_reader(
     let fmt_opts: FormatOptions = FormatOptions::default();
     let probed = symphonia::default::get_probe().format(&hint, mss, &fmt_opts, &meta_opts)?;
     Ok(probed.format)
+}
+
+#[allow(clippy::cast_precision_loss)]
+pub fn get_first_transit_pos(path: &Path) -> Result<Duration, Error> {
+    let mut reader = get_format_reader(path)?;
+    let track = reader
+        .default_track()
+        .ok_or(Error::TracksNotFound(path.to_string_lossy().to_string()))?;
+    let track_id = track.id;
+
+    let params = &track.codec_params;
+    let n_channels = params.channels.unwrap().count();
+    let sample_rate = params.sample_rate.unwrap();
+
+    let mut decoder =
+        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
+    let mut sample_buf = None;
+
+    let mut current_pos: usize = 0;
+
+    let pos_frame = loop {
+        let pos_frame = match reader.next_packet() {
+            Err(err) => break Err(err),
+
+            Ok(packet) => {
+                if packet.track_id() != track_id {
+                    continue;
+                }
+
+                let (pos, packet_length) = match decoder.decode(&packet) {
+                    Ok(audio_buf) => {
+                        let sample_buf = sample_buf.get_or_insert_with(|| {
+                            let spec = *audio_buf.spec();
+                            let capacity = audio_buf.capacity() as u64;
+                            SampleBuffer::<i16>::new(capacity, spec)
+                        });
+
+                        sample_buf.copy_interleaved_ref(audio_buf);
+
+                        let pos = sample_buf.samples().iter().position(|&x| x != 0);
+                        let packet_length = sample_buf.len();
+
+                        (pos, packet_length)
+                    }
+                    Err(err) => break Err(err),
+                };
+
+                if let Some(pos) = pos {
+                    let pos_frame = (current_pos + pos) / n_channels;
+                    Some(pos_frame)
+                } else {
+                    current_pos += packet_length; // continue
+                    None
+                }
+            }
+        };
+
+        if let Some(pos_frame) = pos_frame {
+            break Ok(pos_frame);
+        }
+    }; // loop
+
+    Ok(Duration::from_secs_f32(
+        pos_frame.unwrap_or(0) as f32 / sample_rate as f32,
+    ))
 }

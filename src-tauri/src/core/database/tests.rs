@@ -72,7 +72,7 @@ fn setup_files(dir: &Path) -> PathBuf {
     base_path
 }
 
-fn setup_database(dir: &Path) -> (PathBuf, Database, TestEmitter) {
+fn setup_database(dir: &Path) -> (PathBuf, Arc<Database<TestEmitter>>, TestEmitter) {
     let base_path = setup_files(dir);
     let emitter = TestEmitter::new();
     let database = Database::create(base_path.clone(), emitter.clone()).unwrap();

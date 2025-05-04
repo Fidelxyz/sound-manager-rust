@@ -1,8 +1,8 @@
-use super::{is_audio_file, is_hidden_file, Database, DatabaseData, Result};
+use super::{is_audio_file, is_hidden_file, Database, DatabaseEmitter, Result};
 
 use log::{debug, trace, warn};
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Mutex, RwLock};
+use std::sync::{mpsc, Arc};
 use std::thread::spawn;
 use std::time::Duration;
 
@@ -11,7 +11,6 @@ pub use notify_debouncer_full::notify;
 use notify_debouncer_full::notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify_debouncer_full::notify::EventKind::{Create, Modify, Remove};
 use notify_debouncer_full::DebouncedEvent;
-use rusqlite::Connection;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -28,8 +27,11 @@ enum FileWatcherError {
 
 type FileWatcherResult<T> = std::result::Result<T, FileWatcherError>;
 
-impl Database {
-    pub fn watch_dir(&self) -> Result<()> {
+impl<E> Database<E>
+where
+    E: DatabaseEmitter + Send + Sync + 'static,
+{
+    pub fn watch_dir(self: Arc<Self>) -> Result<()> {
         let (tx, rx) = mpsc::channel();
         let mut watcher = new_debouncer(Duration::from_secs(1), None, tx)?;
         watcher.watch(
@@ -38,12 +40,10 @@ impl Database {
         )?;
         debug!("watch directory: {:?}", self.data.read().unwrap().base_path);
 
-        let data = self.data.clone();
-        let db = self.db.clone();
-        let emitter = self.emitter.clone();
-
         spawn(move || {
             debug!("start directory watcher thread");
+
+            // FIXME: stop when database is dropped
 
             // keep watcher alive
             let _watcher = watcher;
@@ -63,9 +63,10 @@ impl Database {
                     if event.need_rescan() {
                         debug!("Rescanning directory");
 
-                        data.write()
+                        self.data
+                            .write()
                             .unwrap()
-                            .scan(&mut db.lock().unwrap())
+                            .scan(&mut self.db.lock().unwrap())
                             .unwrap_or_else(|err| {
                                 warn!("Failed to scan directory: {err:?}");
                             });
@@ -75,14 +76,14 @@ impl Database {
 
                     trace!("File event: {event:?}");
 
-                    updated |= handle_file_event(&event, &data, &db).unwrap_or_else(|err| {
+                    updated |= handle_file_event(&event, &self).unwrap_or_else(|err| {
                         warn!("Failed to process file change event: {err:?}");
                         false
                     });
                 }
 
                 if updated {
-                    emitter.on_files_updated();
+                    self.emitter.on_files_updated();
                 }
             }
 
@@ -93,19 +94,17 @@ impl Database {
     }
 }
 
-fn handle_file_event(
-    event: &DebouncedEvent,
-    data: &RwLock<DatabaseData>,
-    db: &Mutex<Connection>,
-) -> FileWatcherResult<bool> {
+fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileWatcherResult<bool> {
     match event.kind {
         Create(CreateKind::Folder) => {
             debug!("Folder created: {event:?}");
 
             // Create(Folder) event is untrushworthy, rescan the folder
-            data.write()
+            database
+                .data
+                .write()
                 .unwrap()
-                .scan_folders(&mut db.lock().unwrap())?;
+                .scan_folders(&mut database.db.lock().unwrap())?;
             Ok(true)
         }
 
@@ -116,11 +115,7 @@ fn handle_file_event(
             }
 
             debug!("File created: {event:?}");
-            file_created(
-                &mut data.write().unwrap(),
-                path.as_path(),
-                &db.lock().unwrap(),
-            )?;
+            file_created(path.as_path(), database)?;
             Ok(true)
         }
 
@@ -131,7 +126,7 @@ fn handle_file_event(
             }
 
             debug!("Folder removed: {event:?}");
-            folder_removed(&mut data.write().unwrap(), path.as_path(), db)?;
+            folder_removed(path.as_path(), database)?;
             Ok(true)
         }
 
@@ -142,7 +137,7 @@ fn handle_file_event(
             }
 
             debug!("File removed: {event:?}");
-            file_removed(&mut data.write().unwrap(), path.as_path(), db)?;
+            file_removed(path.as_path(), database)?;
             Ok(true)
         }
 
@@ -152,7 +147,7 @@ fn handle_file_event(
 
             if new_path.is_dir() {
                 debug!("Folder moved: {event:?}");
-                folder_moved(&mut data.write().unwrap(), old_path, new_path, db)?;
+                folder_moved(old_path, new_path, database)?;
                 Ok(true)
             } else if new_path.is_file() {
                 match (
@@ -162,25 +157,21 @@ fn handle_file_event(
                     (true, true) => {
                         // audio -> audio
                         debug!("File moved: {event:?}");
-                        file_moved(&mut data.write().unwrap(), old_path, new_path, db)?;
+                        file_moved(old_path, new_path, database)?;
                         Ok(true)
                     }
 
                     (false, true) => {
                         // non-audio -> audio
                         debug!("File moved: {event:?}");
-                        file_created(
-                            &mut data.write().unwrap(),
-                            new_path.as_path(),
-                            &db.lock().unwrap(),
-                        )?;
+                        file_created(new_path.as_path(), database)?;
                         Ok(true)
                     }
 
                     (true, false) => {
                         // audio -> non-audio
                         debug!("File moved: {event:?}");
-                        file_removed(&mut data.write().unwrap(), old_path.as_path(), db)?;
+                        file_removed(old_path.as_path(), database)?;
                         Ok(true)
                     }
 
@@ -195,11 +186,7 @@ fn handle_file_event(
             // move in or move out of the watching folder will trigger this event
             let path = &event.paths[0];
             debug!("File or folder moved: {event:?}");
-            file_or_folder_updated(
-                &mut data.write().unwrap(),
-                path.as_path(),
-                &mut db.lock().unwrap(),
-            )?;
+            file_or_folder_updated(path.as_path(), database)?;
             Ok(true)
         }
 
@@ -211,11 +198,7 @@ fn handle_file_event(
             }
 
             debug!("File modified: {event:?}");
-            file_created(
-                &mut data.write().unwrap(),
-                path.as_path(),
-                &db.lock().unwrap(),
-            )?;
+            file_created(path.as_path(), database)?;
             Ok(true)
         }
 
@@ -223,12 +206,8 @@ fn handle_file_event(
     }
 }
 
-fn file_or_folder_updated(
-    data: &mut DatabaseData,
-    path: &Path,
-    db: &mut Connection,
-) -> FileWatcherResult<bool> {
-    let relative_path = data.to_relative_path(path);
+fn file_or_folder_updated<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<bool> {
+    let relative_path = database.data.write().unwrap().to_relative_path(path);
 
     if is_hidden_file(path) {
         return Ok(false);
@@ -237,27 +216,33 @@ fn file_or_folder_updated(
     if path.try_exists()? {
         if path.is_dir() {
             // directory exists, try to add folder
-            data.add_folders(vec![relative_path], db);
+            database
+                .data
+                .write()
+                .unwrap()
+                .add_folders(vec![relative_path], &database.db.lock().unwrap());
             Ok(true)
         } else if path.is_file() {
             // file exists, try to add entry
             if !is_audio_file(path) {
                 return Ok(false);
             }
-            file_created(data, path, db)?;
+            file_created(path, database)?;
             Ok(true)
         } else {
             panic!("Unexpected file type for path {path:?}");
         }
     } else {
         // file does not exists, try to remove it
+        let mut data = database.data.write().unwrap();
         if let Some(entry_id) = data.get_entry_id(&relative_path) {
             // entry exists, remove it
-            data.remove_entry(entry_id, db)?;
+            data.remove_entry(entry_id, &database.db.lock().unwrap())?;
             Ok(true)
         } else if let Some(folder) = data.get_folder_by_path(&relative_path) {
             // entry does not exist, try to remove folder
-            data.remove_folders(vec![folder.id], db);
+            let folder_id = folder.id;
+            data.remove_folders(vec![folder_id], &mut database.db.lock().unwrap());
             Ok(true)
         } else {
             // entry and folder do not exist, do nothing
@@ -266,89 +251,99 @@ fn file_or_folder_updated(
     }
 }
 
-fn file_created(data: &mut DatabaseData, path: &Path, db: &Connection) -> FileWatcherResult<()> {
+fn file_created<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()> {
     debug_assert!(path.is_file());
     debug_assert!(path.is_absolute());
+
+    let mut data = database.data.write().unwrap();
+
     let relative_path = data.to_relative_path(path);
 
     match data.get_entry_id(&relative_path) {
         // entry does not exist, add it
-        None => Ok(data.add_entries(&[relative_path], db)?),
+        None => Ok(data.add_entries(&[relative_path], &database.db.lock().unwrap())?),
 
         // entry already exists, reread it
         Some(entry_id) => {
+            let base_path = data.base_path.clone();
             data.entries
                 .get_mut(&entry_id)
-                .expect("Entry not found")
-                .read_file(&data.base_path);
+                .unwrap()
+                .read_file(&base_path);
             Ok(())
         }
     }
 }
 
-fn file_removed(
-    data: &mut DatabaseData,
-    path: &Path,
-    db: &Mutex<Connection>,
-) -> FileWatcherResult<()> {
+fn file_removed<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()> {
     debug_assert!(path.is_file());
     debug_assert!(path.is_absolute());
+
+    let mut data = database.data.write().unwrap();
+
     let relative_path = data.to_relative_path(path);
 
     let entry_id = data
         .get_entry_id(&relative_path)
         .ok_or_else(|| FileWatcherError::EntryNotFound(relative_path))?;
-    data.remove_entry(entry_id, &db.lock().unwrap())?;
+    data.remove_entry(entry_id, &database.db.lock().unwrap())?;
     Ok(())
 }
 
-fn folder_removed(
-    data: &mut DatabaseData,
-    path: &Path,
-    db: &Mutex<Connection>,
-) -> FileWatcherResult<()> {
+fn folder_removed<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()> {
     debug_assert!(path.is_dir());
     debug_assert!(path.is_absolute());
+
+    let mut data = database.data.write().unwrap();
+
     let relative_path = data.to_relative_path(path);
 
     let folder_id = data
         .get_folder_by_path(&relative_path)
         .ok_or_else(|| FileWatcherError::FolderNotFound(relative_path))?
         .id;
-    data.remove_folders(vec![folder_id], &mut db.lock().unwrap());
+    data.remove_folders(vec![folder_id], &mut database.db.lock().unwrap());
     Ok(())
 }
 
-fn file_moved(
-    data: &mut DatabaseData,
+fn file_moved<E>(
     old_path: &Path,
     new_path: &Path,
-    db: &Mutex<Connection>,
+    database: &Database<E>,
 ) -> FileWatcherResult<()> {
     debug_assert!(new_path.is_file());
+    debug_assert!(new_path.is_absolute());
+
+    let mut data = database.data.write().unwrap();
+
     let relative_old_path = data.to_relative_path(old_path);
     let relative_new_path = data.to_relative_path(new_path);
 
     if let Some(entry_id) = data.get_entry_id(&relative_old_path) {
         // if old entry exists, change its path
-        Ok(data.move_entry(entry_id, relative_new_path, &db.lock().unwrap())?)
+        Ok(data.move_entry(entry_id, relative_new_path, &database.db.lock().unwrap())?)
     } else {
         // if old entry does not exist, add new entry
-        Ok(data.add_entries(&[relative_new_path], &db.lock().unwrap())?)
+        Ok(data.add_entries(&[relative_new_path], &database.db.lock().unwrap())?)
     }
 }
 
-fn folder_moved(
-    data: &mut DatabaseData,
+fn folder_moved<E>(
     old_path: &Path,
     new_path: &Path,
-    db: &Mutex<Connection>,
+    database: &Database<E>,
 ) -> FileWatcherResult<()> {
+    debug_assert!(new_path.is_dir());
+    debug_assert!(new_path.is_absolute());
+
+    let mut data = database.data.write().unwrap();
+
     let relative_old_path = data.to_relative_path(old_path);
     let relative_new_path = data.to_relative_path(new_path);
+
     Ok(data.move_folder(
         &relative_old_path,
         &relative_new_path,
-        &mut db.lock().unwrap(),
+        &mut database.db.lock().unwrap(),
     )?)
 }

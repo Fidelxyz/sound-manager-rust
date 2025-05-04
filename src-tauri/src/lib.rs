@@ -7,11 +7,10 @@ use core::player::{PlayerEmitter, PlayerState};
 use core::{Database, EntryId, Filter, Player, TagId, WaveformGenerator};
 use response::Error;
 
-use futures::try_join;
 use log::{debug, trace};
 use std::option::Option;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use tauri::ipc::{Channel, InvokeResponseBody, Response};
@@ -21,8 +20,8 @@ use tauri::{
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 struct AppData {
-    database: RwLock<Option<Database>>,
-    player: async_std::sync::RwLock<Player>,
+    database: RwLock<Option<Arc<Database<AppEmitter>>>>,
+    player: RwLock<Player>,
     waveform_generator: Mutex<WaveformGenerator>,
     emitter: AppEmitter,
 }
@@ -99,7 +98,7 @@ async fn open_database(
         .write()
         .unwrap()
         .replace(Database::open(path, AppEmitter::new(app))?);
-    state.player.write().await.run();
+    state.player.write().unwrap().run();
 
     trace!("open_database done");
     Ok(())
@@ -115,7 +114,7 @@ async fn create_database(path: String, state: State<'_, AppData>) -> Result<(), 
         .write()
         .unwrap()
         .replace(Database::create(path, state.emitter.clone())?);
-    state.player.write().await.run();
+    state.player.write().unwrap().run();
 
     trace!("create_database done");
     Ok(())
@@ -126,7 +125,7 @@ async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
     trace!("close_database");
 
     state.database.write().unwrap().take();
-    state.player.read().await.stop();
+    state.player.read().unwrap().stop();
     state.waveform_generator.lock().unwrap().set_source(None);
 
     trace!("close_database done");
@@ -370,19 +369,13 @@ async fn set_player_source(entry_id: EntryId, state: State<'_, AppData>) -> Resu
     };
     debug!("path: {path:?}");
 
-    let mut player = state.player.write().await;
-    let set_player_source = player.set_source(&path);
+    state.player.write().unwrap().set_source(&path)?;
 
-    let set_waveform_source = async {
-        state
-            .waveform_generator
-            .lock()
-            .unwrap()
-            .set_source(path.clone().into());
-        Ok(())
-    };
-
-    try_join!(set_player_source, set_waveform_source)?;
+    state
+        .waveform_generator
+        .lock()
+        .unwrap()
+        .set_source(path.clone().into());
 
     trace!("set_player_source done");
     Ok(())
@@ -399,7 +392,7 @@ async fn play(
     state
         .player
         .read()
-        .await
+        .unwrap()
         .play(seek.map(Duration::from_secs_f32), skip_silence)?;
 
     trace!("play done");
@@ -410,7 +403,7 @@ async fn play(
 async fn pause(state: State<'_, AppData>) -> Result<(), Error> {
     trace!("pause");
 
-    state.player.read().await.pause();
+    state.player.read().unwrap().pause();
 
     trace!("pause done");
     Ok(())
@@ -420,7 +413,7 @@ async fn pause(state: State<'_, AppData>) -> Result<(), Error> {
 async fn set_volume(volume: f32, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("set_volume: {volume:?}");
 
-    state.player.write().await.set_volume(volume)?;
+    state.player.write().unwrap().set_volume(volume)?;
 
     trace!("set_volume done");
     Ok(())
@@ -428,7 +421,7 @@ async fn set_volume(volume: f32, state: State<'_, AppData>) -> Result<(), Error>
 
 #[tauri::command]
 async fn get_playing_pos(state: State<'_, AppData>) -> Result<f32, Error> {
-    Ok(state.player.read().await.get_pos())
+    Ok(state.player.read().unwrap().get_pos())
 }
 
 // ========== Spotter ==========
