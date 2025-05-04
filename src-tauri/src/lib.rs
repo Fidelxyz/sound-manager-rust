@@ -54,6 +54,37 @@ impl DatabaseEmitter for AppEmitter {
 
 // ========== Database ==========
 
+macro_rules! get_database {
+    ( $var:ident, $database:expr ) => {
+        let $var = $database.read().unwrap();
+        let $var = $var.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    };
+}
+
+macro_rules! get_data {
+    ( $data:ident, $database:expr ) => {
+        let $data = $database.data.read().unwrap();
+    };
+}
+
+macro_rules! get_data_mut {
+    ( $data:ident, $database:expr ) => {
+        let mut $data = $database.data.write().unwrap();
+    };
+}
+
+macro_rules! get_db {
+    ( $db:ident, $database:expr ) => {
+        let $db = $database.db.lock().unwrap();
+    };
+}
+
+macro_rules! get_db_mut {
+    ( $db:ident, $database:expr ) => {
+        let mut $db = $database.db.lock().unwrap();
+    };
+}
+
 #[tauri::command]
 async fn open_database(
     path: String,
@@ -117,8 +148,7 @@ async fn migrate_database(path: String, from_type: MigrateFrom) -> MigratorResul
 async fn refresh(state: State<'_, AppData>) -> Result<(), Error> {
     trace!("refresh");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
+    get_database!(database, state.database);
     database.refresh()?;
 
     trace!("refresh done");
@@ -127,9 +157,9 @@ async fn refresh(state: State<'_, AppData>) -> Result<(), Error> {
 
 #[tauri::command]
 async fn get_entries(state: State<'_, AppData>) -> Result<Response, Error> {
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let data = database.data.read().unwrap();
+    get_database!(database, state.database);
+    get_data!(data, database);
+
     let entries = data.get_entries().values().collect::<Vec<_>>();
     let response = serde_json::to_string(&entries).unwrap();
     Ok(Response::new(response))
@@ -137,9 +167,9 @@ async fn get_entries(state: State<'_, AppData>) -> Result<Response, Error> {
 
 #[tauri::command]
 async fn get_tags(state: State<'_, AppData>) -> Result<Response, Error> {
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let data = database.data.read().unwrap();
+    get_database!(database, state.database);
+    get_data!(data, database);
+
     let tags = data.get_tags();
     let response = serde_json::to_string(&tags).unwrap();
     Ok(Response::new(response))
@@ -147,9 +177,9 @@ async fn get_tags(state: State<'_, AppData>) -> Result<Response, Error> {
 
 #[tauri::command]
 async fn get_folder(state: State<'_, AppData>) -> Result<Response, Error> {
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let data = database.data.read().unwrap();
+    get_database!(database, state.database);
+    get_data!(data, database);
+
     let folder = data.get_folders();
     let response = serde_json::to_string(&folder).unwrap();
     Ok(Response::new(response))
@@ -159,10 +189,11 @@ async fn get_folder(state: State<'_, AppData>) -> Result<Response, Error> {
 async fn new_tag(name: String, state: State<'_, AppData>) -> Result<EntryId, Error> {
     trace!("new_tag: {name:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let mut data = database.data.write().unwrap();
-    let tag_id = data.new_tag(name, &database.db.lock().unwrap())?;
+    get_database!(database, state.database);
+    get_data_mut!(data, database);
+    get_db!(db, database);
+
+    let tag_id = data.new_tag(name, &db)?;
 
     trace!("new_tag done");
     Ok(tag_id)
@@ -172,10 +203,11 @@ async fn new_tag(name: String, state: State<'_, AppData>) -> Result<EntryId, Err
 async fn delete_tag(tag_id: TagId, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("delete_tag: {tag_id:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let mut data = database.data.write().unwrap();
-    data.delete_tag(tag_id, &database.db.lock().unwrap())?;
+    get_database!(database, state.database);
+    get_data_mut!(data, database);
+    get_db!(db, database);
+
+    data.delete_tag(tag_id, &db)?;
 
     trace!("delete_tag done");
     Ok(())
@@ -185,10 +217,11 @@ async fn delete_tag(tag_id: TagId, state: State<'_, AppData>) -> Result<(), Erro
 async fn rename_tag(tag_id: TagId, name: String, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("rename_tag: tag_id = {tag_id:?}, name = {name:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let mut data = database.data.write().unwrap();
-    data.rename_tag(tag_id, name, &database.db.lock().unwrap())?;
+    get_database!(database, state.database);
+    get_data_mut!(data, database);
+    get_db!(db, database);
+
+    data.rename_tag(tag_id, name, &db)?;
 
     trace!("rename_tag done");
     Ok(())
@@ -205,15 +238,11 @@ async fn reorder_tag(
         "reorder_tag: tag_id = {tag_id:?}, new_parent_id = {new_parent_id:?}, new_pos = {new_pos:?}"
     );
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let mut data = database.data.write().unwrap();
-    data.reorder_tag(
-        tag_id,
-        new_parent_id,
-        new_pos,
-        &mut database.db.lock().unwrap(),
-    )?;
+    get_database!(database, state.database);
+    get_data_mut!(data, database);
+    get_db_mut!(db, database);
+
+    data.reorder_tag(tag_id, new_parent_id, new_pos, &mut db)?;
 
     trace!("reorder_tag done");
     Ok(())
@@ -223,10 +252,11 @@ async fn reorder_tag(
 async fn set_tag_color(tag_id: TagId, color: i32, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("set_tag_color: tag_id = {tag_id:?}, color = {color:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let mut data = database.data.write().unwrap();
-    data.set_tag_color(tag_id, color, &database.db.lock().unwrap())?;
+    get_database!(database, state.database);
+    get_data_mut!(data, database);
+    get_db!(db, database);
+
+    data.set_tag_color(tag_id, color, &db)?;
 
     trace!("set_tag_color done");
     Ok(())
@@ -239,9 +269,9 @@ async fn get_tags_for_entry(
 ) -> Result<Response, Error> {
     trace!("get_tags_for_entry: {entry_id:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let data = database.data.read().unwrap();
+    get_database!(database, state.database);
+    get_data!(data, database);
+
     let tags = data.get_tags_for_entry(entry_id);
     let response = serde_json::to_string(&tags).unwrap();
 
@@ -257,10 +287,11 @@ async fn add_tag_for_entry(
 ) -> Result<(), Error> {
     trace!("add_tag_for_entry: entry_id = {entry_id:?}, tag_id = {tag_id:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let mut data = database.data.write().unwrap();
-    data.add_tag_for_entry(entry_id, tag_id, &database.db.lock().unwrap())?;
+    get_database!(database, state.database);
+    get_data_mut!(data, database);
+    get_db!(db, database);
+
+    data.add_tag_for_entry(entry_id, tag_id, &db)?;
 
     trace!("add_tag_for_entry done");
     Ok(())
@@ -274,10 +305,11 @@ async fn remove_tag_for_entry(
 ) -> Result<(), Error> {
     trace!("remove_tag_for_entry: entry_id = {entry_id:?}, tag_id = {tag_id:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let mut data = database.data.write().unwrap();
-    data.remove_tag_for_entry(entry_id, tag_id, &database.db.lock().unwrap())?;
+    get_database!(database, state.database);
+    get_data_mut!(data, database);
+    get_db!(db, database);
+
+    data.remove_tag_for_entry(entry_id, tag_id, &db)?;
 
     trace!("remove_tag_for_entry done");
     Ok(())
@@ -287,9 +319,9 @@ async fn remove_tag_for_entry(
 async fn filter(filter: Filter, state: State<'_, AppData>) -> Result<Option<Vec<EntryId>>, Error> {
     trace!("filter: {filter:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let data = database.data.read().unwrap();
+    get_database!(database, state.database);
+    get_data!(data, database);
+
     let entry_ids = data.filter(&filter);
 
     trace!("filter done");
@@ -332,10 +364,9 @@ async fn set_player_source(entry_id: EntryId, state: State<'_, AppData>) -> Resu
     trace!("set_player_source: {entry_id:?}");
 
     let path = {
-        let database = state.database.read().unwrap();
-        let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-        let data = database.data.read().unwrap();
-        data.to_absolute_path(&data.get_entry(entry_id).unwrap().path)
+        get_database!(database, state.database);
+        get_data!(data, database);
+        data.get_entry_path(entry_id).unwrap()
     };
     debug!("path: {path:?}");
 
@@ -412,9 +443,8 @@ async fn spot(
 ) -> Result<(), Error> {
     trace!("spot: {entry_id:?}");
 
-    let database = state.database.read().unwrap();
-    let database = database.as_ref().ok_or_else(|| Error::DatabaseNotOpen)?;
-    let data = database.data.read().unwrap();
+    get_database!(database, state.database);
+    get_data!(data, database);
 
     data.spot(
         entry_id,

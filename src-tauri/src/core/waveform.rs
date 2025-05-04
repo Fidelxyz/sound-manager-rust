@@ -43,7 +43,7 @@ impl WaveformGenerator {
     pub fn set_source(&mut self, path: Option<PathBuf>) {
         let mut source_path = self.source_path.lock().unwrap();
         *source_path = path;
-        self.reset.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.reset.store(true, std::sync::atomic::Ordering::Release);
     }
 
     fn get_default_track<'reader>(
@@ -89,7 +89,8 @@ impl WaveformGenerator {
                 .as_ref()
                 .ok_or(Error::SourceNotSet)?,
         )?;
-        self.reset.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.reset
+            .store(false, std::sync::atomic::Ordering::Release);
 
         let track = self.get_default_track(reader.as_ref())?;
         let track_id = track.id;
@@ -118,7 +119,7 @@ impl WaveformGenerator {
 
             // Decode all packets, ignoring all decode errors.
             let result: Error = loop {
-                if reset.load(std::sync::atomic::Ordering::SeqCst) {
+                if reset.load(std::sync::atomic::Ordering::Acquire) {
                     break Error::SourceReset;
                 }
 
@@ -155,7 +156,7 @@ impl WaveformGenerator {
                     }
                 };
 
-                if reset.load(std::sync::atomic::Ordering::SeqCst) {
+                if reset.load(std::sync::atomic::Ordering::Acquire) {
                     break Error::SourceReset;
                 }
 

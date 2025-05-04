@@ -5,6 +5,9 @@ mod folder;
 mod spotter;
 mod tag;
 
+#[cfg(test)]
+mod tests;
+
 pub use entry::{Entry, EntryId};
 pub use filter::Filter;
 pub use folder::{Folder, FolderId, FolderNode};
@@ -12,11 +15,11 @@ pub use tag::{Tag, TagId, TagNode};
 
 use file_watcher::notify;
 
-use log::{info, trace, warn};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
+use log::{info, trace, warn};
 use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
@@ -34,14 +37,14 @@ pub struct DatabaseData {
     tags: HashMap<TagId, Tag>,
 }
 
-pub struct FileDiff {
+struct FileDiff {
     pub new_folders: Vec<PathBuf>,
     pub deleted_folders: Vec<FolderId>,
     pub new_entries: Vec<PathBuf>,
     pub deleted_entries: Vec<EntryId>,
 }
 
-pub struct FolderDiff {
+struct FolderDiff {
     pub existing_folders: Vec<FolderId>,
     pub new_folders: Vec<PathBuf>,
 }
@@ -287,13 +290,13 @@ impl Database {
 }
 
 impl DatabaseData {
-    pub fn to_relative_path(&self, path: &Path) -> PathBuf {
+    fn to_relative_path(&self, path: &Path) -> PathBuf {
         debug_assert!(path.is_absolute());
         let relative_path = path.strip_prefix(&self.base_path).unwrap();
         relative_path.into()
     }
 
-    pub fn to_absolute_path(&self, path: &Path) -> PathBuf {
+    fn to_absolute_path(&self, path: &Path) -> PathBuf {
         debug_assert!(path.is_relative());
         self.base_path.join(path)
     }
@@ -512,7 +515,7 @@ impl DatabaseData {
     }
 
     /// Scan only the folders (excluding files) in the database.
-    pub fn scan_folders(&mut self, db: &mut Connection) -> Result<()> {
+    fn scan_folders(&mut self, db: &mut Connection) -> Result<()> {
         let diff = self.read_dir_folders(&self.base_path, ROOT_FOLDER_ID.into())?;
 
         // remove deleted folders
@@ -740,6 +743,12 @@ impl DatabaseData {
     pub fn get_entry_id(&self, path: &Path) -> Option<EntryId> {
         self.get_folder_by_path(path)
             .and_then(|folder| folder.entries.get(path.file_name().unwrap()).copied())
+    }
+
+    pub fn get_entry_path(&self, entry_id: EntryId) -> Option<PathBuf> {
+        self.entries
+            .get(&entry_id)
+            .map(|entry| self.to_absolute_path(&entry.path))
     }
 
     fn add_entries(&mut self, paths: &[PathBuf], db: &Connection) -> Result<()> {

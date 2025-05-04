@@ -52,7 +52,7 @@ impl MigratorResult {
 
 #[macro_export]
 macro_rules! warn {
-    ($logger:ident, $($arg:tt)+) => {{
+    ( $logger:ident, $($arg:tt)+ ) => {{
         log::warn!($($arg)+);
         $logger.warn(format!($($arg)+));
     }};
