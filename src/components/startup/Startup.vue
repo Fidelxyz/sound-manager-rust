@@ -18,17 +18,15 @@ const loading = ref(false);
 
 const confirm = useConfirm();
 
-async function openDatabase() {
+async function openDatabase(path?: string) {
   console.log("Open Database");
-  const path = await open({
-    multiple: false,
-    directory: true,
-  });
-  if (!path) return;
+
+  const path_ = path || (await open({ multiple: false, directory: true }));
+  if (!path_) return;
 
   loading.value = true;
   api
-    .openDatabase(path)
+    .openDatabase(path_)
     .then(() => {
       emit("database-loaded");
     })
@@ -36,25 +34,15 @@ async function openDatabase() {
       if (e.kind === "databaseNotFound") {
         console.warn(e);
 
-        const match_folder_name = path.match(/([^\\/]+)[\\/]*$/);
-        const folder_name = match_folder_name ? match_folder_name[1] : path;
+        const match_folder_name = path_.match(/([^\\/]+)[\\/]*$/);
+        const folder_name = match_folder_name ? match_folder_name[1] : path_;
         confirm.require({
           header: "数据库不存在",
           message: `是否为 ${folder_name} 创建数据库？`,
           icon: "pi pi-question-circle",
           rejectProps: { label: "取消", severity: "secondary", outlined: true },
           acceptProps: { label: "创建数据库", severity: "success" },
-          accept: () => {
-            api
-              .createDatabase(path)
-              .then(() => {
-                emit("database-loaded");
-              })
-              .catch((e: ErrorKind) => {
-                console.error(e);
-                error("创建数据库错误", e.message);
-              });
-          },
+          accept: () => createDatabase(path_),
         });
       } else {
         console.error(e);
@@ -66,24 +54,33 @@ async function openDatabase() {
     });
 }
 
-async function createDatabase() {
+async function createDatabase(path?: string) {
   console.log("Create Database");
-  const path = await open({
-    multiple: false,
-    directory: true,
-  });
-  if (!path) return;
+
+  const path_ = path || (await open({ multiple: false, directory: true }));
+  if (!path_) return;
 
   loading.value = true;
   api
-    .createDatabase(path)
+    .createDatabase(path_)
     .then(() => {
       emit("database-loaded");
     })
     .catch((e: ErrorKind) => {
       console.error(e);
       if (e.kind === "databaseAlreadyExists") {
-        error("数据库已存在", "请打开数据库");
+        console.warn(e);
+
+        const match_folder_name = path_.match(/([^\\/]+)[\\/]*$/);
+        const folder_name = match_folder_name ? match_folder_name[1] : path_;
+        confirm.require({
+          header: "数据库已存在",
+          message: `是否打开数据库 ${folder_name} ？`,
+          icon: "pi pi-question-circle",
+          rejectProps: { label: "取消", severity: "secondary", outlined: true },
+          acceptProps: { label: "打开数据库", severity: "success" },
+          accept: () => openDatabase(path_),
+        });
       } else {
         error("创建数据库错误", e.message);
       }
@@ -149,13 +146,13 @@ function closeMigrationMessage() {
       label="打开数据库"
       icon="pi pi-folder-open"
       :loading="loading"
-      @click="openDatabase"
+      @click="openDatabase()"
     />
     <Button
       label="创建数据库"
       icon="pi pi-folder-plus"
       :loading="loading"
-      @click="createDatabase"
+      @click="createDatabase()"
     />
     <Button
       label="从 Billfish 迁移"
