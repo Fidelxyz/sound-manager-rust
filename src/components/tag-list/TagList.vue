@@ -332,7 +332,10 @@ function setTagColor(event: MenuItemCommandEvent) {
           nodeContent: ({ context }) => ({
             onContextmenu: (event: MouseEvent) =>
               onTagRightClick(event, context.node.data),
-            class: { 'py-0!': context.node.data === editingTag },
+            class: {
+              'py-0!': context.node.data === editingTag,
+              'hover:bg-(--p-button-text-primary-hover-background)!': true,
+            },
           }),
         }"
       >
