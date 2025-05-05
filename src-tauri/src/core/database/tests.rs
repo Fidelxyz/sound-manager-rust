@@ -237,28 +237,21 @@ fn test_new_tag() {
     let mut data = database.data.write().unwrap();
     let db = database.db.lock().unwrap();
 
-    let mut tag_id_to_name = HashMap::with_capacity(TAGS_NUM);
-    for i in 0..TAGS_NUM {
-        let tag_name = format!("tag{i}");
-        let tag_id = data.new_tag(tag_name.clone(), &db).unwrap();
-        tag_id_to_name.insert(tag_id, tag_name);
+    let mut tag_ids: [i32; TAGS_NUM] = [0; TAGS_NUM];
+    for (i, tag_id) in tag_ids.iter_mut().enumerate() {
+        *tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
     }
 
     let tags = data.get_tags();
-    let mut positions = HashSet::new();
     assert_eq!(tags.len(), TAGS_NUM);
-    for tag in tags {
+    for (i, tag) in tags.iter().enumerate() {
         assert_eq!(tag.children.len(), 0);
-        assert_eq!(&tag.tag.name, tag_id_to_name.get(&tag.tag.id).unwrap());
+        assert_eq!(&tag.tag.name, &format!("tag{i}"));
         assert_eq!(tag.tag.color, 0);
         assert_eq!(tag.tag.parent_id, ROOT_TAG_ID);
         assert_eq!(tag.tag.children.len(), 0);
-        assert!(positions.insert(tag.tag.position)); // position must be unique
+        assert_eq!(tag.tag.position, i32::try_from(i).unwrap());
     }
-    assert_eq!(
-        positions,
-        (0..TAGS_NUM.try_into().unwrap()).collect::<HashSet<i32>>()
-    );
 
     for i in 0..TAGS_NUM {
         let tag_name = format!("tag{i}");
@@ -267,4 +260,307 @@ fn test_new_tag() {
             Err(Error::TagAlreadyExists(..))
         );
     }
+}
+
+#[test]
+fn test_set_tag_color() {
+    const TAGS_NUM: usize = 10;
+
+    let (_base_path, database, _emitter) = setup_database(testdir!().as_path());
+
+    let mut data = database.data.write().unwrap();
+    let db = database.db.lock().unwrap();
+
+    let mut expected_tag_id_to_color = HashMap::with_capacity(TAGS_NUM);
+    for i in 0..TAGS_NUM {
+        let tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
+        let tag_color: i32 = i.try_into().unwrap();
+        data.set_tag_color(tag_id, tag_color, &db).unwrap();
+        expected_tag_id_to_color.insert(tag_id, tag_color);
+    }
+
+    let tags = data.get_tags();
+    let mut actual_tag_id_to_color = HashMap::with_capacity(TAGS_NUM);
+    for tag in tags {
+        actual_tag_id_to_color.insert(tag.tag.id, tag.tag.color);
+    }
+
+    assert_eq!(actual_tag_id_to_color, expected_tag_id_to_color);
+}
+
+#[test]
+fn test_reorder_tag_reparent() {
+    const TAGS_NUM: usize = 10;
+
+    let (_base_path, database, _emitter) = setup_database(testdir!().as_path());
+
+    let mut data = database.data.write().unwrap();
+    let mut db = database.db.lock().unwrap();
+
+    let mut tag_ids: [i32; TAGS_NUM] = [0; TAGS_NUM];
+    for (i, tag_id) in tag_ids.iter_mut().enumerate() {
+        *tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
+    }
+
+    // Reparent tag 1..TAGS_NUM to tag 0
+    for i in 1..TAGS_NUM {
+        data.reorder_tag(tag_ids[i], tag_ids[0], -1, &mut db)
+            .unwrap();
+
+        let tags = data.get_tags();
+
+        assert_eq!(tags.len(), TAGS_NUM - i);
+        let tag_0 = &tags[0];
+        assert_eq!(tag_0.tag.id, tag_ids[0]);
+        assert_eq!(tag_0.children.len(), i);
+        assert_eq!(
+            tag_0.tag.children,
+            tag_ids[1..=i].iter().copied().collect::<HashSet<_>>()
+        );
+
+        let tag_i = &tag_0.children[i - 1];
+        assert_eq!(tag_i.tag.id, tag_ids[i]);
+        assert_eq!(tag_i.tag.parent_id, tag_ids[0]);
+        assert_eq!(tag_i.tag.position, i32::try_from(i).unwrap() - 1);
+    }
+}
+
+#[test]
+fn test_reorder_tag_same_parent() {
+    const TAGS_NUM: usize = 10;
+
+    let (_base_path, database, _emitter) = setup_database(testdir!().as_path());
+
+    let mut data = database.data.write().unwrap();
+    let mut db = database.db.lock().unwrap();
+
+    let mut tag_ids: [i32; TAGS_NUM] = [0; TAGS_NUM];
+    for (i, tag_id) in tag_ids.iter_mut().enumerate() {
+        *tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
+    }
+
+    // Reparent tag 1..TAGS_NUM to tag 0
+    // 0 - [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    //      ^  ^  ^  ^  ^  ^  ^  ^  ^
+    //      0  1  2  3  4  5  6  7  8
+    for i in 1..TAGS_NUM {
+        data.reorder_tag(tag_ids[i], tag_ids[0], -1, &mut db)
+            .unwrap();
+    }
+    let tags = data.get_tags();
+    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    assert!(child_ids.eq([1, 2, 3, 4, 5, 6, 7, 8, 9].map(|i| tag_ids[i])));
+    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
+
+    // Reorder children of tag 0
+
+    // Move to the end
+    // Move tag 1 to position 8
+    // 0 - [2, 3, 4, 5, 6, 7, 8, 9, 1]
+    //      ^  ^  ^  ^  ^  ^  ^  ^  ^
+    //      0  1  2  3  4  5  6  7  8
+    data.reorder_tag(tag_ids[1], tag_ids[0], 8, &mut db)
+        .unwrap();
+    let tags = data.get_tags();
+    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    assert!(child_ids.eq([2, 3, 4, 5, 6, 7, 8, 9, 1].map(|i| tag_ids[i])));
+    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
+
+    // Move to the front
+    // Move tag 1 to position 0
+    // 0 - [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    //      ^  ^  ^  ^  ^  ^  ^  ^  ^
+    //      0  1  2  3  4  5  6  7  8
+    data.reorder_tag(tag_ids[1], tag_ids[0], 0, &mut db)
+        .unwrap();
+    let tags = data.get_tags();
+    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    assert!(child_ids.eq([1, 2, 3, 4, 5, 6, 7, 8, 9].map(|i| tag_ids[i])));
+    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
+
+    // Move to the middle
+    // Move tag 7 to position 2
+    // 0 - [1, 2, 7, 3, 4, 5, 6, 8, 9]
+    //      ^  ^  ^  ^  ^  ^  ^  ^  ^
+    //      0  1  2  3  4  5  6  7  8
+    data.reorder_tag(tag_ids[7], tag_ids[0], 2, &mut db)
+        .unwrap();
+    let tags = data.get_tags();
+    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    assert!(child_ids.eq([1, 2, 7, 3, 4, 5, 6, 8, 9].map(|i| tag_ids[i])));
+    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
+}
+
+#[test]
+fn test_reorder_tag_across_parents() {
+    const TAGS_NUM: usize = 10;
+
+    let (_base_path, database, _emitter) = setup_database(testdir!().as_path());
+
+    let mut data = database.data.write().unwrap();
+    let mut db = database.db.lock().unwrap();
+
+    let mut tag_ids: [i32; TAGS_NUM] = [0; TAGS_NUM];
+    for (i, tag_id) in tag_ids.iter_mut().enumerate() {
+        *tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
+    }
+
+    // Reparent tag 2..=5 to tag 0
+    // Reparent tag 6..=9 to tag 1
+    // 0 - [2, 3, 4, 5], 1 - [6, 7, 8, 9]
+    //      ^  ^  ^  ^        ^  ^  ^  ^
+    //      0  1  2  3        0  1  2  3
+    for i in 2..=5 {
+        data.reorder_tag(tag_ids[i], tag_ids[0], -1, &mut db)
+            .unwrap();
+    }
+    for i in 6..=9 {
+        data.reorder_tag(tag_ids[i], tag_ids[1], -1, &mut db)
+            .unwrap();
+    }
+    let tags = data.get_tags();
+    let child0_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    assert!(child0_ids.eq([2, 3, 4, 5].map(|i| tag_ids[i])));
+    let child0_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    assert!(child0_positions.eq([0, 1, 2, 3]));
+    let child1_ids = tags[1].children.iter().map(|tag| tag.tag.id);
+    assert!(child1_ids.eq([6, 7, 8, 9].map(|i| tag_ids[i])));
+    let child1_positions = tags[1].children.iter().map(|tag| tag.tag.position);
+    assert!(child1_positions.eq([0, 1, 2, 3]));
+
+    // Move tag 4 to tag 1 at position 1
+    // 0 - [2, 3, 5], 1 - [6, 4, 7, 8, 9]
+    //      ^  ^  ^        ^  ^  ^  ^  ^
+    //      0  1  2        0  1  2  3  4
+    data.reorder_tag(tag_ids[4], tag_ids[1], 1, &mut db)
+        .unwrap();
+    let tags = data.get_tags();
+    let child0_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    assert!(child0_ids.eq([2, 3, 5].map(|i| tag_ids[i])));
+    let child0_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    assert!(child0_positions.eq([0, 1, 2]));
+    let child1_ids = tags[1].children.iter().map(|tag| tag.tag.id);
+    assert!(child1_ids.eq([6, 4, 7, 8, 9].map(|i| tag_ids[i])));
+    let child1_positions = tags[1].children.iter().map(|tag| tag.tag.position);
+    assert!(child1_positions.eq([0, 1, 2, 3, 4]));
+
+    // Move tag 8 to tag 0 at position 1
+    // 0 - [2, 8, 3, 5], 1 - [6, 4, 7, 9]
+    //      ^  ^  ^  ^        ^  ^  ^  ^
+    //      0  1  2  3        0  1  2  3
+    data.reorder_tag(tag_ids[8], tag_ids[0], 1, &mut db)
+        .unwrap();
+    let tags = data.get_tags();
+    let child0_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
+    let child0_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    assert!(child0_positions.eq([0, 1, 2, 3]));
+    let child1_ids = tags[1].children.iter().map(|tag| tag.tag.id);
+    assert!(child1_ids.eq([6, 4, 7, 9].map(|i| tag_ids[i])));
+    let child1_positions = tags[1].children.iter().map(|tag| tag.tag.position);
+    assert!(child1_positions.eq([0, 1, 2, 3]));
+
+    // Move tag 0 to tag 1 at position 2
+    // 1 - [6, 4, 0 - [2, 8, 3, 5], 7, 9]
+    //                 ^  ^  ^  ^
+    //                 0  1  2  3
+    //      ^  ^  ^                 ^  ^
+    //      0  1  2                 3  4
+    data.reorder_tag(tag_ids[0], tag_ids[1], 2, &mut db)
+        .unwrap();
+    let tags = data.get_tags();
+    let tag_1 = &tags[0];
+    let child1_ids = tag_1.children.iter().map(|tag| tag.tag.id);
+    assert!(child1_ids.eq([6, 4, 0, 7, 9].map(|i| tag_ids[i])));
+    let child1_positions = tag_1.children.iter().map(|tag| tag.tag.position);
+    assert!(child1_positions.eq([0, 1, 2, 3, 4]));
+    let tag_0 = &tags[0].children[2];
+    let child0_ids = tag_0.children.iter().map(|tag| tag.tag.id);
+    assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
+    let child0_positions = tag_0.children.iter().map(|tag| tag.tag.position);
+    assert!(child0_positions.eq([0, 1, 2, 3]));
+}
+
+#[test]
+fn test_read_tags() {
+    const TAGS_NUM: usize = 10;
+
+    let (_base_path, database, _emitter) = setup_database(testdir!().as_path());
+
+    let mut tag_ids: [i32; TAGS_NUM] = [0; TAGS_NUM];
+    {
+        let mut data = database.data.write().unwrap();
+        let mut db = database.db.lock().unwrap();
+
+        for (i, tag_id) in tag_ids.iter_mut().enumerate() {
+            *tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
+        }
+
+        // Reparent tag 2..=5 to tag 0
+        // Reparent tag 6..=9 to tag 1
+        // 0 - [2, 3, 4, 5], 1 - [6, 7, 8, 9]
+        //      ^  ^  ^  ^        ^  ^  ^  ^
+        //      0  1  2  3        0  1  2  3
+        for i in 2..=5 {
+            data.reorder_tag(tag_ids[i], tag_ids[0], -1, &mut db)
+                .unwrap();
+        }
+        for i in 6..=9 {
+            data.reorder_tag(tag_ids[i], tag_ids[1], -1, &mut db)
+                .unwrap();
+        }
+
+        // Move tag 4 to tag 1 at position 1
+        // 0 - [2, 3, 5], 1 - [6, 4, 7, 8, 9]
+        //      ^  ^  ^        ^  ^  ^  ^  ^
+        //      0  1  2        0  1  2  3  4
+        data.reorder_tag(tag_ids[4], tag_ids[1], 1, &mut db)
+            .unwrap();
+
+        // Move tag 8 to tag 0 at position 1
+        // 0 - [2, 8, 3, 5], 1 - [6, 4, 7, 9]
+        //      ^  ^  ^  ^        ^  ^  ^  ^
+        //      0  1  2  3        0  1  2  3
+        data.reorder_tag(tag_ids[8], tag_ids[0], 1, &mut db)
+            .unwrap();
+
+        // Move tag 0 to tag 1 at position 2
+        // 1 - [6, 4, 0 - [2, 8, 3, 5], 7, 9]
+        //                 ^  ^  ^  ^
+        //                 0  1  2  3
+        //      ^  ^  ^                 ^  ^
+        //      0  1  2                 3  4
+        data.reorder_tag(tag_ids[0], tag_ids[1], 2, &mut db)
+            .unwrap();
+        let tags = data.get_tags();
+        let tag_1 = &tags[0];
+        let child1_ids = tag_1.children.iter().map(|tag| tag.tag.id);
+        assert!(child1_ids.eq([6, 4, 0, 7, 9].map(|i| tag_ids[i])));
+        let child1_positions = tag_1.children.iter().map(|tag| tag.tag.position);
+        assert!(child1_positions.eq([0, 1, 2, 3, 4]));
+        let tag_0 = &tags[0].children[2];
+        let child0_ids = tag_0.children.iter().map(|tag| tag.tag.id);
+        assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
+        let child0_positions = tag_0.children.iter().map(|tag| tag.tag.position);
+        assert!(child0_positions.eq([0, 1, 2, 3]));
+    }
+    drop(database);
+
+    let database = Database::open(_base_path, TestEmitter::new()).unwrap();
+    let data = database.data.read().unwrap();
+    let tags = data.get_tags();
+    let tag_1 = &tags[0];
+    let child1_ids = tag_1.children.iter().map(|tag| tag.tag.id);
+    assert!(child1_ids.eq([6, 4, 0, 7, 9].map(|i| tag_ids[i])));
+    let child1_positions = tag_1.children.iter().map(|tag| tag.tag.position);
+    assert!(child1_positions.eq([0, 1, 2, 3, 4]));
+    let tag_0 = &tags[0].children[2];
+    let child0_ids = tag_0.children.iter().map(|tag| tag.tag.id);
+    assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
+    let child0_positions = tag_0.children.iter().map(|tag| tag.tag.position);
+    assert!(child0_positions.eq([0, 1, 2, 3]));
 }
