@@ -1,5 +1,8 @@
 mod billfish_migrator;
 
+use super::database::SQLITE_DB_PATH;
+
+use std::fs::remove_file;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -17,19 +20,29 @@ trait Migrator<E> {
     fn migrate(path: &Path, logger: &mut MigratorResult) -> Result<(), E>;
 }
 
-#[derive(Serialize)]
-#[serde(tag = "kind", content = "message")]
-#[serde(rename_all = "camelCase")]
-enum MigratorLog {
-    Warn(String),
-    Error(String),
+// ========== Error ==========
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("database already exists: {0}")]
+    DatabaseAlreadyExists(String),
 }
+
+// ========== MigratorResult ==========
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MigratorResult {
     success: bool,
     logs: Vec<MigratorLog>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", content = "message")]
+#[serde(rename_all = "camelCase")]
+enum MigratorLog {
+    Warn(String),
+    Error(String),
 }
 
 impl MigratorResult {
@@ -66,8 +79,14 @@ pub enum MigrateFrom {
     Billfish,
 }
 
-pub fn migrate_from(path: &Path, from: &MigrateFrom) -> MigratorResult {
+pub fn migrate_from(path: &Path, from: &MigrateFrom) -> Result<MigratorResult, Error> {
     let mut result = MigratorResult::new();
+
+    if path.join(SQLITE_DB_PATH).exists() {
+        return Err(Error::DatabaseAlreadyExists(
+            path.to_string_lossy().to_string(),
+        ));
+    }
 
     let impl_result: Result<_, MigratorImplError> = match from {
         MigrateFrom::Billfish => billfish_migrator::BillfishMigrator::migrate(path, &mut result)
@@ -76,7 +95,10 @@ pub fn migrate_from(path: &Path, from: &MigrateFrom) -> MigratorResult {
 
     if let Err(err) = impl_result {
         result.error(err.to_string());
+        remove_file(path.join(SQLITE_DB_PATH)).unwrap_or_else(|err| {
+            warn!(result, "Failed to remove database file: {:?}", err);
+        });
     }
 
-    result
+    Ok(result)
 }

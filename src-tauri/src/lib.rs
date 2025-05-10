@@ -137,14 +137,14 @@ async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
 }
 
 #[tauri::command]
-async fn migrate_database(path: String, from_type: MigrateFrom) -> MigratorResult {
+async fn migrate_database(path: String, from_type: MigrateFrom) -> Result<MigratorResult, Error> {
     trace!("migrate_database: {path:?}");
 
     let path = PathBuf::from(path);
-    let result = migrate_from(&path, &from_type);
+    let result = migrate_from(&path, &from_type)?;
 
     trace!("migrate_database done");
-    result
+    Ok(result)
 }
 
 #[tauri::command]

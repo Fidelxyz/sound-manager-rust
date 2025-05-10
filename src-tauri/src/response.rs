@@ -15,6 +15,8 @@ pub enum Error {
     Player(#[from] crate::core::player::Error),
     #[error("waveform error: {0}")]
     Waveform(#[from] crate::core::waveform::Error),
+    #[error("migrator error: {0}")]
+    Migrator(#[from] crate::core::migrator::Error),
 }
 
 #[derive(serde::Serialize)]
@@ -53,6 +55,11 @@ impl serde::Serialize for Error {
                     ErrorKind::FileAlreadyExists(error_message)
                 }
                 _ => ErrorKind::Other(error_message),
+            },
+            Self::Migrator(err) => match err {
+                crate::core::migrator::Error::DatabaseAlreadyExists(_) => {
+                    ErrorKind::DatabaseAlreadyExists(error_message)
+                }
             },
             _ => ErrorKind::Other(error_message),
         };

@@ -54,6 +54,7 @@ struct FolderDiff {
 const ROOT_FOLDER_ID: FolderId = -1;
 const ROOT_TAG_ID: TagId = -1;
 
+pub const SQLITE_DB_PATH: &str = ".soundmanager.db";
 const DATABASE_VERSION: i32 = 1;
 
 #[derive(Error, Debug)]
@@ -93,7 +94,7 @@ where
     pub fn open(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
         info!("Opening database {base_path:?}");
 
-        let database_file = base_path.join(".soundmanager.db");
+        let database_file = base_path.join(SQLITE_DB_PATH);
         if !database_file.try_exists()? {
             // if database file does not exist
             return Err(Error::DatabaseNotFound(
@@ -143,7 +144,7 @@ where
     pub fn create(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
         info!("Creating database {base_path:?}");
 
-        let database_file = base_path.join(".soundmanager.db");
+        let database_file = base_path.join(SQLITE_DB_PATH);
         if database_file.try_exists()? {
             // if database file already exists
             return Err(Error::DatabaseAlreadyExists(

@@ -70,17 +70,7 @@ async function createDatabase(path?: string) {
       console.error(e);
       if (e.kind === "databaseAlreadyExists") {
         console.warn(e);
-
-        const match_folder_name = path_.match(/([^\\/]+)[\\/]*$/);
-        const folder_name = match_folder_name ? match_folder_name[1] : path_;
-        confirm.require({
-          header: "数据库已存在",
-          message: `是否打开数据库 ${folder_name} ？`,
-          icon: "pi pi-question-circle",
-          rejectProps: { label: "取消", severity: "secondary", outlined: true },
-          acceptProps: { label: "打开数据库", severity: "success" },
-          accept: () => openDatabase(path_),
-        });
+        onDatabaseExists(path_);
       } else {
         error("创建数据库错误", e.message);
       }
@@ -89,6 +79,21 @@ async function createDatabase(path?: string) {
       loading.value = false;
     });
 }
+
+function onDatabaseExists(path: string) {
+  const match_folder_name = path.match(/([^\\/]+)[\\/]*$/);
+  const folder_name = match_folder_name ? match_folder_name[1] : path;
+  confirm.require({
+    header: "数据库已存在",
+    message: `是否打开数据库 ${folder_name} ？`,
+    icon: "pi pi-question-circle",
+    rejectProps: { label: "取消", severity: "secondary", outlined: true },
+    acceptProps: { label: "打开数据库", severity: "success" },
+    accept: () => openDatabase(path),
+  });
+}
+
+// ========== Migration ==========
 
 const migrationMessageVisible = ref(false);
 const migratorResult = ref<MigratorResult>();
@@ -103,17 +108,25 @@ async function migrateFrom(from: MigrateFrom) {
   if (!path) return;
 
   loading.value = true;
-  try {
-    migratorResult.value = await api.migrateDatabase(path, from);
-    migratedPath.value = path;
 
-    // show migration message if there are any logs
-    if (migratorResult.value.logs.length > 0) {
-      showMigrationMessage();
-    }
-  } finally {
+  const result = await api.migrateDatabase(path, from).catch((e: ErrorKind) => {
+    console.error(e);
+    onDatabaseExists(path);
+  });
+  if (!result) {
     loading.value = false;
+    return;
   }
+
+  migratorResult.value = result;
+  migratedPath.value = path;
+
+  // show migration message if there are any logs
+  if (migratorResult.value.logs.length > 0) {
+    showMigrationMessage();
+  }
+
+  loading.value = false;
 }
 
 function showMigrationMessage() {
