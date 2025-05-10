@@ -998,6 +998,18 @@ impl DatabaseData {
         TagNode::build(&self.tags)
     }
 
+    pub fn get_tag_order(&self, tag_id: TagId) -> Vec<i32> {
+        let mut order = Vec::new();
+        let mut tag_id = tag_id;
+        while tag_id != ROOT_TAG_ID {
+            let tag = self.tags.get(&tag_id).unwrap();
+            order.push(tag.position);
+            tag_id = tag.parent_id;
+        }
+        order.reverse();
+        order
+    }
+
     pub fn new_tag(&mut self, name: String, db: &Connection) -> Result<TagId> {
         if self.tags.values().any(|tag| tag.name == name) {
             return Err(Error::TagAlreadyExists(name));
@@ -1243,7 +1255,7 @@ impl DatabaseData {
             })
             .collect::<Vec<_>>();
 
-        tags.sort_by_key(|tag| tag.position);
+        tags.sort_by_cached_key(|tag| self.get_tag_order(tag.id));
 
         tags
     }

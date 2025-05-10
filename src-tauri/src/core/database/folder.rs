@@ -62,7 +62,7 @@ impl FolderNode<'_> {
             .collect::<Vec<_>>();
 
         // sort sub_folders by name
-        sub_folders.sort_by(|a, b| a.folder.name.cmp(&b.folder.name));
+        sub_folders.sort_unstable_by(|a, b| a.folder.name.cmp(&b.folder.name));
 
         FolderNode {
             folder,

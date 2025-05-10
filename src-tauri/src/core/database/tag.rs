@@ -38,7 +38,7 @@ impl TagNode<'_> {
             .map(|child_id| TagNode::new(*child_id, tags))
             .collect::<Vec<_>>();
 
-        children.sort_by_key(|child| child.tag.position);
+        children.sort_unstable_by_key(|child| child.tag.position);
 
         TagNode { tag, children }
     }
