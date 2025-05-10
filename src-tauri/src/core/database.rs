@@ -760,7 +760,7 @@ impl DatabaseData {
     }
 
     pub fn get_entry_id(&self, path: &Path) -> Option<EntryId> {
-        self.get_folder_by_path(path)
+        self.get_folder_by_path(path.parent().unwrap())
             .and_then(|folder| folder.entries.get(path.file_name().unwrap()).copied())
     }
 
