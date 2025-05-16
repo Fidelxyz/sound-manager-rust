@@ -136,6 +136,7 @@ where
             .scan(&mut database.db.lock().unwrap())?;
 
         let database = Arc::new(database);
+        database.prune()?;
         database.clone().watch_dir(stop_rx)?;
 
         Ok(database)
@@ -171,13 +172,15 @@ where
                 file_name TEXT NOT NULL,
                 folder_id INTEGER NOT NULL,
                 deleted DATETIME DEFAULT NULL,
-                FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
+                FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE,
+                UNIQUE (folder_id, file_name)
             );
             CREATE TABLE folders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 parent INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
                 name TEXT NOT NULL,
-                deleted DATETIME DEFAULT NULL
+                deleted DATETIME DEFAULT NULL,
+                UNIQUE (parent, name)
             );
             CREATE TABLE tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -247,6 +250,7 @@ where
             .scan(&mut database.db.lock().unwrap())?;
 
         let database = Arc::new(database);
+        database.prune()?;
         database.clone().watch_dir(stop_rx)?;
 
         Ok(database)
@@ -260,6 +264,21 @@ where
         self.emitter.on_files_updated();
         Ok(())
     }
+
+    pub fn prune(&self) -> Result<()> {
+        self.db.lock().unwrap().execute_batch(
+            "DELETE FROM entries
+            WHERE deleted IS NOT NULL
+            AND deleted < datetime('now', '-30 days');
+            DELETE FROM folders
+            WHERE deleted IS NOT NULL
+            AND deleted < datetime('now', '-30 days');
+            DELETE FROM tags
+            WHERE deleted IS NOT NULL
+            AND deleted < datetime('now', '-30 days');",
+        )?;
+        Ok(())
+    }
 }
 
 impl<E> Database<E> {
@@ -269,7 +288,7 @@ impl<E> Database<E> {
 
     fn read_tags(db: &Connection) -> Result<HashMap<TagId, Tag>> {
         let mut tags = db
-            .prepare("SELECT id, name, parent, position, color FROM tags")?
+            .prepare("SELECT id, name, parent, position, color FROM tags WHERE deleted IS NULL")?
             .query_map([], |row| {
                 Ok((
                     row.get(0)?,
@@ -346,7 +365,7 @@ impl DatabaseData {
             let dir_entry = match dir_entry {
                 Ok(dir_entry) => dir_entry,
                 Err(err) => {
-                    warn!("Failed to read directory entry: {err:?}");
+                    warn!("Failed to read directory entry: {err}");
                     continue;
                 }
             };
@@ -361,7 +380,7 @@ impl DatabaseData {
             let file_type = match dir_entry.file_type() {
                 Ok(file_type) => file_type,
                 Err(err) => {
-                    warn!("Failed to read file type: {err:?}");
+                    warn!("Failed to read file type: {err}");
                     continue;
                 }
             };
@@ -387,7 +406,7 @@ impl DatabaseData {
                         new_entries.extend(diff.new_entries);
                         deleted_entries.extend(diff.deleted_entries);
                     }
-                    Err(err) => warn!("Failed to read directory: {err:?}"),
+                    Err(err) => warn!("Failed to read directory: {err}"),
                 }
             } else if file_type.is_file() && is_audio_file(file_name.as_ref()) {
                 let entry_id = folder.and_then(|folder| folder.entries.get(&file_name).copied());
@@ -431,28 +450,12 @@ impl DatabaseData {
         })
     }
 
-    fn sync_changes(&mut self, diff: FileDiff, db: &mut Connection) -> Result<()> {
-        // remove deleted entries and folders
-        self.remove_entries(diff.deleted_entries, db)?;
-        self.remove_folders(diff.deleted_folders, db);
-
-        // update existing entries metadata
-        for entry in self.entries.values_mut() {
-            entry.read_file(&self.base_path);
-        }
-
-        // read new entries and folders
-        self.add_folders(diff.new_folders, db);
-        self.add_entries(&diff.new_entries, db)?;
-
-        Ok(())
-    }
-
     /// Scan the entire directory of the database.
     fn scan(&mut self, db: &mut Connection) -> Result<()> {
         let diff = self.read_dir(&self.base_path, ROOT_FOLDER_ID.into())?;
 
         self.sync_changes(diff, db)?;
+        self.sync_deleted(db)?;
 
         Ok(())
     }
@@ -487,7 +490,7 @@ impl DatabaseData {
             let dir_entry = match dir_entry {
                 Ok(dir_entry) => dir_entry,
                 Err(err) => {
-                    warn!("Failed to read directory entry: {err:?}");
+                    warn!("Failed to read directory entry: {err}");
                     continue;
                 }
             };
@@ -502,7 +505,7 @@ impl DatabaseData {
             let file_type = match dir_entry.file_type() {
                 Ok(file_type) => file_type,
                 Err(err) => {
-                    warn!("Failed to read file type: {err:?}");
+                    warn!("Failed to read file type: {err}");
                     continue;
                 }
             };
@@ -523,7 +526,7 @@ impl DatabaseData {
                         existing_folders.extend(diff.existing_folders);
                         new_folders.extend(diff.new_folders);
                     }
-                    Err(err) => warn!("Failed to read directory: {err:?}"),
+                    Err(err) => warn!("Failed to read directory: {err}"),
                 }
             }
         }
@@ -549,7 +552,65 @@ impl DatabaseData {
         self.remove_folders(removed_folders, db);
 
         // read new entries
-        self.add_folders(diff.new_folders, db);
+        self.add_folders(&diff.new_folders, db)?;
+
+        Ok(())
+    }
+
+    fn sync_changes(&mut self, diff: FileDiff, db: &mut Connection) -> Result<()> {
+        // remove deleted entries and folders
+        self.remove_entries(diff.deleted_entries, db)?;
+        self.remove_folders(diff.deleted_folders, db);
+
+        // update existing entries metadata
+        for entry in self.entries.values_mut() {
+            entry.read_file(&self.base_path);
+        }
+
+        // read new entries and folders
+        self.add_folders(&diff.new_folders, db)?;
+        self.add_entries(&diff.new_entries, db)?;
+
+        Ok(())
+    }
+
+    /// Sync deleted entries, folders and tags in the database (e.g. since last luanch).
+    fn sync_deleted(&self, db: &Connection) -> Result<()> {
+        // mark deleted entries
+        let query_entries = db
+            .prepare("SELECT id FROM entries WHERE deleted IS NULL")?
+            .query_map([], |row| row.get::<_, EntryId>(0))?
+            .collect::<std::result::Result<HashSet<EntryId>, _>>()?;
+        let existing_entries = self.entries.keys().copied().collect();
+        let deleted_entries = query_entries
+            .difference(&existing_entries)
+            .collect::<Vec<_>>();
+
+        info!("Deleting entries: {deleted_entries:?}");
+
+        let mut stmt_delete =
+            db.prepare("UPDATE entries SET deleted = datetime('now') WHERE id = ?")?;
+        for entry_id in deleted_entries {
+            stmt_delete.execute([entry_id])?;
+        }
+
+        // mark deleted folders
+        let query_folders = db
+            .prepare("SELECT id FROM folders WHERE deleted IS NULL")?
+            .query_map([], |row| row.get::<_, FolderId>(0))?
+            .collect::<std::result::Result<HashSet<FolderId>, _>>()?;
+        let existing_folders = self.folders.keys().copied().collect();
+        let deleted_folders = query_folders
+            .difference(&existing_folders)
+            .collect::<Vec<_>>();
+
+        info!("Deleting folders: {deleted_folders:?}");
+
+        let mut stmt_delete =
+            db.prepare("UPDATE folders SET deleted = datetime('now') WHERE id = ?")?;
+        for folder_id in deleted_folders {
+            stmt_delete.execute([folder_id])?;
+        }
 
         Ok(())
     }
@@ -575,66 +636,180 @@ impl DatabaseData {
         folder
     }
 
-    /// Recursively add a folder to the database.
-    fn add_folder(&mut self, path: &Path, db: &Connection) -> Result<()> {
-        debug_assert!(path.is_relative(), "Path must be relative");
+    fn add_folders(&mut self, paths: &[PathBuf], db: &Connection) -> Result<()> {
+        info!("Adding folders: {paths:#?}");
 
-        let mut stmt_insert = db.prepare("INSERT INTO folders (parent, name) VALUES (?, ?)")?;
+        debug_assert!(
+            paths.iter().all(|path| path.is_relative()),
+            "All paths must be relative"
+        );
 
-        let path_components = path.components();
-        let mut folder_id = ROOT_FOLDER_ID;
-        for component in path_components {
-            let folder = self.folders.get(&folder_id).unwrap();
-
-            let sub_folder_name = component.as_os_str();
-            let sub_folder_id = match folder.sub_folders.get(sub_folder_name).copied() {
-                Some(sub_folder_id) => sub_folder_id,
-
-                // folder does not exist, create new folder
-                None => {
-                    // insert new folder into database
-                    let new_folder_id: FolderId = stmt_insert
-                        .insert((folder_id, sub_folder_name.to_string_lossy()))?
-                        .try_into()
-                        .unwrap();
-
-                    let new_folder = Folder::new(
-                        new_folder_id,
-                        folder_id,
-                        sub_folder_name.to_owned(),
-                        folder.path.join(sub_folder_name),
-                    );
-
-                    // Add folder to the data in memory
-                    self.folders
-                        .get_mut(&folder_id)
-                        .unwrap()
-                        .sub_folders
-                        .insert(sub_folder_name.into(), new_folder_id);
-                    self.folders.insert(new_folder_id, new_folder);
-
-                    new_folder_id
-                }
-            };
-
-            folder_id = sub_folder_id;
+        // use different strategy for different number of new folders
+        if paths.len() * 4 < self.folders.len() {
+            // small number of new folders
+            trace!("add_folders: small number of new folders: {}", paths.len());
+            self.add_folders_serial(paths, db)?;
+        } else {
+            // large number of new folders
+            trace!("add_folders: large number of new folders: {}", paths.len());
+            self.add_folders_batch(paths, db)?;
         }
 
         Ok(())
     }
 
-    fn add_folders(&mut self, paths: Vec<PathBuf>, db: &Connection) {
-        info!("Adding folders: {paths:#?}");
+    fn add_folders_serial(&mut self, paths: &[PathBuf], db: &Connection) -> Result<()> {
+        for path in paths {
+            let mut stmt_select =
+                db.prepare("SELECT id, deleted FROM folders WHERE parent = ? AND name = ?")?;
+            let mut stmt_insert = db.prepare("INSERT INTO folders (parent, name) VALUES (?, ?)")?;
+            let mut stmt_restore = db.prepare("UPDATE folders SET deleted = NULL WHERE id = ?")?;
+
+            let path_components = path.components();
+            let mut folder_id = ROOT_FOLDER_ID;
+            for component in path_components {
+                let folder = self.folders.get(&folder_id).unwrap();
+
+                let sub_folder_name = component.as_os_str();
+                let sub_folder_id = match folder.sub_folders.get(sub_folder_name).copied() {
+                    Some(sub_folder_id) => sub_folder_id,
+
+                    // folder does not exist, create new folder
+                    None => {
+                        let query_row = stmt_select
+                            .query_row((folder_id, sub_folder_name.to_string_lossy()), |row| {
+                                Ok((
+                                    row.get::<_, FolderId>(0)?,                 // id
+                                    row.get::<_, Option<String>>(1)?.is_some(), // deleted
+                                ))
+                            })
+                            .optional()?;
+
+                        // query folder id from or insert new folder into database
+                        let new_folder_id = if let Some((id, deleted)) = query_row {
+                            // folder exists in database
+                            if deleted {
+                                // folder is deleted, restore it
+                                stmt_restore.execute([id])?;
+                            }
+                            id
+                        } else {
+                            // folder does not exist in database, insert a new one
+                            stmt_insert
+                                .insert((folder_id, sub_folder_name.to_string_lossy()))?
+                                .try_into()
+                                .unwrap()
+                        };
+
+                        let new_folder = Folder::new(
+                            new_folder_id,
+                            folder_id,
+                            sub_folder_name.to_owned(),
+                            folder.path.join(sub_folder_name),
+                        );
+
+                        // Add folder to the data in memory
+                        self.folders
+                            .get_mut(&folder_id)
+                            .unwrap()
+                            .sub_folders
+                            .insert(sub_folder_name.into(), new_folder_id);
+                        self.folders.insert(new_folder_id, new_folder);
+
+                        new_folder_id
+                    }
+                };
+
+                folder_id = sub_folder_id;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn add_folders_batch(&mut self, paths: &[PathBuf], db: &Connection) -> Result<()> {
+        // query all folder ids from database in one batch
+        // and store them into a path - folder_id map
+        let query_rows = db
+            .prepare("SELECT id, parent, name, deleted FROM folders WHERE parent = ?")?
+            .query_map([ROOT_FOLDER_ID], |row| {
+                let folder_id = row.get::<_, FolderId>(0)?;
+                let parent_id = row.get::<_, FolderId>(1)?;
+                let name = row.get::<_, String>(2)?;
+                let deleted = row.get::<_, Option<String>>(3)?.is_some();
+                Ok(((parent_id, name), (folder_id, deleted)))
+            })?
+            .filter_map(std::result::Result::ok)
+            .collect::<HashMap<(FolderId, String), (FolderId, bool)>>();
+
+        // match queried rows with folders and perform corresponding actions
+
+        let mut stmt_insert = db.prepare("INSERT INTO folders (parent, name) VALUES (?, ?)")?;
+        let mut stmt_restore = db.prepare("UPDATE folders SET deleted = NULL WHERE id = ?")?;
 
         for path in paths {
-            self.add_folder(&path, db).unwrap_or_else(|err| {
-                warn!("Failed to add folder for {path:?}: {err:?}");
-            });
+            let path_components = path.components();
+            let mut folder_id = ROOT_FOLDER_ID;
+            for component in path_components {
+                let folder = self.folders.get(&folder_id).unwrap();
+
+                let sub_folder_name = component.as_os_str();
+                let sub_folder_id = match folder.sub_folders.get(sub_folder_name).copied() {
+                    Some(sub_folder_id) => sub_folder_id,
+
+                    // folder does not exist, create new folder
+                    None => {
+                        // find matching folder in queried rows
+                        let new_folder_id = if let Some((id, deleted)) = query_rows
+                            .get(&(folder_id, sub_folder_name.to_string_lossy().into()))
+                            .copied()
+                        {
+                            // if folder already exists in database
+
+                            if deleted {
+                                // folder is deleted, restore it
+                                stmt_restore.execute([id])?;
+                            }
+
+                            id
+                        } else {
+                            // if folder does not exist in database, insert folder and set id
+                            stmt_insert
+                                .insert((folder_id, sub_folder_name.to_string_lossy()))?
+                                .try_into()
+                                .unwrap()
+                        };
+
+                        let new_folder = Folder::new(
+                            new_folder_id,
+                            folder_id,
+                            sub_folder_name.to_owned(),
+                            folder.path.join(sub_folder_name),
+                        );
+
+                        // Add folder to the data in memory
+                        self.folders
+                            .get_mut(&folder_id)
+                            .unwrap()
+                            .sub_folders
+                            .insert(sub_folder_name.into(), new_folder_id);
+                        self.folders.insert(new_folder_id, new_folder);
+
+                        new_folder_id
+                    }
+                };
+
+                folder_id = sub_folder_id;
+            }
         }
+
+        Ok(())
     }
 
     /// Recursively remove a folder from the database.
     fn remove_folder(&mut self, folder_id: FolderId, db: &mut Connection) -> Result<()> {
+        info!("Removing folder: {folder_id}");
+
         let folder = self.folders.get(&folder_id).unwrap();
         let sub_folders = folder.sub_folders.values().copied().collect::<Vec<_>>();
         let entries = folder.entries.values().copied().collect::<Vec<_>>();
@@ -669,7 +844,7 @@ impl DatabaseData {
 
         for folder_id in folder_ids {
             self.remove_folder(folder_id, db).unwrap_or_else(|err| {
-                warn!("Failed to remove folder with ID {folder_id}: {err:?}");
+                warn!("Failed to remove folder with ID {folder_id}: {err}");
             });
         }
     }
@@ -693,10 +868,17 @@ impl DatabaseData {
 
             // update folder in database
             let new_folder_name = new_path.file_name().unwrap();
-            db.execute(
-                "UPDATE folders SET parent = ?, name = ? WHERE id = ?",
-                (new_parent_id, new_folder_name.to_string_lossy(), folder.id),
+            let new_folder_name_str = new_folder_name.to_string_lossy();
+            let tx = db.transaction()?;
+            tx.execute(
+                "DELETE FROM folders WHERE parent = ? AND name = ?",
+                (folder.id, &new_folder_name_str),
             )?;
+            tx.execute(
+                "UPDATE folders SET parent = ?, name = ? WHERE id = ?",
+                (new_parent_id, &new_folder_name_str, folder.id),
+            )?;
+            tx.commit()?;
 
             // remove from old parent
             let removed = self
@@ -779,6 +961,21 @@ impl DatabaseData {
             "All paths must be relative"
         );
 
+        // use different strategy for different number of new entries
+        if paths.len() * 4 < self.entries.len() {
+            // small number of new entries
+            trace!("add_entries: small number of new entries: {}", paths.len());
+            self.add_entries_serial(paths, db)?;
+        } else {
+            // large number of new entries
+            trace!("add_entries: large number of new entries: {}", paths.len());
+            self.add_entries_batch(paths, db)?;
+        }
+
+        Ok(())
+    }
+
+    fn add_entries_serial(&mut self, paths: &[PathBuf], db: &Connection) -> Result<()> {
         // read entries file metadata
         let mut new_entries = paths
             .iter()
@@ -794,114 +991,161 @@ impl DatabaseData {
             })
             .collect::<Vec<_>>();
 
-        // use different strategy for different number of new entries
-        if paths.len() * 4 < self.entries.len() {
-            // small number of new entries
-            trace!("add_entries: small number of new entries: {}", paths.len());
+        let mut stmt_insert =
+            db.prepare("INSERT INTO entries (file_name, folder_id) VALUES (?, ?)")?;
+        let mut stmt_restore = db.prepare("UPDATE entries SET deleted = NULL WHERE id = ?")?;
 
-            for entry in &mut new_entries {
-                let path = entry.path.to_string_lossy();
+        for entry in &mut new_entries {
+            let query_row = db
+                .query_row(
+                    "SELECT id, deleted FROM entries WHERE folder_id = ?",
+                    [entry.folder_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, EntryId>(0)?,                  // id
+                            row.get::<_, Option<String>>(1)?.is_some(), // deleted
+                        ))
+                    },
+                )
+                .optional()?;
 
-                let query_entry_id = db
-                    .query_row(
-                        "SELECT id FROM entries WHERE file_path = ?",
-                        [path.as_ref()],
-                        |row| row.get::<_, EntryId>(0),
-                    )
-                    .optional()?;
+            if let Some((id, deleted)) = query_row {
+                // entry exists in database
+                entry.id = id;
 
-                let mut stmt_insert =
-                    db.prepare("INSERT INTO entries (file_name, folder_id) VALUES (?, ?)")?;
-                if let Some(id) = query_entry_id {
-                    // entry exists in database
-                    entry.id = id;
-
-                    entry.tag_ids = db
-                        .prepare("SELECT tag_id FROM entry_tag WHERE entry_id = ?")?
-                        .query_map([&entry.id], |row| row.get::<_, TagId>(0))?
-                        .filter_map(std::result::Result::ok)
-                        .collect();
-                } else {
-                    // entry does not exist in database
-                    let id: EntryId = stmt_insert
-                        .insert((entry.file_name.to_string_lossy(), entry.folder_id))?
-                        .try_into()
-                        .unwrap();
-                    entry.id = id;
+                if deleted {
+                    // entry is deleted, restore it
+                    stmt_restore.execute([entry.id])?;
                 }
+
+                entry.tag_ids = db
+                    .prepare(
+                        "SELECT entry_tag.tag_id
+                            FROM entry_tag
+                            JOIN entries ON entry_tag.entry_id = entries.id
+                            JOIN tags ON entry_tag.tag_id = tags.id
+                            WHERE entry_tag.entry_id = ?
+                            AND entries.deleted IS NULL
+                            AND tags.deleted IS NULL",
+                    )?
+                    .query_map([&entry.id], |row| row.get::<_, TagId>(0))?
+                    .filter_map(std::result::Result::ok)
+                    .collect();
+            } else {
+                // entry does not exist in database
+                let id: EntryId = stmt_insert
+                    .insert((entry.file_name.to_string_lossy(), entry.folder_id))?
+                    .try_into()
+                    .unwrap();
+                entry.id = id;
             }
+        }
 
-            // Add entries to the data in memory
-            for entry in &new_entries {
-                self.folders
-                    .get_mut(&entry.folder_id)
-                    .unwrap()
-                    .entries
-                    .insert(entry.file_name.clone(), entry.id);
-            }
-            self.entries
-                .extend(new_entries.into_iter().map(|entry| (entry.id, entry)));
-        } else {
-            // large number of new entries
-            trace!("add_entries: large number of new entries: {}", paths.len());
+        // Add entries to the data in memory
+        for entry in &new_entries {
+            self.folders
+                .get_mut(&entry.folder_id)
+                .unwrap()
+                .entries
+                .insert(entry.file_name.clone(), entry.id);
+        }
+        self.entries
+            .extend(new_entries.into_iter().map(|entry| (entry.id, entry)));
 
-            // query all entry ids from database in one batch
-            // and store them into a path - entry_id map
-            let query_entry_ids = db
-                .prepare("SELECT id, file_name, folder_id FROM entries")?
-                .query_map([], |row| {
-                    let entry_id = row.get::<_, EntryId>(0)?;
-                    let file_name = row.get::<_, String>(1)?;
-                    let folder_id = row.get::<_, FolderId>(2)?;
-                    Ok(((folder_id, file_name), entry_id))
-                })?
-                .filter_map(std::result::Result::ok)
-                .collect::<HashMap<(FolderId, String), EntryId>>();
+        Ok(())
+    }
 
-            // match queried rows with entries and perform corresponding actions
-            let mut stmt_insert =
-                db.prepare("INSERT INTO entries (file_name, folder_id) VALUES (?, ?)")?;
-            for entry in &mut new_entries {
-                // find matching entry in queried rows
-                let file_name = entry.file_name.to_string_lossy();
-                if let Some(id) = query_entry_ids.get(&(entry.folder_id, file_name.into())) {
-                    // if entry already exists in database, set id
-                    entry.id = *id;
-                } else {
-                    // if entry does not exist in database, insert entry and set id
-                    let id: EntryId = stmt_insert
-                        .insert((entry.file_name.to_string_lossy(), entry.folder_id))?
-                        .try_into()
-                        .unwrap();
-                    entry.id = id;
+    fn add_entries_batch(&mut self, paths: &[PathBuf], db: &Connection) -> Result<()> {
+        // read entries file metadata
+        let mut new_entries = paths
+            .iter()
+            .filter_map(|path| {
+                let folder_path = path.parent().unwrap();
+                let Some(folder) = self.get_folder_by_path(folder_path) else {
+                    warn!("Failed to add entry for {path:?}: folder {folder_path:?} not found");
+                    return None;
+                };
+                let mut entry = Entry::new(path.into(), folder.id);
+                entry.read_file(&self.base_path);
+                Some(entry)
+            })
+            .collect::<Vec<_>>();
+
+        // query all entry ids from database in one batch
+        // and store them into a path - entry_id map
+        let query_rows = db
+            .prepare("SELECT id, file_name, folder_id, deleted FROM entries")?
+            .query_map([], |row| {
+                let entry_id = row.get::<_, EntryId>(0)?;
+                let file_name = row.get::<_, String>(1)?;
+                let folder_id = row.get::<_, FolderId>(2)?;
+                let deleted = row.get::<_, Option<String>>(3)?.is_some();
+                Ok(((folder_id, file_name), (entry_id, deleted)))
+            })?
+            .filter_map(std::result::Result::ok)
+            .collect::<HashMap<(FolderId, String), (EntryId, bool)>>();
+
+        // match queried rows with entries and perform corresponding actions
+
+        let mut stmt_insert =
+            db.prepare("INSERT INTO entries (file_name, folder_id) VALUES (?, ?)")?;
+        let mut stmt_restore = db.prepare("UPDATE entries SET deleted = NULL WHERE id = ?")?;
+
+        for entry in &mut new_entries {
+            // find matching entry in queried rows
+            let file_name = entry.file_name.to_string_lossy();
+            if let Some((id, deleted)) = query_rows
+                .get(&(entry.folder_id, file_name.into()))
+                .copied()
+            {
+                // if entry already exists in database, set id
+                entry.id = id;
+
+                if deleted {
+                    // entry is deleted, restore it
+                    stmt_restore.execute([entry.id])?;
                 }
+            } else {
+                // if entry does not exist in database, insert entry and set id
+                let id: EntryId = stmt_insert
+                    .insert((entry.file_name.to_string_lossy(), entry.folder_id))?
+                    .try_into()
+                    .unwrap();
+                entry.id = id;
             }
+        }
 
-            // Add entries to the data in memory
-            for entry in &new_entries {
-                self.folders
-                    .get_mut(&entry.folder_id)
-                    .unwrap()
-                    .entries
-                    .insert(entry.file_name.clone(), entry.id);
-            }
-            self.entries
-                .extend(new_entries.into_iter().map(|entry| (entry.id, entry)));
+        // Add entries to the data in memory
+        for entry in &new_entries {
+            self.folders
+                .get_mut(&entry.folder_id)
+                .unwrap()
+                .entries
+                .insert(entry.file_name.clone(), entry.id);
+        }
+        self.entries
+            .extend(new_entries.into_iter().map(|entry| (entry.id, entry)));
 
-            // query all entry_tag rows from database
-            // and store them into a entry_id - tag_id list
-            let query_entry_tags = db
-                .prepare("SELECT entry_id, tag_id FROM entry_tag")?
-                .query_map([], |row| {
-                    Ok((row.get::<_, EntryId>(0)?, row.get::<_, TagId>(1)?))
-                })?
-                .filter_map(std::result::Result::ok)
-                .collect::<Vec<(EntryId, TagId)>>();
+        // query all entry_tag rows from database
+        // and store them into a entry_id - tag_id list
+        let query_entry_tags = db
+            .prepare(
+                "SELECT entry_tag.entry_id, entry_tag.tag_id
+                    FROM entry_tag
+                    JOIN entries ON entry_tag.entry_id = entries.id
+                    JOIN tags ON entry_tag.tag_id = tags.id
+                    WHERE entries.deleted IS NULL
+                    AND tags.deleted IS NULL",
+            )?
+            .query_map([], |row| {
+                Ok((row.get::<_, EntryId>(0)?, row.get::<_, TagId>(1)?))
+            })?
+            .filter_map(std::result::Result::ok)
+            .collect::<Vec<(EntryId, TagId)>>();
 
-            for (entry_id, tag_id) in query_entry_tags {
-                if let Some(entry) = self.entries.get_mut(&entry_id) {
-                    entry.tag_ids.insert(tag_id);
-                }
+        for (entry_id, tag_id) in query_entry_tags {
+            if let Some(entry) = self.entries.get_mut(&entry_id) {
+                entry.tag_ids.insert(tag_id);
             }
         }
 
@@ -909,6 +1153,8 @@ impl DatabaseData {
     }
 
     fn remove_entry(&mut self, entry_id: EntryId, db: &Connection) -> Result<()> {
+        info!("Removing entry: {entry_id}");
+
         let entry = self.entries.remove(&entry_id).unwrap();
 
         db.execute(
@@ -927,34 +1173,34 @@ impl DatabaseData {
         Ok(())
     }
 
-    fn remove_entries(&mut self, entry_ids: Vec<EntryId>, db: &mut Connection) -> Result<()> {
+    fn remove_entries(&mut self, entry_ids: Vec<EntryId>, db: &Connection) -> Result<()> {
         info!("Removing entries: {entry_ids:?}");
 
-        let tx = db.transaction()?;
-        {
-            let mut stmt =
-                tx.prepare("UPDATE entries SET deleted = datetime('now') WHERE id = ?")?;
+        let mut stmt = db.prepare("UPDATE entries SET deleted = datetime('now') WHERE id = ?")?;
 
-            for entry_id in entry_ids {
-                let entry = self.entries.remove(&entry_id).unwrap();
+        for entry_id in entry_ids {
+            let entry = self.entries.remove(&entry_id).unwrap();
 
-                // remove entry from its folder
-                let folder = self.folders.get_mut(&entry.folder_id).unwrap();
-                let removed = folder.entries.remove(&entry.file_name);
-                debug_assert!(removed.is_some());
+            // remove entry from its folder
+            let folder = self.folders.get_mut(&entry.folder_id).unwrap();
+            let removed = folder.entries.remove(&entry.file_name);
+            debug_assert!(removed.is_some());
 
-                let result = stmt.execute([entry_id]);
-                if let Err(err) = result {
-                    warn!("Failed to remove entry with ID {entry_id}: {err:?}");
-                }
+            let result = stmt.execute([entry_id]);
+            if let Err(err) = result {
+                warn!("Failed to remove entry with ID {entry_id}: {err}");
             }
         }
-        tx.commit()?;
 
         Ok(())
     }
 
-    fn move_entry(&mut self, entry_id: EntryId, new_path: PathBuf, db: &Connection) -> Result<()> {
+    fn move_entry(
+        &mut self,
+        entry_id: EntryId,
+        new_path: PathBuf,
+        db: &mut Connection,
+    ) -> Result<()> {
         debug_assert!(new_path.is_relative(), "Path must be relative");
 
         // check existance of entry and folders
@@ -969,10 +1215,17 @@ impl DatabaseData {
         // update entry in database
         let old_file_name = entry.file_name.clone();
         let new_file_name = new_path.file_name().unwrap().to_owned();
-        db.execute(
-            "UPDATE entries SET folder_id = ?, file_name = ?, WHERE id = ?",
-            (new_folder_id, new_file_name.to_string_lossy(), entry_id),
+        let new_file_name_str = new_file_name.to_string_lossy();
+        let tx = db.transaction()?;
+        tx.execute(
+            "DELETE FROM entries WHERE folder_id = ? AND file_name = ?",
+            (new_folder_id, &new_file_name_str),
         )?;
+        tx.execute(
+            "UPDATE entries SET folder_id = ?, file_name = ? WHERE id = ?",
+            (new_folder_id, &new_file_name_str, entry_id),
+        )?;
+        tx.commit()?;
 
         // remove entry from the old folder
         let old_folder = self.folders.get_mut(&old_folder_id).unwrap();

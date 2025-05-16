@@ -8,11 +8,11 @@ use std::time::Duration;
 
 use crossbeam_channel;
 use crossbeam_channel::select;
-use notify_debouncer_full::new_debouncer;
 use notify_debouncer_full::notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify_debouncer_full::notify::EventKind::{Create, Modify, Remove};
 use notify_debouncer_full::notify::RecursiveMode;
 use notify_debouncer_full::DebouncedEvent;
+use notify_debouncer_full::{new_debouncer, notify};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -56,7 +56,7 @@ where
                         let events = match result.unwrap() {
                             Ok(events) => events,
                             Err(err) => {
-                                warn!("Error watching directory: {err:?}");
+                                warn!("Error watching directory: {:#?}", err.iter().map(notify::Error::to_string));
                                 continue;
                             }
                         };
@@ -72,7 +72,7 @@ where
                                     .unwrap()
                                     .scan(&mut self.db.lock().unwrap())
                                     .unwrap_or_else(|err| {
-                                        warn!("Failed to scan directory: {err:?}");
+                                        warn!("Failed to scan directory: {err}");
                                     });
 
                                 break; // skip the rest of the events
@@ -81,7 +81,7 @@ where
                             trace!("File event: {event:?}");
 
                             updated |= handle_file_event(&event, &self).unwrap_or_else(|err| {
-                                warn!("Failed to process file change event: {err:?}");
+                                warn!("Failed to process file change event: {err}");
                                 false
                             });
                         }
@@ -226,7 +226,7 @@ fn file_or_folder_updated<E>(path: &Path, database: &Database<E>) -> FileWatcher
                 .data
                 .write()
                 .unwrap()
-                .add_folders(vec![relative_path], &database.db.lock().unwrap());
+                .add_folders(&[relative_path], &database.db.lock().unwrap())?;
             Ok(true)
         } else if path.is_file() {
             // file exists, try to add entry
@@ -248,7 +248,7 @@ fn file_or_folder_updated<E>(path: &Path, database: &Database<E>) -> FileWatcher
         } else if let Some(folder) = data.get_folder_by_path(&relative_path) {
             // entry does not exist, try to remove folder
             let folder_id = folder.id;
-            data.remove_folders(vec![folder_id], &mut database.db.lock().unwrap());
+            data.remove_folder(folder_id, &mut database.db.lock().unwrap())?;
             Ok(true)
         } else {
             // entry and folder do not exist, do nothing
@@ -308,7 +308,7 @@ fn folder_removed<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<(
         .get_folder_by_path(&relative_path)
         .ok_or_else(|| FileWatcherError::FolderNotFound(relative_path))?
         .id;
-    data.remove_folders(vec![folder_id], &mut database.db.lock().unwrap());
+    data.remove_folder(folder_id, &mut database.db.lock().unwrap())?;
     Ok(())
 }
 
@@ -327,7 +327,11 @@ fn file_moved<E>(
 
     if let Some(entry_id) = data.get_entry_id(&relative_old_path) {
         // if old entry exists, change its path
-        Ok(data.move_entry(entry_id, relative_new_path, &database.db.lock().unwrap())?)
+        Ok(data.move_entry(
+            entry_id,
+            relative_new_path,
+            &mut database.db.lock().unwrap(),
+        )?)
     } else {
         // if old entry does not exist, add new entry
         Ok(data.add_entries(&[relative_new_path], &database.db.lock().unwrap())?)
