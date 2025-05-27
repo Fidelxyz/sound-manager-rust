@@ -15,32 +15,42 @@ import {
 
 import type { Entry, ErrorKind } from "@/api";
 import { api } from "@/api";
-import { error } from "@/utils/message";
+import { error, info } from "@/utils/message";
 
 const { entry } = defineProps<{
   entry?: Entry;
 }>();
 
+const emit = defineEmits<{
+  pause: [];
+}>();
+
 type SpotSettings = {
-  saveCopy: boolean;
+  saveEnabled: boolean;
   savePath: string | null;
+  openInApplicationEnabled: boolean;
   openInApplication: string | null;
 };
 
 const settings = ref<SpotSettings>({
-  saveCopy: false,
+  saveEnabled: false,
   savePath: null,
+  openInApplicationEnabled: false,
   openInApplication: null,
 });
 const tempSettings = ref<SpotSettings>(settings.value);
+const saveFolderName = ref<string | null>(null);
 const openInApplicationName = ref<string | null>(null);
 const settingsOpened = ref(false);
 const confirm = useConfirm();
 
 function spot() {
+  // validate settings
   if (
-    (settings.value.saveCopy === false || settings.value.savePath === null) &&
-    settings.value.openInApplication === null
+    (settings.value.saveEnabled === false ||
+      settings.value.savePath === null) &&
+    (settings.value.openInApplicationEnabled === false ||
+      settings.value.openInApplication === null)
   ) {
     openSpotSettings();
     return;
@@ -57,29 +67,47 @@ function spot() {
 
   const entryId = entry.id;
   const savePath =
-    settings.value.saveCopy !== false && settings.value.savePath !== null
+    settings.value.saveEnabled && settings.value.savePath !== null
       ? settings.value.savePath
       : undefined;
   const openInApplication =
+    settings.value.openInApplicationEnabled &&
     settings.value.openInApplication !== null
       ? settings.value.openInApplication
       : undefined;
 
-  api.spot(entryId, savePath, openInApplication).catch((e: ErrorKind) => {
-    if (e.kind === "fileAlreadyExists") {
-      confirm.require({
-        header: "文件已存在",
-        message: `文件 ${entry.fileName} 位于 ${savePath} 已存在。确定要覆盖文件吗？`,
-        icon: "pi pi-exclamation-circle",
-        rejectProps: { label: "取消", severity: "secondary", outlined: true },
-        acceptProps: { label: "覆盖文件", severity: "danger" },
-        accept: () => confirmSpot(entryId, savePath, openInApplication),
-      });
-      return;
-    }
-    console.error(e);
-    error("发送至应用失败", e.message);
-  });
+  api
+    .spot(entryId, savePath, openInApplication)
+    .then(() => {
+      if (settings.value.openInApplicationEnabled) {
+        info(
+          "发送至应用成功",
+          `已将 ${entry.fileName} 发送至 ${openInApplicationName.value}。`,
+        );
+        emit("pause");
+      } else {
+        info(
+          "另存为成功",
+          `已将 ${entry.fileName} 保存至 ${saveFolderName.value} 文件夹。`,
+        );
+      }
+    })
+
+    .catch((e: ErrorKind) => {
+      if (e.kind === "fileAlreadyExists") {
+        confirm.require({
+          header: "文件已存在",
+          message: `文件 ${entry.fileName} 位于 ${savePath} 已存在。确定要覆盖文件吗？`,
+          icon: "pi pi-exclamation-circle",
+          rejectProps: { label: "取消", severity: "secondary", outlined: true },
+          acceptProps: { label: "覆盖文件", severity: "danger" },
+          accept: () => confirmSpot(entryId, savePath, openInApplication),
+        });
+        return;
+      }
+      console.error(e);
+      error("发送至应用失败", e.message);
+    });
 }
 
 function confirmSpot(
@@ -103,6 +131,7 @@ function openSpotSettings() {
 
 function saveSettings() {
   settings.value = { ...tempSettings.value };
+
   if (settings.value.openInApplication !== null) {
     // extract the application name from the path
     const match = settings.value.openInApplication.match(
@@ -112,6 +141,15 @@ function saveSettings() {
   } else {
     openInApplicationName.value = null;
   }
+
+  if (settings.value.savePath !== null) {
+    // extract the folder name from the path
+    const match = settings.value.savePath.match(/([^\\/]+)$/);
+    saveFolderName.value = match ? match[1] : null;
+  } else {
+    saveFolderName.value = null;
+  }
+
   settingsOpened.value = false;
 }
 
@@ -144,7 +182,7 @@ onKeyStroke("s", () => {
 <template>
   <ButtonGroup>
     <Button
-      :label="`发送至 ${openInApplicationName ?? '…'}`"
+      :label="`发送至 ${openInApplicationName ?? saveFolderName ?? '…'}`"
       icon="pi pi-file-export"
       @click="spot"
       :disabled="!entry"
@@ -169,13 +207,13 @@ onKeyStroke("s", () => {
             </td>
             <td class="setting-value">
               <ToggleSwitch
-                v-model="tempSettings.saveCopy"
+                v-model="tempSettings.saveEnabled"
                 inputId="save-copy"
               />
             </td>
           </tr>
 
-          <tr v-if="tempSettings.saveCopy">
+          <tr v-if="tempSettings.saveEnabled">
             <td class="setting-label">
               <label for="save-path">保存至位置</label>
             </td>
@@ -198,6 +236,18 @@ onKeyStroke("s", () => {
           </tr>
 
           <tr>
+            <td class="setting-label">
+              <label for="save-copy">发送文件至应用</label>
+            </td>
+            <td class="setting-value">
+              <ToggleSwitch
+                v-model="tempSettings.openInApplicationEnabled"
+                inputId="save-copy"
+              />
+            </td>
+          </tr>
+
+          <tr v-if="tempSettings.openInApplicationEnabled">
             <td class="setting-label">
               <label for="open-in-application">发送至应用</label>
             </td>

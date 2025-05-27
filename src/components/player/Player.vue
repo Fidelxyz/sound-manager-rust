@@ -155,7 +155,7 @@ onKeyStroke(" ", (event) => {
           <Slider class="w-48" v-model="volume" @change="setVolume" />
         </div>
 
-        <Spotter :entry="entry" />
+        <Spotter :entry="entry" @pause="pause" />
       </div>
     </div>
   </div>
