@@ -6,10 +6,10 @@ use std::slice::from_raw_parts;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
-use symphonia::core::codecs::DecoderOptions;
+use symphonia::core::codecs::audio::AudioDecoderOptions;
+use symphonia::core::codecs::CodecParameters;
 
-use symphonia::core::audio::SampleBuffer;
-use symphonia::core::formats::{FormatReader, Track};
+use symphonia::core::formats::{FormatReader, Track, TrackType};
 use thiserror::Error;
 
 const BATCH_SAMPLES: usize = 1024;
@@ -19,12 +19,12 @@ const SAMPLING_STEP: usize = 512;
 pub enum Error {
     #[error("source not set")]
     SourceNotSet,
-    #[error("source reset")]
-    SourceReset,
     #[error("tracks not found for source: {0}")]
     TracksNotFound(String),
     #[error(transparent)]
     Symphonia(#[from] symphonia::core::errors::Error),
+    #[error("codec parameters missing")]
+    CodecParamsMissing,
 }
 
 pub struct WaveformGenerator {
@@ -50,7 +50,7 @@ impl WaveformGenerator {
         &self,
         reader: &'reader dyn FormatReader,
     ) -> Result<&'reader Track, Error> {
-        let track = reader.default_track().ok_or_else(|| {
+        let track = reader.default_track(TrackType::Audio).ok_or_else(|| {
             Error::TracksNotFound(
                 self.source_path
                     .lock()
@@ -70,8 +70,7 @@ impl WaveformGenerator {
         let reader = get_format_reader(path)?;
 
         let track = self.get_default_track(reader.as_ref())?;
-        let params = &track.codec_params;
-        let n_frames = params.n_frames.unwrap();
+        let n_frames = track.num_frames.unwrap();
         let waveform_samples_num: u32 = (n_frames / SAMPLING_STEP as u64).try_into().unwrap();
         let data_length = waveform_samples_num;
 
@@ -95,9 +94,13 @@ impl WaveformGenerator {
         let track = self.get_default_track(reader.as_ref())?;
         let track_id = track.id;
 
-        let params = &track.codec_params;
-        let n_frames = params.n_frames.unwrap();
-        let n_channels = params.channels.unwrap().count();
+        let params = track
+            .codec_params
+            .as_ref()
+            .and_then(CodecParameters::audio)
+            .ok_or(Error::CodecParamsMissing)?;
+        let n_frames = track.num_frames.unwrap();
+        let n_channels = params.channels.as_ref().unwrap().count();
         let src_samples_per_batch = n_channels * SAMPLING_STEP * BATCH_SAMPLES;
         let waveform_samples_num: u32 = (n_frames / SAMPLING_STEP as u64).try_into().unwrap();
 
@@ -106,28 +109,34 @@ impl WaveformGenerator {
         debug!("waveform_samples_num: {waveform_samples_num}");
 
         let mut decoder = symphonia::default::get_codecs()
-            .make(&track.codec_params, &DecoderOptions::default())?;
+            .make_audio_decoder(params, &AudioDecoderOptions::default())?;
 
         let reset = self.reset.clone();
         spawn(move || {
             debug!("start waveform generation");
 
             let n_channels_i32 = i32::try_from(n_channels).unwrap();
-            let mut sample_buf = None;
-            let mut samples = Vec::with_capacity(usize::try_from(n_frames).unwrap() * n_channels);
-            let mut available_samples_head = 0;
+            let n_samples = usize::try_from(n_frames).unwrap() * n_channels;
+            let mut samples = vec![0i16; n_samples];
+            let mut available_samples_head = 0; // The index of the next sample to be processed.
+            let mut available_samples_tail = 0; // The index of the last sample to be processed.
 
             // Decode all packets, ignoring all decode errors.
-            let result: Error = loop {
+            loop {
                 if reset.load(std::sync::atomic::Ordering::Acquire) {
-                    break Error::SourceReset;
+                    info!("Waveform generator: source reset");
+                    break;
                 }
 
                 // loop for packets
-                let result = match reader.next_packet() {
-                    Err(err) => Err(err), // about to break
+                let end = match reader.next_packet() {
+                    Err(err) => {
+                        // about to break
+                        warn!("Waveform generator: stopped generating waveform, because of unrecoverable error: {err}");
+                        true
+                    }
 
-                    Ok(packet) => {
+                    Ok(Some(packet)) => {
                         // If the packet does not belong to the selected track, skip over it.
                         if packet.track_id() != track_id {
                             continue;
@@ -136,48 +145,57 @@ impl WaveformGenerator {
                         // Decode the packet into audio samples.
                         match decoder.decode(&packet) {
                             Ok(audio_buf) => {
-                                // create sample buffer if not exists
-                                let sample_buf = sample_buf.get_or_insert_with(|| {
-                                    let spec = *audio_buf.spec();
-                                    let capacity = audio_buf.capacity() as u64;
-                                    SampleBuffer::<i16>::new(capacity, spec)
-                                });
+                                let n_new_samples = audio_buf.samples_interleaved();
 
-                                sample_buf.copy_interleaved_ref(audio_buf);
-                                samples.extend_from_slice(sample_buf.samples());
-                                Ok(()) // continue
+                                audio_buf.copy_to_slice_interleaved(
+                                    &mut samples[available_samples_tail
+                                        ..available_samples_tail + n_new_samples],
+                                );
+
+                                available_samples_tail += n_new_samples;
+
+                                false // continue
+                            }
+
+                            Err(symphonia::core::errors::Error::IoError(err)) => {
+                                // The packet failed to decode due to an IO error, skip the packet.
+                                warn!("Waveform generator: skipped packet, because of IO error: {err}");
+                                false // continue
                             }
                             Err(symphonia::core::errors::Error::DecodeError(err)) => {
-                                warn!("decode error: {err}");
-                                Ok(()) // continue
+                                // The packet failed to decode due to invalid data, skip the packet.
+                                warn!("Waveform generator: skipped packet, because of decode error: {err}");
+                                false // continue
                             }
-                            Err(err) => Err(err), // about to break
+
+                            Err(err) => {
+                                // about to break
+                                warn!("Waveform generator: stopped generating wavefrom, because of unrecoverable error: {err}");
+                                true
+                            }
                         }
                     }
+
+                    Ok(None) => true, // end of stream
                 };
 
                 if reset.load(std::sync::atomic::Ordering::Acquire) {
-                    break Error::SourceReset;
+                    info!("Waveform generator: source reset");
+                    break;
                 }
 
                 // consume available samples
                 loop {
-                    let available_samples_num = match result {
-                        Ok(()) => {
-                            // decoding not ended, whether there are enough data for a batch
-                            if samples.len() >= available_samples_head + src_samples_per_batch {
-                                src_samples_per_batch
-                            } else {
-                                0
-                            }
-                        }
-                        Err(_) => {
-                            // about to break, consume all remaining samples
-                            if samples.len() > available_samples_head {
-                                samples.len() - available_samples_head //  all remaining samples
-                            } else {
-                                0
-                            }
+                    let available_samples_num = if end {
+                        // about to break, consume all remaining samples
+                        available_samples_tail.saturating_sub(available_samples_head)
+                    } else {
+                        // decoding not ended, whether there are enough data for a batch
+                        if available_samples_tail >= available_samples_head + src_samples_per_batch
+                        {
+                            src_samples_per_batch
+                        } else {
+                            0
                         }
                     };
 
@@ -210,27 +228,7 @@ impl WaveformGenerator {
 
                     available_samples_head += src_samples_per_batch;
                 }
-
-                // handle break
-                if let Err(err) = result {
-                    break err.into();
-                }
-            }; // loop
-
-            match result {
-                Error::Symphonia(symphonia::core::errors::Error::IoError(err))
-                    if err.kind() == std::io::ErrorKind::UnexpectedEof
-                        && err.to_string() == "end of stream" =>
-                {
-                    // End of stream is expected
-                }
-                Error::SourceReset => {
-                    info!("source reset");
-                }
-                err => {
-                    warn!("waveform generator: {err}");
-                }
-            }
+            } // loop
 
             debug!("waveform generation done");
         });

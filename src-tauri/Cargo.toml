@@ -27,16 +27,22 @@ thiserror = "2.0.11"
 log = "0.4.26"
 simplelog = "0.12.2"
 rusqlite = { version = "0.33.0", features = ["bundled"] }
-symphonia = { version = "0.5.4", features = ["mp3", "opt-simd"] }
+symphonia = { version = "0.5.4", git = "https://github.com/pdeljanov/Symphonia.git", branch = "dev-0.6", features = [
+    "mp3",
+    "opt-simd",
+] }
 rodio = { version = "0.20.1", default-features = false, features = [
     "symphonia-wav",
-    "symphonia-flac",
     "symphonia-mp3",
     "symphonia-aac",
+    "symphonia-flac",
 ] }
 crossbeam-channel = "0.5.15"
 notify-debouncer-full = { version = "0.5.0", features = ["crossbeam-channel"] }
 open = "5.3.2"
+
+[patch.crates-io]
+symphonia = { git = "https://github.com/Fidelxyz/Symphonia.git" }
 
 [dev-dependencies]
 testdir = "0.9.3"

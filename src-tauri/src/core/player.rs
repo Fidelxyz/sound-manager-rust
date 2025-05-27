@@ -1,19 +1,19 @@
 use core::time::Duration;
-use log::debug;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::thread::{sleep, spawn};
-use symphonia::core::codecs::DecoderOptions;
 
+use log::{debug, warn};
 use rodio::{Decoder, OutputStream, Sink};
 use serde::Serialize;
-use symphonia::core::audio::SampleBuffer;
-use symphonia::core::formats::{FormatOptions, FormatReader};
+use symphonia::core::codecs::audio::AudioDecoderOptions;
+use symphonia::core::codecs::CodecParameters;
+use symphonia::core::formats::probe::Hint;
+use symphonia::core::formats::{FormatOptions, FormatReader, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -34,6 +34,8 @@ pub enum Error {
     PlayerNotStarted,
     #[error("tracks not found for source: {0}")]
     TracksNotFound(String),
+    #[error("codec parameters missing")]
+    CodecParamsMissing,
 }
 
 pub struct Player {
@@ -206,72 +208,86 @@ pub fn get_format_reader(
     if let Some(ext) = path.extension() {
         hint.with_extension(ext.to_string_lossy().as_ref());
     }
-    let meta_opts: MetadataOptions = MetadataOptions::default();
-    let fmt_opts: FormatOptions = FormatOptions::default();
-    let probed = symphonia::default::get_probe().format(&hint, mss, &fmt_opts, &meta_opts)?;
-    Ok(probed.format)
+    let format = symphonia::default::get_probe().probe(
+        &hint,
+        mss,
+        FormatOptions::default(),
+        MetadataOptions::default(),
+    )?;
+    Ok(format)
 }
 
 #[allow(clippy::cast_precision_loss)]
 pub fn get_first_transit_pos(path: &Path) -> Result<Duration, Error> {
     let mut reader = get_format_reader(path)?;
     let track = reader
-        .default_track()
+        .default_track(TrackType::Audio)
         .ok_or(Error::TracksNotFound(path.to_string_lossy().to_string()))?;
     let track_id = track.id;
 
-    let params = &track.codec_params;
-    let n_channels = params.channels.unwrap().count();
+    let params = &track
+        .codec_params
+        .as_ref()
+        .and_then(CodecParameters::audio)
+        .ok_or_else(|| Error::CodecParamsMissing)?;
+    let n_channels = params
+        .channels
+        .as_ref()
+        .ok_or_else(|| Error::CodecParamsMissing)?
+        .count();
     let sample_rate = params.sample_rate.unwrap();
 
-    let mut decoder =
-        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
-    let mut sample_buf = None;
+    let mut decoder = symphonia::default::get_codecs()
+        .make_audio_decoder(params, &AudioDecoderOptions::default())?;
+    let mut sample_buf = Vec::<i16>::new();
 
     let mut current_pos: usize = 0;
 
     let pos_frame = loop {
-        let pos_frame = match reader.next_packet() {
+        match reader.next_packet() {
             Err(err) => break Err(err),
 
-            Ok(packet) => {
+            Ok(Some(packet)) => {
                 if packet.track_id() != track_id {
                     continue;
                 }
 
-                let (pos, packet_length) = match decoder.decode(&packet) {
+                match decoder.decode(&packet) {
                     Ok(audio_buf) => {
-                        let sample_buf = sample_buf.get_or_insert_with(|| {
-                            let spec = *audio_buf.spec();
-                            let capacity = audio_buf.capacity() as u64;
-                            SampleBuffer::<i16>::new(capacity, spec)
-                        });
+                        sample_buf.resize(audio_buf.samples_interleaved(), 0);
+                        audio_buf.copy_to_slice_interleaved(&mut sample_buf);
 
-                        sample_buf.copy_interleaved_ref(audio_buf);
+                        if let Some(pos) = sample_buf.iter().position(|&x| x != 0) {
+                            // first transit found
+                            let pos_frame = (current_pos + pos) / n_channels;
+                            break Ok(Some(pos_frame));
+                        }
 
-                        let pos = sample_buf.samples().iter().position(|&x| x != 0);
+                        // first transit not found, continue
                         let packet_length = sample_buf.len();
-
-                        (pos, packet_length)
+                        current_pos += packet_length;
                     }
-                    Err(err) => break Err(err),
-                };
 
-                if let Some(pos) = pos {
-                    let pos_frame = (current_pos + pos) / n_channels;
-                    Some(pos_frame)
-                } else {
-                    current_pos += packet_length; // continue
-                    None
+                    // The packet failed to decode due to an IO error or invalid data, skip the packet.
+                    Err(symphonia::core::errors::Error::IoError(err)) => {
+                        // The packet failed to decode due to an IO error, skip the packet.
+                        warn!("IO error: {err}");
+                    }
+                    Err(symphonia::core::errors::Error::DecodeError(err)) => {
+                        // The packet failed to decode due to invalid data, skip the packet.
+                        warn!("decode error: {err}");
+                    }
+
+                    // An unrecoverable error occurred, halt decoding.
+                    Err(err) => break Err(err),
                 }
             }
-        };
 
-        if let Some(pos_frame) = pos_frame {
-            break Ok(pos_frame);
+            Ok(None) => break Ok(None), // end of stream
         }
-    }; // loop
+    }?; // loop
 
+    // Default to 0
     Ok(Duration::from_secs_f32(
         pos_frame.unwrap_or(0) as f32 / sample_rate as f32,
     ))
