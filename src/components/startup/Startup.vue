@@ -8,10 +8,11 @@ import { Button, useConfirm } from "primevue";
 import type { ErrorKind, MigrateFrom, MigratorResult } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
+import { basename } from "@tauri-apps/api/path";
 import MigrationMessage from "./MigrationMessage.vue";
 
 const emit = defineEmits<{
-  "database-loaded": [];
+  "database-loaded": [path: string];
 }>();
 
 const loading = ref(false);
@@ -19,23 +20,23 @@ const loading = ref(false);
 const confirm = useConfirm();
 
 async function openDatabase(path?: string) {
-  console.log("Open Database");
+  console.info("Opening Database");
 
-  const path_ = path || (await open({ multiple: false, directory: true }));
+  const path_ =
+    path || (await open({ multiple: false, directory: true, recursive: true }));
   if (!path_) return;
 
   loading.value = true;
   api
     .openDatabase(path_)
     .then(() => {
-      emit("database-loaded");
+      emit("database-loaded", path_);
     })
-    .catch((e: ErrorKind) => {
+    .catch(async (e: ErrorKind) => {
       if (e.kind === "databaseNotFound") {
         console.warn(e);
 
-        const match_folder_name = path_.match(/([^\\/]+)[\\/]*$/);
-        const folder_name = match_folder_name ? match_folder_name[1] : path_;
+        const folder_name = await basename(path_);
         confirm.require({
           header: "数据库不存在",
           message: `是否为 ${folder_name} 创建数据库？`,
@@ -55,16 +56,17 @@ async function openDatabase(path?: string) {
 }
 
 async function createDatabase(path?: string) {
-  console.log("Create Database");
+  console.info("Creating Database");
 
-  const path_ = path || (await open({ multiple: false, directory: true }));
+  const path_ =
+    path || (await open({ multiple: false, directory: true, recursive: true }));
   if (!path_) return;
 
   loading.value = true;
   api
     .createDatabase(path_)
     .then(() => {
-      emit("database-loaded");
+      emit("database-loaded", path_);
     })
     .catch((e: ErrorKind) => {
       console.error(e);
@@ -81,8 +83,7 @@ async function createDatabase(path?: string) {
 }
 
 function onDatabaseExists(path: string) {
-  const match_folder_name = path.match(/([^\\/]+)[\\/]*$/);
-  const folder_name = match_folder_name ? match_folder_name[1] : path;
+  const folder_name = basename(path);
   confirm.require({
     header: "数据库已存在",
     message: `是否打开数据库 ${folder_name} ？`,
@@ -100,10 +101,11 @@ const migratorResult = ref<MigratorResult>();
 const migratedPath = ref<string>();
 
 async function migrateFrom(from: MigrateFrom) {
-  console.log("Migrate From Billfish");
+  console.info("Migrating From Billfish");
   const path = await open({
     multiple: false,
     directory: true,
+    recursive: true,
   });
   if (!path) return;
 
@@ -137,10 +139,11 @@ function closeMigrationMessage() {
   migrationMessageVisible.value = false;
   if (migratorResult.value?.success && migratedPath.value) {
     loading.value = true;
+    const databasePath = migratedPath.value;
     api
-      .openDatabase(migratedPath.value)
+      .openDatabase(databasePath)
       .then(() => {
-        emit("database-loaded");
+        emit("database-loaded", databasePath);
       })
       .catch((e: ErrorKind) => {
         console.error(e);

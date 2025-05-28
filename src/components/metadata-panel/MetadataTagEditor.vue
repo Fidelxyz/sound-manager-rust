@@ -58,7 +58,7 @@ function addTag(value: TreeSelectionKeys) {
   if (!entry) return;
 
   const tagId = Number.parseInt(Object.keys(value)[0]);
-  console.log("Add tag", tagId);
+  console.info("Adding tag", tagId);
   api
     .addTagForEntry(entry.id, tagId)
     .then(() => {

@@ -1,8 +1,8 @@
 mod entry;
 mod file_watcher;
+mod files;
 mod filter;
 mod folder;
-mod spotter;
 mod tag;
 
 #[cfg(test)]
@@ -1569,7 +1569,7 @@ fn is_audio_file(path: &Path) -> bool {
     match path.extension() {
         None => false,
         Some(ext) => {
-            let ext = ext.to_string_lossy();
+            let ext = ext.to_string_lossy().to_ascii_lowercase();
             ext == "wav" || ext == "mp3" || ext == "flac" || ext == "ogg"
         }
     }

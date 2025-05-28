@@ -56,9 +56,9 @@ const tableFilters = ref<DataTableFilterMeta>({
 });
 
 watch(
-  () => filter,
+  filter,
   async (filter) => {
-    let entry_ids = await api.filter(filter.value);
+    let entry_ids = await api.filter(filter);
     console.debug("Filtered entries", entry_ids);
     if (Array.isArray(entry_ids) && entry_ids.length === 0) {
       entry_ids = [-1];

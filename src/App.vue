@@ -1,38 +1,20 @@
 <script setup lang="ts">
-import { listen } from "@tauri-apps/api/event";
 import { Menu, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
-import { onMounted, onUnmounted, ref, useTemplateRef } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 
-import { ConfirmDialog, Splitter, SplitterPanel, Toast } from "primevue";
-import type { TreeNode } from "primevue/treenode";
+import { ConfirmDialog, Toast } from "primevue";
 
-import AudioList from "./components/audio-list/AudioList.vue";
-import FolderList from "./components/folder-list/FolderList.vue";
-import MetadataPanel from "./components/metadata-panel/MetadataPanel.vue";
-import Player from "./components/player/Player.vue";
+import DatabaseView from "./components/DatabaseView.vue";
 import Startup from "./components/startup/Startup.vue";
-import TagList from "./components/tag-list/TagList.vue";
 
-import type { Entry, ErrorKind, Filter, FolderNode, TagNode } from "@/api";
+import type { ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 
-const metadataPanel = useTemplateRef("metadataPanel");
-
-// data
-const entries = ref<Entry[]>([]);
-const folder = ref<FolderNode | null>(null);
-const tags = ref<TreeNode[]>([]);
-
 // state
 const databaseOpen = ref(false);
-const activeEntry = ref<Entry>();
-const filter = ref<Filter>({
-  search: "",
-  tagIds: [],
-  folderId: null,
-});
+const databasePath = ref<string>();
 
 onMounted(async () => {
   const titleSubmenu = await Submenu.new({
@@ -100,10 +82,11 @@ onUnmounted(() => {
 });
 
 async function openDatabase() {
-  console.log("Open Database");
+  console.info("Opening Database");
   const path = await open({
     multiple: false,
     directory: true,
+    recursive: true,
   });
   if (!path) return;
 
@@ -115,7 +98,7 @@ async function openDatabase() {
   api
     .openDatabase(path)
     .then(() => {
-      onDatabaseLoaded();
+      onDatabaseLoaded(path);
     })
     .catch((e: ErrorKind) => {
       console.error(e);
@@ -128,10 +111,11 @@ async function openDatabase() {
 }
 
 async function createDatabase() {
-  console.log("Create Database");
+  console.info("Creating Database");
   const path = await open({
     multiple: false,
     directory: true,
+    recursive: true,
   });
   if (!path) return;
 
@@ -143,7 +127,7 @@ async function createDatabase() {
   api
     .createDatabase(path)
     .then(() => {
-      onDatabaseLoaded();
+      onDatabaseLoaded(path);
     })
     .catch((e: ErrorKind) => {
       console.error(e);
@@ -169,129 +153,19 @@ function refresh() {
   });
 }
 
-function onDatabaseLoaded() {
-  console.log("Database loaded");
-  loadEntries();
-  loadFolders();
-  loadTags();
+function onDatabaseLoaded(path: string) {
+  console.info("Database loaded");
   databaseOpen.value = true;
+  databasePath.value = path;
 }
-
-function onTagsChanged() {
-  console.debug("Tags changed");
-  loadTags();
-  metadataPanel.value?.refresh();
-}
-
-function onFilesChanged() {
-  console.debug("Files changed");
-  loadEntries();
-  loadFolders();
-  metadataPanel.value?.refresh();
-}
-
-function loadEntries() {
-  console.log("Load entries");
-  api
-    .getEntries()
-    .then((data) => {
-      console.log("Entries", data);
-      entries.value = data;
-    })
-    .catch((e) => {
-      error("加载文件失败", e.message);
-      console.error(e);
-    });
-}
-
-async function loadFolders() {
-  console.log("Load folders");
-  api
-    .getFolder()
-    .then((data) => {
-      console.log("Folder", data);
-      folder.value = data;
-    })
-    .catch((e) => {
-      error("加载文件夹失败", e.message);
-      console.error(e);
-    });
-}
-
-function loadTags() {
-  console.log("Load tags");
-  api
-    .getTags()
-    .then((tagNodes) => {
-      console.log("Tags", tagNodes);
-      tags.value = toTagTree(tagNodes);
-    })
-    .catch((e) => {
-      e("加载标签失败", e.message);
-      console.error(e);
-    });
-}
-
-function toTagTree(tags: TagNode[]): TreeNode[] {
-  return tags.map((tagNode): TreeNode => {
-    return {
-      key: tagNode.tag.id.toString(),
-      label: tagNode.tag.name,
-      data: tagNode.tag,
-      icon: `pi pi-tag tag-color-${tagNode.tag.color}`,
-      children: toTagTree(tagNode.children),
-    };
-  });
-}
-
-listen("files_updated", onFilesChanged);
 </script>
 
 <template>
   <main class="container max-w-none h-screen">
     <Toast />
     <ConfirmDialog />
-    <div v-if="databaseOpen" class="h-full flex flex-col">
-      <div class="flex-1 min-h-0">
-        <Splitter class="h-full rounded-none!" :gutterSize="2">
-          <SplitterPanel class="min-w-2xs" :size="15">
-            <Splitter layout="vertical" class="h-full" :gutterSize="2">
-              <SplitterPanel :minSize="20">
-                <FolderList :folder="folder" v-model:filter="filter" />
-              </SplitterPanel>
 
-              <SplitterPanel :minSize="20">
-                <TagList
-                  :tags="tags"
-                  v-model:filter="filter"
-                  @tags-changed="onTagsChanged"
-                />
-              </SplitterPanel>
-            </Splitter>
-          </SplitterPanel>
-
-          <SplitterPanel :size="65">
-            <AudioList
-              :entries="entries"
-              :tags="tags"
-              v-model:filter="filter"
-              v-model:activeEntry="activeEntry"
-            />
-          </SplitterPanel>
-
-          <SplitterPanel class="min-w-xs" :size="20">
-            <MetadataPanel
-              ref="metadataPanel"
-              :entry="activeEntry"
-              :allTags="tags"
-            />
-          </SplitterPanel>
-        </Splitter>
-      </div>
-      <div>
-        <Player :entry="activeEntry" />
-      </div>
-    </div>
+    <DatabaseView v-if="databaseOpen" :basePath="databasePath" />
     <Startup v-else @database-loaded="onDatabaseLoaded" />
   </main>
 </template>

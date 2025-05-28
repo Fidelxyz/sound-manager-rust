@@ -1,11 +1,17 @@
 use super::{DatabaseData, EntryId, Error, Result};
 
-use std::fs::copy;
+use std::fs::{copy, remove_file};
 use std::path::Path;
 
 use open;
 
 impl DatabaseData {
+    pub fn delete_file(&self, entry_id: EntryId) -> Result<()> {
+        let path = self.to_absolute_path(&self.get_entry(entry_id).unwrap().path);
+        remove_file(path)?;
+        Ok(())
+    }
+
     pub fn spot(
         &self,
         entry_id: EntryId,

@@ -16,6 +16,7 @@ import {
 import type { Entry, ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error, info } from "@/utils/message";
+import { basename } from "@tauri-apps/api/path";
 
 const { entry } = defineProps<{
   entry?: Entry;
@@ -65,7 +66,6 @@ function spot() {
     settings.value.openInApplication,
   );
 
-  const entryId = entry.id;
   const savePath =
     settings.value.saveEnabled && settings.value.savePath !== null
       ? settings.value.savePath
@@ -76,8 +76,17 @@ function spot() {
       ? settings.value.openInApplication
       : undefined;
 
+  confirmSpot(entry, savePath, openInApplication);
+}
+
+function confirmSpot(
+  entry: Entry,
+  savePath?: string,
+  openInApplication?: string,
+  force = false,
+) {
   api
-    .spot(entryId, savePath, openInApplication)
+    .spot(entry.id, savePath, openInApplication, force)
     .then(() => {
       if (settings.value.openInApplicationEnabled) {
         info(
@@ -94,14 +103,14 @@ function spot() {
     })
 
     .catch((e: ErrorKind) => {
-      if (e.kind === "fileAlreadyExists") {
+      if (!force && e.kind === "fileAlreadyExists") {
         confirm.require({
           header: "文件已存在",
-          message: `文件 ${entry.fileName} 位于 ${savePath} 已存在。确定要覆盖文件吗？`,
+          message: `位于 ${savePath} 中的文件 ${entry.fileName} 已存在。确定要覆盖文件吗？`,
           icon: "pi pi-exclamation-circle",
           rejectProps: { label: "取消", severity: "secondary", outlined: true },
           acceptProps: { label: "覆盖文件", severity: "danger" },
-          accept: () => confirmSpot(entryId, savePath, openInApplication),
+          accept: () => confirmSpot(entry, savePath, openInApplication, true),
         });
         return;
       }
@@ -110,26 +119,12 @@ function spot() {
     });
 }
 
-function confirmSpot(
-  entryId: number,
-  savePath?: string,
-  openInApplication?: string,
-) {
-  api.spot(entryId, savePath, openInApplication, true).catch((e: ErrorKind) => {
-    if (e.kind === "fileAlreadyExists") {
-      confirmSpot(entryId, savePath, openInApplication);
-    }
-    console.error(e);
-    error("发送至应用失败", e.message);
-  });
-}
-
 function openSpotSettings() {
   tempSettings.value = { ...settings.value };
   settingsOpened.value = true;
 }
 
-function saveSettings() {
+async function saveSettings() {
   settings.value = { ...tempSettings.value };
 
   if (settings.value.openInApplication !== null) {
@@ -144,8 +139,7 @@ function saveSettings() {
 
   if (settings.value.savePath !== null) {
     // extract the folder name from the path
-    const match = settings.value.savePath.match(/([^\\/]+)$/);
-    saveFolderName.value = match ? match[1] : null;
+    saveFolderName.value = await basename(settings.value.savePath);
   } else {
     saveFolderName.value = null;
   }

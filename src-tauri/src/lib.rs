@@ -428,7 +428,20 @@ async fn get_playing_pos(state: State<'_, AppData>) -> Result<f32, Error> {
     Ok(state.player.read().unwrap().get_pos())
 }
 
-// ========== Spotter ==========
+// ========== Files ==========
+
+#[tauri::command]
+async fn delete_file(entry_id: EntryId, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("delete_file: {entry_id:?}");
+
+    get_database!(database, state.database);
+    get_data!(data, database);
+
+    data.delete_file(entry_id)?;
+
+    trace!("delete_file done");
+    Ok(())
+}
 
 #[tauri::command]
 async fn spot(
@@ -457,6 +470,7 @@ async fn spot(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -523,6 +537,7 @@ pub fn run() {
             pause,
             set_volume,
             get_playing_pos,
+            delete_file,
             spot
         ])
         .run(tauri::generate_context!())

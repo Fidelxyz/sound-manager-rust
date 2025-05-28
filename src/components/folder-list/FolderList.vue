@@ -15,12 +15,12 @@ const selectedFolder = ref<Folder>();
 
 function selectFolder(folder: Folder) {
   if (selectedFolder.value === folder) {
-    console.log("Unselect folder:", folder.name);
+    console.info("Unselected folder:", folder.name);
     selectedFolder.value = undefined;
     filter.value.folderId = null;
     return;
   }
-  console.log("Select folder:", folder.name);
+  console.info("Selected folder:", folder.name);
   selectedFolder.value = folder;
   filter.value.folderId = folder.id;
 }

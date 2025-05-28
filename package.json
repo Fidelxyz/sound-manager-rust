@@ -21,6 +21,7 @@
     "@primevue/icons": "^4.3.4",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "~2.2.1",
+    "@tauri-apps/plugin-fs": "~2",
     "@vueuse/core": "^13.2.0",
     "primeicons": "^7.0.0",
     "primevue": "^4.3.4",

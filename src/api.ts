@@ -24,6 +24,10 @@ export type Entry = {
 export type Folder = {
   id: number;
   name: string;
+  /**
+   * Relative path to the folder.
+   */
+  path: string;
 };
 
 export type FolderNode = {
@@ -169,6 +173,14 @@ export const api = {
 
   requestWaveform(channel: Channel<ArrayBuffer>): Promise<number> {
     return invoke<number>("request_waveform", { channel });
+  },
+
+  addFile(filePath: string, dstFolderId: number, force = false): Promise<void> {
+    return invoke<void>("add_file", { filePath, dstFolderId, force });
+  },
+
+  deleteFile(entryId: number): Promise<void> {
+    return invoke<void>("delete_file", { entryId });
   },
 
   spot(

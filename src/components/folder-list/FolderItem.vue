@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { computed, onMounted, onUnmounted, useTemplateRef } from "vue";
+
 import { Button } from "primevue";
 
+import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
+import { dropTargetForExternal } from "@atlaskit/pragmatic-drag-and-drop/external/adapter";
+import { containsFiles } from "@atlaskit/pragmatic-drag-and-drop/external/file";
+
 import type { Folder, FolderNode } from "@/api";
-import { computed } from "vue";
+import type { DropTargetData } from "@/types";
 
 const {
   folderNode,
@@ -14,22 +20,61 @@ const {
   depth?: number;
 }>();
 
+const nodeContent = useTemplateRef("nodeContent");
+
 const folder = computed(() => folderNode.folder);
 
 const emit = defineEmits<{
   select: [folder: Folder];
 }>();
 
+onMounted(() => {
+  registerDragAndDrop();
+});
+
+onUnmounted(() => {
+  unregisterDragAndDrop();
+});
+
 function selectFolder(folder: Folder) {
   emit("select", folder);
 }
+
+// ========== Drag and Drop BEGIN ==========
+
+let unregisterDropTarget: CleanupFn | null = null;
+
+function registerDragAndDrop() {
+  if (nodeContent.value) {
+    unregisterDropTarget = dropTargetForExternal({
+      element: nodeContent.value,
+      canDrop: containsFiles,
+      getData: () => {
+        const data: DropTargetData = {
+          type: "folder",
+          folder: folder.value,
+        };
+        return data;
+      },
+    });
+  }
+}
+
+function unregisterDragAndDrop() {
+  if (unregisterDropTarget) {
+    unregisterDropTarget();
+    unregisterDropTarget = null;
+  }
+}
+
+// ========== Drag and Drop END ==========
 </script>
 
 <template>
-  <li>
+  <li ref="nodeContent">
     <Button
       variant="text"
-      class="w-full justify-start!"
+      class="w-full justify-start! z-1999"
       :class="{ active: folder === selectedFolder }"
       :style="{
         paddingLeft: `calc(var(--p-button-padding-x) + ${depth * 1}rem)`,

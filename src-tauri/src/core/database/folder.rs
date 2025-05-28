@@ -16,12 +16,11 @@ pub struct Folder {
     pub id: FolderId,
     #[serde(serialize_with = "serialize_os_string")]
     pub name: OsString,
+    /// Relative path to the folder
+    pub path: PathBuf,
 
     #[serde(skip)]
-    pub path: PathBuf,
-    #[serde(skip)]
     pub parent_id: FolderId,
-    /// Relative path to the folder
     #[serde(skip)]
     pub sub_folders: HashMap<OsString, FolderId>,
     #[serde(skip)]
