@@ -159,6 +159,10 @@ export const api = {
     return invoke("pause");
   },
 
+  stop(): Promise<void> {
+    return invoke("stop");
+  },
+
   getPlayingPos(): Promise<number> {
     return invoke<number>("get_playing_pos");
   },
@@ -173,10 +177,6 @@ export const api = {
 
   requestWaveform(channel: Channel<ArrayBuffer>): Promise<number> {
     return invoke<number>("request_waveform", { channel });
-  },
-
-  addFile(filePath: string, dstFolderId: number, force = false): Promise<void> {
-    return invoke<void>("add_file", { filePath, dstFolderId, force });
   },
 
   deleteFile(entryId: number): Promise<void> {

@@ -166,7 +166,7 @@ function addTagToEntry({
 const confirm = useConfirm();
 const contextMenu = useTemplateRef("contextMenu");
 const contextMenuSelectedTag = ref<Tag>();
-const contextMenuItems = ref<MenuItem[]>([
+const contextMenuItems: MenuItem[] = [
   {
     label: "重命名",
     icon: "pi pi-pencil",
@@ -235,9 +235,9 @@ const contextMenuItems = ref<MenuItem[]>([
   {
     label: "删除",
     icon: "pi pi-trash",
-    command: confirmDeleteTag,
+    command: deleteTag,
   },
-]);
+];
 
 function onTagRightClick(event: MouseEvent, tag: Tag) {
   contextMenuSelectedTag.value = tag;
@@ -258,21 +258,21 @@ function renameTag() {
   }, 0);
 }
 
-function confirmDeleteTag() {
+function deleteTag() {
   const tag = contextMenuSelectedTag.value;
   if (!tag) return;
 
   confirm.require({
     header: "删除标签",
     message: `确定要删除标签 ${tag.name} 吗？`,
-    icon: "pi pi-exclamation-circle",
+    icon: "pi pi-trash",
     rejectProps: { label: "取消", severity: "secondary", outlined: true },
     acceptProps: { label: "删除", severity: "danger" },
-    accept: () => deleteTag(tag),
+    accept: () => confirmDeleteTag(tag),
   });
 }
 
-function deleteTag(tag: Tag) {
+function confirmDeleteTag(tag: Tag) {
   console.debug("Delete tag", tag);
   api
     .deleteTag(tag.id)

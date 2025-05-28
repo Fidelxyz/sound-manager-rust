@@ -32,7 +32,10 @@ watch(
 
   // on entry changed
   async (entry) => {
-    if (!entry) return;
+    if (!entry) {
+      stop();
+      return;
+    }
 
     pause();
     await api.setPlayerSource(entry.id).catch((e) => {
@@ -69,6 +72,14 @@ function pause() {
   console.debug("pause");
   api.pause();
   playing.value = false;
+}
+
+function stop() {
+  console.debug("stop");
+  api.stop();
+  activeEntry.value = undefined;
+  playing.value = false;
+  playingPos = 0;
 }
 
 async function seek(time: number) {

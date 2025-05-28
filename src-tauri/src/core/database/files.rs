@@ -1,17 +1,29 @@
-use super::{DatabaseData, EntryId, Error, Result};
+use super::{Database, DatabaseData, DatabaseEmitter, EntryId, Error, Result};
 
-use std::fs::{copy, remove_file};
+use std::fs::copy;
 use std::path::Path;
+use trash::delete;
 
 use open;
 
-impl DatabaseData {
+impl<E> Database<E>
+where
+    E: DatabaseEmitter + Send + Sync + 'static,
+{
     pub fn delete_file(&self, entry_id: EntryId) -> Result<()> {
-        let path = self.to_absolute_path(&self.get_entry(entry_id).unwrap().path);
-        remove_file(path)?;
+        let mut data = self.data.write().unwrap();
+
+        let path = data.to_absolute_path(&data.get_entry(entry_id).unwrap().path);
+        delete(path)?;
+
+        data.remove_entry(entry_id, &self.db.lock().unwrap())?;
+        self.emitter.on_files_updated();
+
         Ok(())
     }
+}
 
+impl DatabaseData {
     pub fn spot(
         &self,
         entry_id: EntryId,

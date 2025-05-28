@@ -129,7 +129,7 @@ async fn close_database(state: State<'_, AppData>) -> Result<(), Error> {
         database.close();
     }
 
-    state.player.read().unwrap().stop();
+    state.player.read().unwrap().terminate();
     state.waveform_generator.lock().unwrap().set_source(None);
 
     trace!("close_database done");
@@ -414,6 +414,17 @@ async fn pause(state: State<'_, AppData>) -> Result<(), Error> {
 }
 
 #[tauri::command]
+async fn stop(state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("stop");
+
+    state.player.read().unwrap().stop();
+    state.waveform_generator.lock().unwrap().set_source(None);
+
+    trace!("stop done");
+    Ok(())
+}
+
+#[tauri::command]
 async fn set_volume(volume: f32, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("set_volume: {volume:?}");
 
@@ -435,9 +446,8 @@ async fn delete_file(entry_id: EntryId, state: State<'_, AppData>) -> Result<(),
     trace!("delete_file: {entry_id:?}");
 
     get_database!(database, state.database);
-    get_data!(data, database);
 
-    data.delete_file(entry_id)?;
+    database.delete_file(entry_id)?;
 
     trace!("delete_file done");
     Ok(())
@@ -535,6 +545,7 @@ pub fn run() {
             set_player_source,
             play,
             pause,
+            stop,
             set_volume,
             get_playing_pos,
             delete_file,

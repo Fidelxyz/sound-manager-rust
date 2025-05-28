@@ -77,6 +77,8 @@ pub enum Error {
     Symphonia(#[from] symphonia::core::errors::Error),
     #[error("notify error: {0}")]
     Notify(#[from] notify_debouncer_full::notify::Error),
+    #[error("trash error: {0}")]
+    Trash(#[from] trash::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -1238,6 +1240,7 @@ impl DatabaseData {
 
         // update entry path and file name
         let entry = self.entries.get_mut(&entry_id).unwrap();
+        entry.folder_id = new_folder_id;
         entry.path = new_path;
         entry.file_name = new_file_name;
 

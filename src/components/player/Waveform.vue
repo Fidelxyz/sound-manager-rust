@@ -22,7 +22,7 @@ const emit = defineEmits<{
 let wavesurfer: WaveSurfer;
 let waveformData: Float32Array;
 let waveformLength = 0;
-let waveformChannel: Channel<ArrayBuffer> | undefined;
+let waveformChannel: Channel<ArrayBuffer> | null = null;
 
 let timer: Timer;
 const playback_timer = new PlaybackTimer();
@@ -98,6 +98,15 @@ function onReceiveWaveformData(srcData: ArrayBuffer) {
   wavesurfer.load("", [waveformData], entry?.duration || 0);
 }
 
+function clearWaveform() {
+  console.debug("clearWaveform");
+  if (waveformChannel) {
+    waveformChannel.onmessage = () => {};
+    waveformChannel = null;
+  }
+  wavesurfer.load("", [[0]], 1);
+}
+
 listen<PlayerState>("player_state_updated", (event) => {
   wavesurfer.setTime(event.payload.pos);
   if (event.payload.playing) {
@@ -116,6 +125,8 @@ watch(
   (entry) => {
     if (entry) {
       requestWaveform();
+    } else {
+      clearWaveform();
     }
   },
 );

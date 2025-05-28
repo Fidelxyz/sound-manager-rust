@@ -109,7 +109,7 @@ impl Player {
         });
     }
 
-    pub fn stop(&self) {
+    pub fn terminate(&self) {
         self.sink.write().unwrap().take();
     }
 
@@ -174,6 +174,21 @@ impl Player {
         });
     }
 
+    pub fn stop(&self) {
+        {
+            let sink = self.sink.read().unwrap();
+            if let Some(sink) = sink.as_ref() {
+                debug!("stop");
+                sink.clear();
+            }
+        }
+
+        self.emitter.on_player_state_updated(PlayerState {
+            playing: false,
+            pos: 0.,
+        });
+    }
+
     pub fn set_volume(&self, volume: f32) -> Result<(), Error> {
         let sink = self.sink.read().unwrap();
         let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
@@ -195,7 +210,7 @@ impl Player {
 
 impl Drop for Player {
     fn drop(&mut self) {
-        self.stop();
+        self.terminate();
     }
 }
 

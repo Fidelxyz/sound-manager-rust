@@ -1,21 +1,28 @@
 <script setup lang="ts">
 import { onKeyStroke } from "@vueuse/core";
-import { ref, useTemplateRef, watch } from "vue";
+import { type Ref, ref, useTemplateRef, watch } from "vue";
 
 import { FilterMatchMode } from "@primevue/core/api";
 import {
   Column,
+  ContextMenu,
   type DataTableFilterMeta,
   type DataTableFilterMetaData,
+  type DataTableRowContextMenuEvent,
   type DataTableRowSelectEvent,
+  useConfirm,
 } from "primevue";
+import type { MenuItem } from "primevue/menuitem";
 import type { TreeNode } from "primevue/treenode";
 import DataTable from "./datatable";
 
 import type { Entry, Filter } from "@/api";
 import { api } from "@/api";
+import { info } from "@/utils/message";
 import { formatDuration } from "@/utils/utils";
 import FilterPanel from "./FilterPanel.vue";
+
+const confirm = useConfirm();
 
 const { entries, tags } = defineProps<{
   entries: Entry[];
@@ -70,23 +77,69 @@ watch(
 
 // ========== Filter END ==========
 
-function rowClass(data: Entry) {
-  return [{ viewed: data?.viewed }];
+// ========== Context Menu BEGIN ==========
+
+const contextMenu = useTemplateRef("contextMenu");
+const contextMenuSelection = ref<Entry>();
+const contextMenuItems: MenuItem[] = [
+  {
+    label: "删除",
+    icon: "pi pi-trash",
+    command: () => deleteEntry(contextMenuSelection),
+  },
+];
+function onRowContextMenu(event: DataTableRowContextMenuEvent) {
+  contextMenu.value?.show(event.originalEvent);
 }
+
+function deleteEntry(entry: Ref<Entry | undefined>) {
+  const entry_ = entry.value;
+  if (!entry_) return;
+
+  confirm.require({
+    header: "确认删除",
+    message: `确定要删除 "${entry_.fileName}" 吗？`,
+    icon: "pi pi-trash",
+    rejectProps: { label: "取消", severity: "secondary", outlined: true },
+    acceptProps: { label: "删除", severity: "danger" },
+    accept: () => confirmDeleteEntry(entry_),
+  });
+}
+
+function confirmDeleteEntry(entry: Entry) {
+  if (activeEntry.value?.id === entry.id) {
+    activeEntry.value = undefined;
+  }
+
+  api
+    .deleteFile(entry.id)
+    .then(() => {
+      console.info("Deleted entry", entry);
+      info("删除成功", `已删除 "${entry.fileName}。"`);
+    })
+    .catch((error) => {
+      console.error("Failed to delete entry", entry, error);
+      info("删除失败", `删除 "${entry.fileName}" 时出现错误：${error}。`);
+    });
+}
+
+// ========== Context Menu END ==========
 </script>
 
 <template>
   <div class="flex flex-col h-full">
     <FilterPanel v-model="filter" :entries="entries" :tags="tags" />
 
+    <ContextMenu ref="contextMenu" :model="contextMenuItems" />
     <DataTable
       ref="dataTable"
       :value="entries"
       v-model:selection="activeEntry"
+      v-model:contextMenuSelection="contextMenuSelection"
       v-model:filters="tableFilters"
       dataKey="id"
       dragPreviewKey="fileName"
-      :rowClass="rowClass"
+      :rowClass="(data: Entry) => [{ viewed: data?.viewed }]"
       scrollable
       scrollHeight="flex"
       resizableColumns
@@ -96,6 +149,7 @@ function rowClass(data: Entry) {
       :metaKeySelection="true"
       :virtualScrollerOptions="{ itemSize: 32 }"
       @rowSelect="selectEntry"
+      @rowContextmenu="onRowContextMenu"
       :pt="{
         tableContainer: {
           style: 'overflow-x: hidden !important',

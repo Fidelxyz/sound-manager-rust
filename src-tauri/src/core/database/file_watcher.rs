@@ -282,7 +282,6 @@ fn file_created<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()>
 }
 
 fn file_removed<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()> {
-    debug_assert!(path.is_file());
     debug_assert!(path.is_absolute());
 
     let mut data = database.data.write().unwrap();
