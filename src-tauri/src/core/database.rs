@@ -733,8 +733,13 @@ impl DatabaseData {
         // query all folder ids from database in one batch
         // and store them into a path - folder_id map
         let query_rows = db
-            .prepare("SELECT id, parent, name, deleted FROM folders WHERE parent = ?")?
-            .query_map([ROOT_FOLDER_ID], |row| {
+            .prepare(
+                format!(
+                    "SELECT id, parent, name, deleted FROM folders WHERE id <> {ROOT_FOLDER_ID}"
+                )
+                .as_str(),
+            )?
+            .query_map([], |row| {
                 let folder_id = row.get::<_, FolderId>(0)?;
                 let parent_id = row.get::<_, FolderId>(1)?;
                 let name = row.get::<_, String>(2)?;
