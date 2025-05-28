@@ -1308,6 +1308,12 @@ impl DatabaseData {
 
     pub fn delete_tag(&mut self, tag_id: TagId, db: &Connection) -> Result<()> {
         let tag = self.tags.get(&tag_id).unwrap();
+        let parent_id = tag.parent_id;
+
+        // remove its children recursively
+        for child in tag.children.clone() {
+            self.delete_tag(child, db)?;
+        }
 
         db.execute(
             "UPDATE tags SET deleted = datetime('now') WHERE id = ?",
@@ -1315,7 +1321,6 @@ impl DatabaseData {
         )?;
 
         // remove tag
-        let parent_id = tag.parent_id;
         let removed = self.tags.remove(&tag_id);
         debug_assert!(removed.is_some());
 

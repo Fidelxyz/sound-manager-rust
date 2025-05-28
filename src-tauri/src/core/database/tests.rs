@@ -2,7 +2,7 @@ use super::{Database, DatabaseEmitter, Error, ROOT_FOLDER_ID, ROOT_TAG_ID};
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
-use std::fs::{create_dir, exists, File};
+use std::fs::{create_dir, exists, remove_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -46,7 +46,7 @@ impl DatabaseEmitter for TestEmitter {
 fn setup_files(dir: &Path) -> PathBuf {
     let base_path = dir.join("test_database");
     if base_path.exists() {
-        std::fs::remove_dir_all(&base_path).unwrap();
+        remove_dir_all(&base_path).unwrap();
     }
 
     std::fs::create_dir_all(&base_path).unwrap();
@@ -563,4 +563,152 @@ fn test_read_tags() {
     assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
     let child0_positions = tag_0.children.iter().map(|tag| tag.tag.position);
     assert!(child0_positions.eq([0, 1, 2, 3]));
+}
+
+#[test]
+fn test_rename_tag() {
+    const TAGS_NUM: usize = 3;
+    let mut tag_ids: [i32; TAGS_NUM] = [0; TAGS_NUM];
+
+    let (_base_path, database, _emitter) = setup_database(testdir!().as_path());
+
+    {
+        let mut data = database.data.write().unwrap();
+        let db = database.db.lock().unwrap();
+
+        for (i, tag_id) in tag_ids.iter_mut().enumerate() {
+            *tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
+        }
+
+        // Rename tag 1 to "renamed_tag"
+        data.rename_tag(tag_ids[1], "renamed_tag".to_string(), &db)
+            .unwrap();
+
+        // Tag 1 should now have the new name
+        let tags = data.get_tags();
+        let tag_1 = tags.iter().find(|tag| tag.tag.id == tag_ids[1]).unwrap();
+        assert_eq!(tag_1.tag.name, "renamed_tag");
+
+        // Other tags should remain unchanged
+        let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
+        assert_eq!(tag_0.tag.name, format!("tag0"));
+        let tag_2 = tags.iter().find(|tag| tag.tag.id == tag_ids[2]).unwrap();
+        assert_eq!(tag_2.tag.name, format!("tag2"));
+
+        // Rename to an existing tag name should fail
+        assert_err!(
+            data.rename_tag(tag_ids[0], "renamed_tag".to_string(), &db),
+            Err(Error::TagAlreadyExists(..))
+        );
+    }
+    drop(database);
+
+    // Reopen the database to verify the changes persist
+    let database = Database::open(_base_path, TestEmitter::new()).unwrap();
+    let mut data = database.data.write().unwrap();
+    let db = database.db.lock().unwrap();
+
+    // Tag 1 should now have the new name
+    let tags = data.get_tags();
+    let tag_1 = tags.iter().find(|tag| tag.tag.id == tag_ids[1]).unwrap();
+    assert_eq!(tag_1.tag.name, "renamed_tag");
+
+    // Other tags should remain unchanged
+    let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
+    assert_eq!(tag_0.tag.name, format!("tag0"));
+    let tag_2 = tags.iter().find(|tag| tag.tag.id == tag_ids[2]).unwrap();
+    assert_eq!(tag_2.tag.name, format!("tag2"));
+
+    // Rename to an existing tag name should fail
+    assert_err!(
+        data.rename_tag(tag_ids[0], "renamed_tag".to_string(), &db),
+        Err(Error::TagAlreadyExists(..))
+    );
+}
+
+#[test]
+fn test_delete_tag() {
+    const TAGS_NUM: usize = 6;
+    let mut tag_ids: [i32; TAGS_NUM] = [0; TAGS_NUM];
+
+    let (_base_path, database, _emitter) = setup_database(testdir!().as_path());
+
+    {
+        let mut data = database.data.write().unwrap();
+        let mut db = database.db.lock().unwrap();
+
+        for (i, tag_id) in tag_ids.iter_mut().enumerate() {
+            *tag_id = data.new_tag(format!("tag{i}"), &db).unwrap();
+        }
+
+        // Reparent tags
+        // 0 - [1 - [2], 3], 4 - [5]
+        data.reorder_tag(tag_ids[0], ROOT_TAG_ID, -1, &mut db)
+            .unwrap();
+        data.reorder_tag(tag_ids[1], tag_ids[0], -1, &mut db)
+            .unwrap();
+        data.reorder_tag(tag_ids[2], tag_ids[1], -1, &mut db)
+            .unwrap();
+        data.reorder_tag(tag_ids[3], tag_ids[0], -1, &mut db)
+            .unwrap();
+        data.reorder_tag(tag_ids[4], ROOT_TAG_ID, -1, &mut db)
+            .unwrap();
+        data.reorder_tag(tag_ids[5], tag_ids[4], -1, &mut db)
+            .unwrap();
+
+        // Delete tag 1
+        // 0 - [3], 4 - [5]
+        data.delete_tag(tag_ids[1], &db).unwrap();
+
+        // Tag 1 should be removed
+        let tags = data.get_tags();
+        assert_eq!(tags.len(), 2);
+
+        let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
+        assert_eq!(tag_0.tag.children, [tag_ids[3]].into());
+        assert_eq!(tag_0.children.len(), 1);
+
+        // Other tags should remain unchanged
+        let tag_3 = &tag_0.children[0];
+        assert_eq!(tag_3.tag.id, tag_ids[3]);
+        assert_eq!(tag_3.tag.children.len(), 0);
+        assert_eq!(tag_3.children.len(), 0);
+
+        let tag_4 = tags.iter().find(|tag| tag.tag.id == tag_ids[4]).unwrap();
+        assert_eq!(tag_4.tag.children, [tag_ids[5]].into());
+        assert_eq!(tag_4.children.len(), 1);
+
+        let tag_5 = &tag_4.children[0];
+        assert_eq!(tag_5.tag.id, tag_ids[5]);
+        assert_eq!(tag_5.tag.children.len(), 0);
+        assert_eq!(tag_5.children.len(), 0);
+    }
+    drop(database);
+
+    // Reopen the database to verify the changes persist
+    let database = Database::open(_base_path, TestEmitter::new()).unwrap();
+    let data = database.data.read().unwrap();
+
+    // Tag 1 should be removed
+    let tags = data.get_tags();
+    assert_eq!(tags.len(), 2);
+
+    let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
+    assert_eq!(tag_0.tag.children, [tag_ids[3]].into());
+    assert_eq!(tag_0.children.len(), 1);
+
+    // Other tags should remain unchanged
+    let tag_3 = &tag_0.children[0];
+    assert_eq!(tag_3.tag.id, tag_ids[3]);
+    assert_eq!(tag_3.tag.children.len(), 0);
+    assert_eq!(tag_3.children.len(), 0);
+
+    let tag_4 = tags.iter().find(|tag| tag.tag.id == tag_ids[4]).unwrap();
+    assert_eq!(tag_4.tag.children, [tag_ids[5]].into());
+    assert_eq!(tag_4.children.len(), 1);
+
+    let tag_5 = &tag_4.children[0];
+    assert_eq!(tag_5.tag.id, tag_ids[5]);
+    assert_eq!(tag_5.tag.children.len(), 0);
+    assert_eq!(tag_5.children.len(), 0);
 }
