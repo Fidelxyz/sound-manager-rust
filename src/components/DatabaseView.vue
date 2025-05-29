@@ -258,7 +258,7 @@ async function confirmImportFile(file: File, dstPath: string) {
       <div>导入至 {{ dropTargetFolder?.name }}</div>
     </div>
     <BlockUI :blocked="dropTargetFolder !== null" class="flex flex-col h-full">
-      <div class="flex-1 min-h-0">
+      <div class="flex-auto min-h-0">
         <Splitter class="h-full rounded-none!" :gutterSize="2">
           <SplitterPanel class="min-w-2xs" :size="15">
             <Splitter layout="vertical" class="h-full" :gutterSize="2">

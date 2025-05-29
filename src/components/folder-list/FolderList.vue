@@ -27,9 +27,9 @@ function selectFolder(folder: Folder) {
 </script>
 
 <template>
-  <div class="w-full h-full p-8 bg-surface-800">
+  <div class="flex flex-col w-full h-full px-8 pt-8 bg-surface-800">
     <div class="font-bold p-2">文件夹</div>
-    <ul>
+    <ul class="flex-auto overflow-auto">
       <FolderItem
         v-if="folder"
         :folderNode="folder"

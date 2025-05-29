@@ -305,7 +305,7 @@ function setTagColor(event: MenuItemCommandEvent) {
 </script>
 
 <template>
-  <div class="w-full h-full p-8 bg-surface-800">
+  <div class="flex flex-col w-full h-full px-8 pt-8 bg-surface-800">
     <div class="flex items-center">
       <div class="mr-auto font-bold p-2">标签</div>
       <Button
@@ -316,7 +316,7 @@ function setTagColor(event: MenuItemCommandEvent) {
       />
     </div>
 
-    <div class="h-full overflow-auto">
+    <div class="flex-auto overflow-auto">
       <ContextMenu ref="contextMenu" :model="contextMenuItems" />
       <Tree
         class="p-0!"

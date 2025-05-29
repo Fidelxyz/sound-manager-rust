@@ -130,49 +130,50 @@ function confirmDeleteEntry(entry: Entry) {
   <div class="flex flex-col h-full">
     <FilterPanel v-model="filter" :entries="entries" :tags="tags" />
 
-    <ContextMenu ref="contextMenu" :model="contextMenuItems" />
-    <DataTable
-      ref="dataTable"
-      :value="entries"
-      v-model:selection="activeEntry"
-      v-model:contextMenuSelection="contextMenuSelection"
-      v-model:filters="tableFilters"
-      dataKey="id"
-      dragPreviewKey="fileName"
-      :rowClass="(data: Entry) => [{ viewed: data?.viewed }]"
-      scrollable
-      scrollHeight="flex"
-      resizableColumns
-      removableSort
-      tableClass="table-fixed"
-      selectionMode="single"
-      :metaKeySelection="true"
-      :virtualScrollerOptions="{ itemSize: 32 }"
-      @rowSelect="selectEntry"
-      @rowContextmenu="onRowContextMenu"
-      :pt="{
-        tableContainer: {
-          style: 'overflow-x: hidden !important',
-        },
-      }"
-    >
-      <Column class="w-1/3" field="title" header="标题" sortable>
-        <template #body="slotProps">
-          <span>{{ slotProps.data.title || slotProps.data.fileName }}</span>
-        </template>
-      </Column>
-      <Column class="w-1/6" field="artist" header="艺术家" sortable></Column>
-      <Column class="w-1/3" field="album" header="专辑" sortable></Column>
-      <Column class="w-1/6" field="duration" header="时长" sortable>
-        <template #body="slotProps">
-          <span>{{
-            slotProps.data.duration
-              ? formatDuration(slotProps.data.duration)
-              : ""
-          }}</span>
-        </template>
-      </Column>
-    </DataTable>
+    <div class="flex-auto overflow-hidden">
+      <ContextMenu ref="contextMenu" :model="contextMenuItems" />
+      <DataTable
+        ref="dataTable"
+        :value="entries"
+        v-model:selection="activeEntry"
+        v-model:contextMenuSelection="contextMenuSelection"
+        v-model:filters="tableFilters"
+        dataKey="id"
+        dragPreviewKey="fileName"
+        :rowClass="(data: Entry) => [{ viewed: data?.viewed }]"
+        scrollable
+        scrollHeight="flex"
+        resizableColumns
+        removableSort
+        tableClass="table-fixed"
+        selectionMode="single"
+        :metaKeySelection="true"
+        @rowSelect="selectEntry"
+        @rowContextmenu="onRowContextMenu"
+        :pt="{
+          tableContainer: {
+            style: 'overflow-x: hidden !important',
+          },
+        }"
+      >
+        <Column class="w-1/3" field="title" header="标题" sortable>
+          <template #body="slotProps">
+            <span>{{ slotProps.data.title || slotProps.data.fileName }}</span>
+          </template>
+        </Column>
+        <Column class="w-1/6" field="artist" header="艺术家" sortable></Column>
+        <Column class="w-1/3" field="album" header="专辑" sortable></Column>
+        <Column class="w-1/6" field="duration" header="时长" sortable>
+          <template #body="slotProps">
+            <span>{{
+              slotProps.data.duration
+                ? formatDuration(slotProps.data.duration)
+                : ""
+            }}</span>
+          </template>
+        </Column>
+      </DataTable>
+    </div>
   </div>
 </template>
 
