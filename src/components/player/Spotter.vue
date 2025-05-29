@@ -168,6 +168,8 @@ async function selectOpenInApplication() {
 }
 
 onKeyStroke("s", () => {
+  if (document.activeElement?.tagName.toLowerCase() === "input") return;
+
   if (!entry) return;
   spot();
 });

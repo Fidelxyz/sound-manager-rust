@@ -133,6 +133,8 @@ listen<PlayerState>("player_state_updated", (event) => {
 });
 
 onKeyStroke(" ", (event) => {
+  if (document.activeElement?.tagName.toLowerCase() === "input") return;
+
   togglePlayPause();
   event.preventDefault();
 });

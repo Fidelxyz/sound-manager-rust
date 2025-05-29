@@ -40,6 +40,8 @@ function selectEntry(event: DataTableRowSelectEvent) {
 
 const dataTable = useTemplateRef("dataTable");
 onKeyStroke("ArrowUp", (event) => {
+  if (document.activeElement?.tagName.toLowerCase() === "input") return;
+
   if (activeEntry.value) {
     dataTable.value?.selectPrevRow(event);
   } else {
@@ -48,6 +50,8 @@ onKeyStroke("ArrowUp", (event) => {
   event.preventDefault();
 });
 onKeyStroke("ArrowDown", (event) => {
+  if (document.activeElement?.tagName.toLowerCase() === "input") return;
+
   if (activeEntry.value) {
     dataTable.value?.selectNextRow(event);
   } else {
