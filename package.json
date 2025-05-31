@@ -1,5 +1,5 @@
 {
-  "name": "sound-manager-rust",
+  "name": "sound-manager",
   "private": true,
   "version": "0.1.0",
   "type": "module",

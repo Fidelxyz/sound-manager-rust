@@ -3986,7 +3986,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sound-manager-rust"
+name = "sound-manager"
 version = "0.1.0"
 dependencies = [
  "cocoa",
