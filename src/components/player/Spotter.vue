@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { open } from "@tauri-apps/plugin-dialog";
 import { onKeyStroke } from "@vueuse/core";
-import { ref, watch, computed, onMounted } from "vue";
+import { ref, watch, computed } from "vue";
 
 import {
   Button,
@@ -34,16 +34,14 @@ type SpotSettings = {
   openInApplication: string | null;
 };
 
-const defaultSettings: SpotSettings = {
+const settings = useConfig<SpotSettings>("spot", {
   saveEnabled: false,
   savePath: null,
   openInApplicationEnabled: false,
   openInApplication: null,
-};
-const settings = ref<SpotSettings>({ ...defaultSettings });
-const tempSettings = ref<SpotSettings>({ ...defaultSettings });
+});
+const tempSettings = ref<SpotSettings>(settings.value);
 const settingsOpened = ref(false);
-const config = useConfig("spot", defaultSettings);
 
 const confirm = useConfirm();
 
@@ -56,10 +54,6 @@ const spotToName = computed(() => {
     return saveFolderName.value ?? "…";
   }
   return "…";
-});
-
-onMounted(async () => {
-  settings.value = await config.load();
 });
 
 watch(settings, async (newSettings) => {
@@ -79,8 +73,6 @@ watch(settings, async (newSettings) => {
   } else {
     saveFolderName.value = null;
   }
-
-  config.save(newSettings);
 });
 
 function spot() {

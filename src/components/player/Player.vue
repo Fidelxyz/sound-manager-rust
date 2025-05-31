@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { onUnmounted, ref, watch } from "vue";
 
 import { Button, Slider, ToggleSwitch } from "primevue";
 import Spotter from "./Spotter.vue";
@@ -19,22 +19,16 @@ const { entry } = defineProps<{
 const activeEntry = ref<Entry>();
 
 // options
-const defaultSettings = {
+const settings = useConfig("player", {
   autoPlay: true,
   skipSilence: true,
   volume: 50,
-};
-const settings = ref({ ...defaultSettings });
-const config = useConfig("player", defaultSettings);
+});
 
 // states
 const playing = ref(false);
 let playingPos = 0;
 let seeking = false;
-
-onMounted(async () => {
-  settings.value = await config.load();
-});
 
 onUnmounted(() => {
   pause();
@@ -61,14 +55,6 @@ watch(
     playingPos = 0;
     if (settings.value.autoPlay) play();
   },
-);
-
-watch(
-  settings,
-  async (newSettings) => {
-    await config.save(newSettings);
-  },
-  { deep: true },
 );
 
 async function play() {

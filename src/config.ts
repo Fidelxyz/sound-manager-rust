@@ -1,46 +1,61 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { ref, watch } from "vue";
 
 const store = new LazyStore("config.json");
 
-type NonUndefined<T> = T extends undefined ? never : T;
-
 abstract class Config<T> {
   protected readonly key: string;
-  protected readonly defaultValue: NonUndefined<T>;
+  protected readonly defaultValue: T;
+  /**
+   * The value of the config, which is a Vue ref to allow reactivity.
+   * Changes to this value will be automatically saved to the store.
+   */
+  public readonly value;
 
-  constructor(key: string, defaultValue: NonUndefined<T>) {
+  public constructor(key: string, defaultValue: T) {
     this.key = key;
     this.defaultValue = defaultValue;
+    this.value = ref(defaultValue); // No need to clone, since we will then recreate an object in load()
+
+    this.load().then(() => {
+      // watch for write changes
+      watch(
+        this.value,
+        (newValue) => {
+          // save changes to the store
+          this.save(newValue);
+        },
+        { deep: true },
+      );
+    });
   }
 
-  abstract load(): Promise<T>;
+  protected abstract load(): Promise<void>;
 
-  async save(value: NonUndefined<T>): Promise<void> {
+  private async save(value: T): Promise<void> {
     await store.set(this.key, value);
   }
 }
 
 class ObjectConfig<T extends Object> extends Config<T> {
-  override async load(): Promise<T> {
-    const value = await store.get<T>(this.key);
-    return { ...this.defaultValue, ...value };
+  protected override async load() {
+    const storeValue = await store.get<T>(this.key);
+    this.value.value = { ...this.defaultValue, ...storeValue };
   }
 }
 
 class ValueConfig<T> extends Config<T> {
-  override async load(): Promise<T> {
-    const value = await store.get<T>(this.key);
-    return value !== undefined ? value : this.defaultValue;
+  protected override async load() {
+    const storeValue = await store.get<T>(this.key);
+    this.value.value =
+      storeValue !== undefined ? storeValue : this.defaultValue;
   }
 }
 
-export function useConfig<T>(
-  key: string,
-  defaultValue: NonUndefined<T>,
-): Config<T> {
-  if (typeof defaultValue === "object") {
-    return new ObjectConfig(key, defaultValue as T & Object) as Config<T>;
-  } else {
-    return new ValueConfig(key, defaultValue);
-  }
+export function useConfig<T>(key: string, defaultValue: T) {
+  const config: Config<T> =
+    typeof defaultValue === "object"
+      ? new ObjectConfig(key, defaultValue as T & Object)
+      : new ValueConfig(key, defaultValue);
+  return config.value;
 }
