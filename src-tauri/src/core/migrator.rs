@@ -64,7 +64,7 @@ impl MigratorResult {
 }
 
 #[macro_export]
-macro_rules! warn {
+macro_rules! migrator_warn {
     ( $logger:ident, $($arg:tt)+ ) => {{
         log::warn!($($arg)+);
         $logger.warn(format!($($arg)+));
@@ -96,7 +96,7 @@ pub fn migrate_from(path: &Path, from: &MigrateFrom) -> Result<MigratorResult, E
     if let Err(err) = impl_result {
         result.error(err.to_string());
         remove_file(path.join(SQLITE_DB_PATH)).unwrap_or_else(|err| {
-            warn!(result, "Failed to remove database file: {:?}", err);
+            migrator_warn!(result, "Failed to remove database file: {:?}", err);
         });
     }
 

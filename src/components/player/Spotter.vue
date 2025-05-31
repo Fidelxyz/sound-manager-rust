@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { open } from "@tauri-apps/plugin-dialog";
 import { onKeyStroke } from "@vueuse/core";
-import { ref } from "vue";
+import { ref, watch, computed, onMounted } from "vue";
 
 import {
   Button,
@@ -15,6 +15,7 @@ import {
 
 import type { Entry, ErrorKind } from "@/api";
 import { api } from "@/api";
+import config from "@/config";
 import { error, info } from "@/utils/message";
 import { basename } from "@tauri-apps/api/path";
 
@@ -33,6 +34,12 @@ type SpotSettings = {
   openInApplication: string | null;
 };
 
+const defaultSettings: SpotSettings = {
+  saveEnabled: false,
+  savePath: null,
+  openInApplicationEnabled: false,
+  openInApplication: null,
+};
 const settings = ref<SpotSettings>({
   saveEnabled: false,
   savePath: null,
@@ -40,18 +47,65 @@ const settings = ref<SpotSettings>({
   openInApplication: null,
 });
 const tempSettings = ref<SpotSettings>(settings.value);
-const saveFolderName = ref<string | null>(null);
-const openInApplicationName = ref<string | null>(null);
 const settingsOpened = ref(false);
 const confirm = useConfirm();
+
+const saveFolderName = ref<string | null>(null);
+const openInApplicationName = ref<string | null>(null);
+const spotToName = computed(() => {
+  if (settings.value.openInApplicationEnabled) {
+    return openInApplicationName.value ?? "…";
+  } else if (settings.value.saveEnabled) {
+    return saveFolderName.value ?? "…";
+  }
+  return "…";
+});
+
+watch(settings, async (newSettings) => {
+  if (newSettings.openInApplication !== null) {
+    // extract the application name from the path
+    const match = newSettings.openInApplication.match(
+      /([^\\/]+?)(?:\.app|\.exe)?$/i,
+    );
+    openInApplicationName.value = match ? match[1] : null;
+  } else {
+    openInApplicationName.value = null;
+  }
+
+  if (newSettings.savePath !== null) {
+    // extract the folder name from the path
+    saveFolderName.value = await basename(newSettings.savePath);
+  } else {
+    saveFolderName.value = null;
+  }
+});
+
+onMounted(async () => {
+  await loadConfig();
+});
+
+// ========== Config BEGIN ==========
+
+async function loadConfig() {
+  const configSettings = await config.get<Partial<SpotSettings>>("spot");
+  console.debug("Loaded spot settings:", configSettings);
+  settings.value = { ...defaultSettings, ...configSettings };
+}
+
+async function storeConfig() {
+  config.set("spot", settings.value);
+  console.debug("Stored spot settings:", settings.value);
+}
+
+// ========== Config END ==========
 
 function spot() {
   // validate settings
   if (
-    (settings.value.saveEnabled === false ||
-      settings.value.savePath === null) &&
-    (settings.value.openInApplicationEnabled === false ||
-      settings.value.openInApplication === null)
+    (!settings.value.saveEnabled && !settings.value.openInApplicationEnabled) ||
+    (settings.value.saveEnabled && !settings.value.savePath) ||
+    (settings.value.openInApplicationEnabled &&
+      !settings.value.openInApplication)
   ) {
     openSpotSettings();
     return;
@@ -124,26 +178,9 @@ function openSpotSettings() {
   settingsOpened.value = true;
 }
 
-async function saveSettings() {
+function saveSettings() {
   settings.value = { ...tempSettings.value };
-
-  if (settings.value.openInApplication !== null) {
-    // extract the application name from the path
-    const match = settings.value.openInApplication.match(
-      /([^\\/]+?)(?:\.app|\.exe)?$/i,
-    );
-    openInApplicationName.value = match ? match[1] : null;
-  } else {
-    openInApplicationName.value = null;
-  }
-
-  if (settings.value.savePath !== null) {
-    // extract the folder name from the path
-    saveFolderName.value = await basename(settings.value.savePath);
-  } else {
-    saveFolderName.value = null;
-  }
-
+  storeConfig();
   settingsOpened.value = false;
 }
 
@@ -178,7 +215,7 @@ onKeyStroke("s", () => {
 <template>
   <ButtonGroup>
     <Button
-      :label="`发送至 ${openInApplicationName ?? saveFolderName ?? '…'}`"
+      :label="`发送至 ${spotToName}`"
       icon="pi pi-file-export"
       @click="spot"
       :disabled="!entry"

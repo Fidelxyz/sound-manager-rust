@@ -5,10 +5,12 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default",
-    "dialog:default",
+    "dialog:allow-open",
     "fs:allow-exists",
     "fs:allow-create",
-    "fs:allow-write"
+    "fs:allow-write",
+    "store:allow-load",
+    "store:allow-get",
+    "store:allow-set"
   ]
 }

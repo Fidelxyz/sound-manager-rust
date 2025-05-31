@@ -7,15 +7,15 @@ use core::player::{PlayerEmitter, PlayerState};
 use core::{Database, EntryId, Filter, Player, TagId, WaveformGenerator};
 use response::Error;
 
-use log::{debug, trace};
 use std::option::Option;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
+use log::{debug, trace, warn};
 use tauri::ipc::{Channel, InvokeResponseBody, Response};
 use tauri::{
-    AppHandle, Emitter, Manager, State, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
+    App, AppHandle, Emitter, Manager, State, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
@@ -477,51 +477,60 @@ async fn spot(
     Ok(())
 }
 
+fn setup_state(app: &App) {
+    let emitter = AppEmitter::new(app.handle().clone());
+    app.manage(AppData {
+        database: None.into(),
+        player: Player::new(emitter.clone()).into(),
+        waveform_generator: WaveformGenerator::new().into(),
+        emitter,
+    });
+}
+
+fn setup_window(app: &App) {
+    let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+        .title("Sound Manager")
+        .inner_size(1600.0, 1000.0)
+        .theme(Some(Theme::Dark))
+        .disable_drag_drop_handler();
+
+    // set transparent title bar only when building for macOS
+    #[cfg(target_os = "macos")]
+    let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
+
+    let window = win_builder.build().unwrap();
+
+    // set background color only when building for macOS
+    #[cfg(target_os = "macos")]
+    {
+        use cocoa::appkit::{NSColor, NSWindow};
+        use cocoa::base::{id, nil};
+
+        let ns_window = window.ns_window().unwrap() as id;
+        unsafe {
+            let bg_color = NSColor::colorWithRed_green_blue_alpha_(nil, 0.12, 0.12, 0.12, 1.0);
+            ns_window.setBackgroundColor_(bg_color);
+        }
+    }
+
+    // persistant window state
+    app.handle()
+        .save_window_state(StateFlags::all())
+        .unwrap_or_else(|e| warn!("Failed to save window state: {e:?}"));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                .title("Sound Manager")
-                .inner_size(1600.0, 1000.0)
-                .theme(Some(Theme::Dark))
-                .disable_drag_drop_handler();
-
-            // set transparent title bar only when building for macOS
-            #[cfg(target_os = "macos")]
-            let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
-
-            let window = win_builder.build().unwrap();
-
-            // set background color only when building for macOS
-            #[cfg(target_os = "macos")]
-            {
-                use cocoa::appkit::{NSColor, NSWindow};
-                use cocoa::base::{id, nil};
-
-                let ns_window = window.ns_window().unwrap() as id;
-                unsafe {
-                    let bg_color =
-                        NSColor::colorWithRed_green_blue_alpha_(nil, 0.12, 0.12, 0.12, 1.0);
-                    ns_window.setBackgroundColor_(bg_color);
-                }
-            }
-
-            app.handle().save_window_state(StateFlags::all())?;
-
-            let emitter = AppEmitter::new(app.handle().clone());
-            app.manage(AppData {
-                database: None.into(),
-                player: Player::new(emitter.clone()).into(),
-                waveform_generator: WaveformGenerator::new().into(),
-                emitter,
-            });
+            setup_window(app);
+            setup_state(app);
             Ok(())
         })
-        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_database,
             create_database,
