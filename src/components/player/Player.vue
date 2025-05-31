@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
-import { onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import { Button, Slider, ToggleSwitch } from "primevue";
 import Spotter from "./Spotter.vue";
@@ -8,6 +8,7 @@ import Waveform from "./Waveform.vue";
 
 import type { Entry, PlayerState } from "@/api";
 import { api } from "@/api";
+import { useConfig } from "@/config";
 import { error } from "@/utils/message";
 import { onKeyStroke } from "@vueuse/core";
 
@@ -18,14 +19,26 @@ const { entry } = defineProps<{
 const activeEntry = ref<Entry>();
 
 // options
-const autoPlay = ref(true);
-const skipSilence = ref(true);
-const volume = ref(50);
+const defaultSettings = {
+  autoPlay: true,
+  skipSilence: true,
+  volume: 50,
+};
+const settings = ref({ ...defaultSettings });
+const config = useConfig("player", defaultSettings);
 
 // states
 const playing = ref(false);
 let playingPos = 0;
 let seeking = false;
+
+onMounted(async () => {
+  settings.value = await config.load();
+});
+
+onUnmounted(() => {
+  pause();
+});
 
 watch(
   () => entry,
@@ -46,19 +59,23 @@ watch(
     // bacause setPlayerSource should be called before generating waveform
     activeEntry.value = { ...entry };
     playingPos = 0;
-    if (autoPlay.value) play();
+    if (settings.value.autoPlay) play();
   },
 );
 
-onUnmounted(() => {
-  pause();
-});
+watch(
+  settings,
+  async (newSettings) => {
+    await config.save(newSettings);
+  },
+  { deep: true },
+);
 
 async function play() {
   console.debug("play");
-  setVolume(volume.value);
+  setVolume(settings.value.volume);
   await api
-    .play(playingPos, skipSilence.value)
+    .play(playingPos, settings.value.skipSilence)
     .then(() => {
       playing.value = true;
     })
@@ -147,9 +164,9 @@ onKeyStroke(" ", (event) => {
     <div class="flex">
       <div class="flex flex-1 align-center justify-start items-center gap-4">
         <label class="leading-none" for="auto-play">自动播放</label>
-        <ToggleSwitch v-model="autoPlay" inputId="auto-play" />
+        <ToggleSwitch v-model="settings.autoPlay" inputId="auto-play" />
         <label class="leading-none" for="skip-silence">跳过无声</label>
-        <ToggleSwitch v-model="skipSilence" inputId="skip-silence" />
+        <ToggleSwitch v-model="settings.skipSilence" inputId="skip-silence" />
       </div>
 
       <div class="flex flex-1 align-center justify-center">
@@ -165,7 +182,7 @@ onKeyStroke(" ", (event) => {
       <div class="flex flex-1 align-center justify-end gap-8">
         <div class="flex items-center gap-4">
           <i class="pi pi-volume-up" />
-          <Slider class="w-48" v-model="volume" @change="setVolume" />
+          <Slider class="w-48" v-model="settings.volume" @change="setVolume" />
         </div>
 
         <Spotter :entry="entry" @pause="pause" />

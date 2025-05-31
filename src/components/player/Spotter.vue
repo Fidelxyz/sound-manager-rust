@@ -15,7 +15,7 @@ import {
 
 import type { Entry, ErrorKind } from "@/api";
 import { api } from "@/api";
-import config from "@/config";
+import { useConfig } from "@/config";
 import { error, info } from "@/utils/message";
 import { basename } from "@tauri-apps/api/path";
 
@@ -40,14 +40,11 @@ const defaultSettings: SpotSettings = {
   openInApplicationEnabled: false,
   openInApplication: null,
 };
-const settings = ref<SpotSettings>({
-  saveEnabled: false,
-  savePath: null,
-  openInApplicationEnabled: false,
-  openInApplication: null,
-});
-const tempSettings = ref<SpotSettings>(settings.value);
+const settings = ref<SpotSettings>({ ...defaultSettings });
+const tempSettings = ref<SpotSettings>({ ...defaultSettings });
 const settingsOpened = ref(false);
+const config = useConfig("spot", defaultSettings);
+
 const confirm = useConfirm();
 
 const saveFolderName = ref<string | null>(null);
@@ -59,6 +56,10 @@ const spotToName = computed(() => {
     return saveFolderName.value ?? "…";
   }
   return "…";
+});
+
+onMounted(async () => {
+  settings.value = await config.load();
 });
 
 watch(settings, async (newSettings) => {
@@ -78,26 +79,9 @@ watch(settings, async (newSettings) => {
   } else {
     saveFolderName.value = null;
   }
+
+  config.save(newSettings);
 });
-
-onMounted(async () => {
-  await loadConfig();
-});
-
-// ========== Config BEGIN ==========
-
-async function loadConfig() {
-  const configSettings = await config.get<Partial<SpotSettings>>("spot");
-  console.debug("Loaded spot settings:", configSettings);
-  settings.value = { ...defaultSettings, ...configSettings };
-}
-
-async function storeConfig() {
-  config.set("spot", settings.value);
-  console.debug("Stored spot settings:", settings.value);
-}
-
-// ========== Config END ==========
 
 function spot() {
   // validate settings
@@ -180,7 +164,6 @@ function openSpotSettings() {
 
 function saveSettings() {
   settings.value = { ...tempSettings.value };
-  storeConfig();
   settingsOpened.value = false;
 }
 
