@@ -102,7 +102,7 @@ function deleteEntry(entry: Ref<Entry | undefined>) {
 
   confirm.require({
     header: "确认删除",
-    message: `确定要删除 "${entry_.fileName}" 吗？`,
+    message: `确定要删除 “${entry_.fileName}” 吗？`,
     icon: "pi pi-trash",
     rejectProps: { label: "取消", severity: "secondary", outlined: true },
     acceptProps: { label: "删除", severity: "danger" },

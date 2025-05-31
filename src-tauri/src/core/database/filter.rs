@@ -1,4 +1,4 @@
-use super::{DatabaseData, EntryId, TagId};
+use super::{DatabaseData, EntryId, FolderId, TagId};
 
 use std::collections::HashSet;
 use std::iter::Iterator;
@@ -8,7 +8,7 @@ use std::iter::Iterator;
 pub struct Filter {
     pub search: String,
     pub tag_ids: Vec<TagId>,
-    pub folder_id: Option<i32>,
+    pub folder_id: Option<FolderId>,
 }
 
 impl DatabaseData {
@@ -17,10 +17,24 @@ impl DatabaseData {
             return None;
         }
 
+        let folder_ids = filter
+            .folder_id
+            .map(|folder_id| self.get_folder_descendants(folder_id));
+
         self.get_entries()
             .values()
-            .filter_map(|entry| {
+            .filter(|entry| {
                 let mut keep = true;
+
+                if let Some(folder_ids) = &folder_ids {
+                    keep &= folder_ids.contains(&entry.folder_id);
+                }
+
+                if !filter.tag_ids.is_empty() {
+                    keep &= entry
+                        .tag_ids
+                        .is_superset(&filter.tag_ids.iter().copied().collect::<HashSet<_>>());
+                }
 
                 if !filter.search.is_empty() {
                     let search = filter.search.to_lowercase();
@@ -48,23 +62,21 @@ impl DatabaseData {
                     keep &= match_search;
                 }
 
-                if let Some(folder_id) = filter.folder_id {
-                    keep &= entry.folder_id == folder_id;
-                }
-
-                if !filter.tag_ids.is_empty() {
-                    keep &= entry
-                        .tag_ids
-                        .is_superset(&filter.tag_ids.iter().copied().collect::<HashSet<_>>());
-                }
-
-                if keep {
-                    Some(entry.id)
-                } else {
-                    None
-                }
+                keep
             })
+            .map(|entry| entry.id)
             .collect::<Vec<_>>()
             .into()
+    }
+
+    /// Return all descendants of a folder, including itself.
+    fn get_folder_descendants(&self, folder_id: FolderId) -> HashSet<FolderId> {
+        let mut descendants = HashSet::from([folder_id]);
+
+        for sub_folder in self.folders.get(&folder_id).unwrap().sub_folders.values() {
+            descendants.extend(self.get_folder_descendants(*sub_folder));
+        }
+
+        descendants
     }
 }

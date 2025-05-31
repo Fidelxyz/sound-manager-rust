@@ -264,7 +264,7 @@ function deleteTag() {
 
   confirm.require({
     header: "删除标签",
-    message: `确定要删除标签 ${tag.name} 吗？`,
+    message: `确定要删除标签 “${tag.name}” 吗？`,
     icon: "pi pi-trash",
     rejectProps: { label: "取消", severity: "secondary", outlined: true },
     acceptProps: { label: "删除", severity: "danger" },
