@@ -76,6 +76,7 @@
           :selectionKeys="selectionKeys"
           @checkbox-change="onCheckboxChange"
           :loadingMode="loadingMode"
+          :lastInGroup="index === valueToRender.length - 1"
           :unstyled="unstyled"
           :pt="pt"
         />

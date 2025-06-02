@@ -131,7 +131,7 @@
       v-bind="ptm('nodeChildren')"
     >
       <TreeNode
-        v-for="childNode of node.children"
+        v-for="(childNode, index) of node.children"
         :key="childNode.key"
         :node="childNode"
         :templates="templates"
@@ -144,6 +144,7 @@
         :selectionMode="selectionMode"
         :selectionKeys="selectionKeys"
         @checkbox-change="propagateUp"
+        :lastInGroup="index === node.children.length - 1"
         :unstyled="unstyled"
         :pt="pt"
       />
@@ -211,6 +212,9 @@ export default defineComponent({
     index: null,
     root: {
       type: Object,
+    },
+    lastInGroup: {
+      type: Boolean,
     },
   },
   data() {
@@ -638,7 +642,15 @@ export default defineComponent({
             element,
             currentLevel: 1,
             indentPerLevel: 4,
-            mode: "standard",
+            mode: (() => {
+              if (this.hasChildren && this.expanded) {
+                return "expanded";
+              } else if (this.lastInGroup) {
+                return "last-in-group";
+              } else {
+                return "standard";
+              }
+            })(),
           });
         },
         canDrop: ({ source }) =>
