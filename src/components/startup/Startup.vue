@@ -157,7 +157,7 @@ function closeMigrationMessage() {
 </script>
 
 <template>
-  <div class="flex items-center justify-center h-full gap-2">
+  <div class="flex h-full items-center justify-center gap-2">
     <Button
       label="打开数据库"
       icon="pi pi-folder-open"

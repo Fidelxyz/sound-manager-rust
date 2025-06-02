@@ -148,14 +148,14 @@ onKeyStroke(" ", (event) => {
     <Waveform :entry="activeEntry" @seek="seek" />
 
     <div class="flex">
-      <div class="flex flex-1 align-center justify-start items-center gap-4">
+      <div class="align-center flex flex-1 items-center justify-start gap-4">
         <label class="leading-none" for="auto-play">自动播放</label>
         <ToggleSwitch v-model="settings.autoPlay" inputId="auto-play" />
         <label class="leading-none" for="skip-silence">跳过无声</label>
         <ToggleSwitch v-model="settings.skipSilence" inputId="skip-silence" />
       </div>
 
-      <div class="flex flex-1 align-center justify-center">
+      <div class="align-center flex flex-1 justify-center">
         <Button
           :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
           rounded
@@ -165,7 +165,7 @@ onKeyStroke(" ", (event) => {
         />
       </div>
 
-      <div class="flex flex-1 align-center justify-end gap-8">
+      <div class="align-center flex flex-1 justify-end gap-8">
         <div class="flex items-center gap-4">
           <i class="pi pi-volume-up" />
           <Slider class="w-48" v-model="settings.volume" @change="setVolume" />

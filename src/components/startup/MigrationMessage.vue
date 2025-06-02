@@ -57,7 +57,7 @@ const prompt = computed(() => {
       </Listbox>
     </div>
 
-    <div class="flex justify-end mt-6">
+    <div class="mt-6 flex justify-end">
       <Button label="确认" icon="pi pi-check" @click="emit('close')" />
     </div>
   </Dialog>

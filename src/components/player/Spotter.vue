@@ -206,7 +206,7 @@ onKeyStroke("s", () => {
       class="w-2xl"
       modal
     >
-      <table class="whitespace-nowrap border-separate border-spacing-y-2">
+      <table class="border-separate border-spacing-y-2 whitespace-nowrap">
         <tbody class="*:h-[2.4rem] **:align-middle">
           <tr>
             <td class="setting-label">
@@ -273,7 +273,7 @@ onKeyStroke("s", () => {
         </tbody>
       </table>
 
-      <div class="flex justify-end gap-2 mt-6">
+      <div class="mt-6 flex justify-end gap-2">
         <Button
           type="button"
           label="取消"

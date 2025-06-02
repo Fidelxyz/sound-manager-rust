@@ -132,7 +132,7 @@ function confirmDeleteEntry(entry: Entry) {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex h-full flex-col">
     <FilterPanel v-model="filter" :entries="entries" :tags="tags" />
 
     <div class="flex-auto overflow-hidden">

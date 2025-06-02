@@ -329,9 +329,9 @@ function setTagColor(event: MenuItemCommandEvent) {
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-full px-8 pt-8 bg-surface-800">
+  <div class="bg-surface-800 flex h-full w-full flex-col px-8 pt-8">
     <div class="flex items-center">
-      <div class="mr-auto font-bold p-2">标签</div>
+      <div class="mr-auto p-2 font-bold">标签</div>
       <Button
         icon="pi pi-plus"
         class="p-button-rounded p-button-text"

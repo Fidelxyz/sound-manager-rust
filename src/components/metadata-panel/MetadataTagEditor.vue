@@ -97,16 +97,16 @@ function onTagSelectorHide() {
 
 <template>
   <div class="p-inputtext flex flex-wrap items-stretch gap-2 py-2!">
-    <span v-if="tags.length === 0" class="text-surface-400 content-center h-8">
+    <span v-if="tags.length === 0" class="text-surface-400 h-8 content-center">
       添加标签
     </span>
 
     <div
       v-for="tag in tags"
-      class="flex items-center rounded-md h-8 px-2.5 gap-0.5"
+      class="flex h-8 items-center gap-0.5 rounded-md px-2.5"
       :class="`tag-bg-${tag.color}`"
     >
-      <span class="font-normal ml-0.5">{{ tag.name }}</span>
+      <span class="ml-0.5 font-normal">{{ tag.name }}</span>
       <Button
         icon="pi pi-times"
         variant="text"

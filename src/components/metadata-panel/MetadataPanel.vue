@@ -24,7 +24,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="w-full h-full px-6 py-8 bg-surface-800">
+  <div class="bg-surface-800 h-full w-full px-6 py-8">
     <div v-if="entry" class="*:my-2">
       <InputText class="w-full" v-model="entry.fileName" />
 
@@ -65,7 +65,7 @@ defineExpose({
     </div>
     <div
       v-else
-      class="flex items-center justify-center h-full text-surface-100"
+      class="text-surface-100 flex h-full items-center justify-center"
     >
       未选择文件
     </div>

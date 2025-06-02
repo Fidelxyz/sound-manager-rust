@@ -74,7 +74,7 @@ function unregisterDragAndDrop() {
   <li ref="nodeContent">
     <Button
       variant="text"
-      class="w-full justify-start! z-1999"
+      class="z-1999 w-full justify-start!"
       :class="{ active: folder === selectedFolder }"
       :style="{
         paddingLeft: `calc(var(--p-button-padding-x) + ${depth * 1}rem)`,

@@ -259,7 +259,7 @@ function onDatabaseLoaded(path: string) {
 </script>
 
 <template>
-  <main class="container max-w-none h-screen">
+  <main class="container h-screen max-w-none">
     <Toast />
     <ConfirmDialog />
 

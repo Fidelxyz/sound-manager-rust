@@ -259,12 +259,12 @@ async function confirmImportFile(file: File, dstPath: string) {
   <div class="h-full">
     <div
       v-if="dropTargetFolder"
-      class="flex items-center justify-center absolute size-full z-1999"
+      class="absolute z-1999 flex size-full items-center justify-center"
     >
       <div>导入至 {{ dropTargetFolder?.name }}</div>
     </div>
-    <BlockUI :blocked="dropTargetFolder !== null" class="flex flex-col h-full">
-      <div class="flex-auto min-h-0">
+    <BlockUI :blocked="dropTargetFolder !== null" class="flex h-full flex-col">
+      <div class="min-h-0 flex-auto">
         <Splitter class="h-full rounded-none!" :gutterSize="2">
           <SplitterPanel class="min-w-2xs" :size="15">
             <Splitter layout="vertical" class="h-full" :gutterSize="2">
