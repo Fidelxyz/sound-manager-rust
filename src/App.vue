@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Menu, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import { Menu, MenuItem, Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 
 import { ConfirmDialog, Toast } from "primevue";
 
@@ -12,67 +12,165 @@ import type { ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
 
+// refs
+const databaseView = useTemplateRef("databaseView");
+
 // state
 const databaseOpen = ref(false);
 const databasePath = ref<string>();
 
-onMounted(async () => {
-  const titleSubmenu = await Submenu.new({
-    text: "Sound Manager",
-    items: [
-      await PredefinedMenuItem.new({
-        text: "服务",
-        item: "Services",
-      }),
-      await PredefinedMenuItem.new({
-        item: "Separator",
-      }),
-      await PredefinedMenuItem.new({
-        text: "隐藏 Sound Manager",
-        item: "Hide",
-      }),
-      await PredefinedMenuItem.new({
-        text: "隐藏其他",
-        item: "HideOthers",
-      }),
-      await PredefinedMenuItem.new({
-        text: "全部显示",
-        item: "ShowAll",
-      }),
-      await PredefinedMenuItem.new({
-        item: "Separator",
-      }),
-      await PredefinedMenuItem.new({
-        text: "退出 Sound Manager",
-        item: "Quit",
-      }),
-    ],
-  });
-  const fileSubmenu = await Submenu.new({
-    text: "文件",
-    items: [
-      {
-        id: "open",
-        text: "打开数据库",
-        action: openDatabase,
-      },
-      {
-        id: "create",
-        text: "创建数据库",
-        action: createDatabase,
-      },
-      {
-        id: "refresh",
-        text: "刷新",
-        action: refresh,
-      },
-    ],
-  });
+/// ========== Menu BEGIN ==========
+
+async function setupMenu() {
   const menu = await Menu.new({
-    items: [titleSubmenu, fileSubmenu],
+    items: [
+      {
+        // ===== Application menu =====
+        id: "app",
+        text: "Sound Manager",
+        items: [
+          {
+            text: "服务",
+            item: "Services",
+          },
+          { item: "Separator" },
+          {
+            text: "隐藏 Sound Manager",
+            item: "Hide",
+          },
+          {
+            text: "隐藏其他",
+            item: "HideOthers",
+          },
+          {
+            text: "全部显示",
+            item: "ShowAll",
+          },
+          { item: "Separator" },
+          {
+            text: "退出 Sound Manager",
+            item: "Quit",
+          },
+        ],
+      },
+      {
+        // ===== File menu =====
+        id: "file",
+        text: "文件",
+        items: [
+          {
+            text: "打开数据库",
+            action: openDatabase,
+            accelerator: "Cmd+O",
+          },
+          {
+            text: "创建数据库",
+            action: createDatabase,
+            accelerator: "Cmd+N",
+          },
+          { item: "Separator" },
+          {
+            id: "refresh",
+            text: "刷新",
+            action: refresh,
+            accelerator: "Cmd+R",
+            enabled: databaseOpen.value,
+          },
+          {
+            id: "spot",
+            text: "发送至…",
+            accelerator: "S",
+            enabled: false,
+          },
+        ],
+      },
+      {
+        // ===== Edit menu =====
+        id: "edit",
+        text: "编辑",
+        items: [
+          {
+            text: "撤销",
+            item: "Undo",
+          },
+          {
+            text: "重做",
+            item: "Redo",
+          },
+          { item: "Separator" },
+          {
+            text: "剪切",
+            item: "Cut",
+          },
+          {
+            text: "复制",
+            item: "Copy",
+          },
+          {
+            text: "粘贴",
+            item: "Paste",
+          },
+          {
+            text: "全选",
+            item: "SelectAll",
+          },
+        ],
+      },
+      {
+        // ===== Select menu =====
+        id: "select",
+        text: "选择",
+        items: [
+          {
+            id: "previous",
+            text: "上一个",
+            action: () => databaseView.value?.audioList?.selectPrev(),
+            accelerator: "ArrowUp",
+            enabled: databaseOpen.value,
+          },
+          {
+            id: "next",
+            text: "下一个",
+            action: () => databaseView.value?.audioList?.selectNext(),
+            accelerator: "ArrowDown",
+            enabled: databaseOpen.value,
+          },
+        ],
+      },
+    ],
   });
   menu.setAsAppMenu();
+  return menu;
+}
+let menuItems: Record<"refresh" | "previous" | "next" | "spot", MenuItem>;
+setupMenu().then(async (menu) => {
+  const fileSubmenu = (await menu.get("file")) as Submenu;
+  const selectSubmenu = (await menu.get("select")) as Submenu;
+  menuItems = {
+    refresh: (await fileSubmenu.get("refresh")) as MenuItem,
+    previous: (await selectSubmenu.get("previous")) as MenuItem,
+    next: (await selectSubmenu.get("next")) as MenuItem,
+    spot: (await fileSubmenu.get("spot")) as MenuItem,
+  };
+});
 
+watch(databaseOpen, async (databaseOpen) => {
+  if (!menuItems) return;
+  menuItems.refresh.setEnabled(databaseOpen);
+  menuItems.previous.setEnabled(databaseOpen);
+  menuItems.next.setEnabled(databaseOpen);
+});
+watch(
+  () => !!databaseView.value?.activeEntry,
+  (hasActiveEntry) => {
+    if (!menuItems) return;
+    menuItems.spot.setEnabled(hasActiveEntry);
+  },
+);
+
+// ========== Menu END ==========
+
+onMounted(() => {
   // make sure database unloaded after refresh
   closeDatabase();
 });
@@ -165,7 +263,11 @@ function onDatabaseLoaded(path: string) {
     <Toast />
     <ConfirmDialog />
 
-    <DatabaseView v-if="databaseOpen" :basePath="databasePath" />
+    <DatabaseView
+      v-if="databaseOpen"
+      ref="databaseView"
+      :basePath="databasePath"
+    />
     <Startup v-else @database-loaded="onDatabaseLoaded" />
   </main>
 </template>

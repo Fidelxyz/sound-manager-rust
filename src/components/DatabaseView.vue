@@ -36,6 +36,7 @@ const { basePath } = defineProps<{
 
 const el = useCurrentElement();
 const metadataPanel = useTemplateRef("metadataPanel");
+const audioList = useTemplateRef("audioList");
 const confirm = useConfirm();
 
 // data
@@ -49,6 +50,11 @@ const filter = ref<Filter>({
   search: "",
   tagIds: [],
   folderId: null,
+});
+
+defineExpose({
+  audioList,
+  activeEntry,
 });
 
 onMounted(() => {
@@ -278,6 +284,7 @@ async function confirmImportFile(file: File, dstPath: string) {
 
           <SplitterPanel :size="65">
             <AudioList
+              ref="audioList"
               :entries="entries"
               :tags="tags"
               v-model:filter="filter"

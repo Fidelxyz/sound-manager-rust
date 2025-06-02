@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { onKeyStroke } from "@vueuse/core";
 import { type Ref, ref, useTemplateRef, watch } from "vue";
 
 import { FilterMatchMode } from "@primevue/core/api";
@@ -32,33 +31,34 @@ const { entries, tags } = defineProps<{
 const filter = defineModel<Filter>("filter", { required: true });
 const activeEntry = defineModel<Entry>("activeEntry");
 
-function selectEntry(event: DataTableRowSelectEvent) {
+defineExpose({
+  selectPrev,
+  selectNext,
+});
+
+const dataTable = useTemplateRef("dataTable");
+
+function selectPrev() {
+  if (activeEntry.value) {
+    dataTable.value?.selectPrevRow();
+  } else {
+    dataTable.value?.selectRow(undefined, 0);
+  }
+}
+
+function selectNext() {
+  if (activeEntry.value) {
+    dataTable.value?.selectNextRow();
+  } else {
+    dataTable.value?.selectRow(undefined, 0);
+  }
+}
+
+function onEntrySelected(event: DataTableRowSelectEvent) {
   const entry = event.data as Entry;
   console.debug("Select entry", entry);
   entry.viewed = true;
 }
-
-const dataTable = useTemplateRef("dataTable");
-onKeyStroke("ArrowUp", (event) => {
-  if (document.activeElement?.tagName.toLowerCase() === "input") return;
-
-  if (activeEntry.value) {
-    dataTable.value?.selectPrevRow(event);
-  } else {
-    dataTable.value?.selectRow(event, 0);
-  }
-  event.preventDefault();
-});
-onKeyStroke("ArrowDown", (event) => {
-  if (document.activeElement?.tagName.toLowerCase() === "input") return;
-
-  if (activeEntry.value) {
-    dataTable.value?.selectNextRow(event);
-  } else {
-    dataTable.value?.selectRow(event, 0);
-  }
-  event.preventDefault();
-});
 
 // ========== Filter BEGIN ==========
 
@@ -152,7 +152,7 @@ function confirmDeleteEntry(entry: Entry) {
         tableClass="table-fixed"
         selectionMode="single"
         :metaKeySelection="true"
-        @rowSelect="selectEntry"
+        @rowSelect="onEntrySelected"
         @rowContextmenu="onRowContextMenu"
         :pt="{
           tableContainer: {
