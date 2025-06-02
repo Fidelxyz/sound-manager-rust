@@ -31,7 +31,7 @@ import { error, info } from "@/utils/message";
 import { isAudioFile } from "@/utils/utils";
 
 const { basePath } = defineProps<{
-  basePath?: string;
+  basePath: string | null;
 }>();
 
 const el = useCurrentElement();
@@ -45,7 +45,7 @@ const folder = ref<FolderNode | null>(null);
 const tags = ref<TreeNode[]>([]);
 
 // state
-const activeEntry = ref<Entry>();
+const activeEntry = ref<Entry | null>(null);
 const filter = ref<Filter>({
   search: "",
   tagIds: [],
@@ -204,7 +204,7 @@ watch(folder, () => {
 });
 
 async function importFile(file: File, dstFolder: Folder) {
-  if (basePath === undefined) return;
+  if (basePath === null) return;
   if (!(await isAudioFile(file.name))) {
     error(
       "不支持的文件类型",

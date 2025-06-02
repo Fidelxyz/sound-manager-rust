@@ -45,7 +45,7 @@ const selectedTags = computed({
 });
 
 const editingNewTag = ref(false);
-const editingTag = ref<Tag>();
+const editingTag = ref<Tag | null>(null);
 const editingTagName = ref("");
 
 function newTag() {
@@ -82,12 +82,12 @@ function completeEditingNewTag() {
 }
 
 function completeRenameTag() {
-  if (editingTag.value === undefined) return;
+  if (!editingTag.value) return;
   if (
     editingTagName.value === "" ||
     editingTagName.value === editingTag.value.name
   ) {
-    editingTag.value = undefined;
+    editingTag.value = null;
     return;
   }
 
@@ -105,7 +105,7 @@ function completeRenameTag() {
       }
     })
     .finally(() => {
-      editingTag.value = undefined;
+      editingTag.value = null;
     });
 }
 

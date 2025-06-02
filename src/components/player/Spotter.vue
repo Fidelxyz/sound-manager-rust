@@ -20,7 +20,7 @@ import { error, info } from "@/utils/message";
 import { basename } from "@tauri-apps/api/path";
 
 const { entry } = defineProps<{
-  entry?: Entry;
+  entry: Entry | null;
 }>();
 
 const emit = defineEmits<{
@@ -105,7 +105,6 @@ function spot() {
     settings.value.openInApplication !== null
       ? settings.value.openInApplication
       : undefined;
-
   confirmSpot(entry, savePath, openInApplication);
 }
 

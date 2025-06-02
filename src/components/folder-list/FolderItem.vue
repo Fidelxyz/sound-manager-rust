@@ -16,7 +16,7 @@ const {
   depth = 0,
 } = defineProps<{
   folderNode: FolderNode;
-  selectedFolder?: Folder;
+  selectedFolder?: Folder | null;
   depth?: number;
 }>();
 

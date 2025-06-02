@@ -17,7 +17,7 @@ const databaseView = useTemplateRef("databaseView");
 
 // state
 const databaseOpen = ref(false);
-const databasePath = ref<string>();
+const databasePath = ref<string | null>(null);
 
 /// ========== Menu BEGIN ==========
 

@@ -11,12 +11,12 @@ const { folder } = defineProps<{
   folder: FolderNode | null;
 }>();
 
-const selectedFolder = ref<Folder>();
+const selectedFolder = ref<Folder | null>(null);
 
 function selectFolder(folder: Folder) {
   if (selectedFolder.value === folder) {
     console.info("Unselected folder:", folder.name);
-    selectedFolder.value = undefined;
+    selectedFolder.value = null;
     filter.value.folderId = null;
     return;
   }

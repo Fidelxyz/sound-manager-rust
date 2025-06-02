@@ -13,10 +13,10 @@ import { error } from "@/utils/message";
 import { onKeyStroke } from "@vueuse/core";
 
 const { entry } = defineProps<{
-  entry?: Entry;
+  entry: Entry | null;
 }>();
 
-const activeEntry = ref<Entry>();
+const activeEntry = ref<Entry | null>(null);
 
 // options
 const settings = useConfig("player", {
@@ -80,7 +80,7 @@ function pause() {
 function stop() {
   console.debug("stop");
   api.stop();
-  activeEntry.value = undefined;
+  activeEntry.value = null;
   playing.value = false;
   playingPos = 0;
 }

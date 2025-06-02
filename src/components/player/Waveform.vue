@@ -13,7 +13,7 @@ import { api } from "@/api";
 import { PlaybackTimer } from "@/utils/playbackTimer";
 
 const { entry } = defineProps<{
-  entry?: Entry;
+  entry: Entry | null;
 }>();
 const emit = defineEmits<{
   seek: [pos: number];

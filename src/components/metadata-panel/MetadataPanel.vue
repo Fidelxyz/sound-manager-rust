@@ -9,7 +9,7 @@ import { formatDuration } from "@/utils/utils";
 import MetadataTagEditor from "./MetadataTagEditor.vue";
 
 const { entry, allTags } = defineProps<{
-  entry?: Entry;
+  entry?: Entry | null;
   allTags: TreeNode[];
 }>();
 const metadataTagEditor = useTemplateRef("metadataTagEditor");

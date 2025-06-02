@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Ref, ref, useTemplateRef, watch } from "vue";
+import { ref, useTemplateRef, watch } from "vue";
 
 import { FilterMatchMode } from "@primevue/core/api";
 import {
@@ -29,7 +29,7 @@ const { entries, tags } = defineProps<{
 }>();
 
 const filter = defineModel<Filter>("filter", { required: true });
-const activeEntry = defineModel<Entry>("activeEntry");
+const activeEntry = defineModel<Entry | null>("activeEntry", { default: null });
 
 defineExpose({
   selectPrev,
@@ -84,35 +84,36 @@ watch(
 // ========== Context Menu BEGIN ==========
 
 const contextMenu = useTemplateRef("contextMenu");
-const contextMenuSelection = ref<Entry>();
+const contextMenuSelection = ref<Entry | null>(null);
 const contextMenuItems: MenuItem[] = [
   {
     label: "删除",
     icon: "pi pi-trash",
-    command: () => deleteEntry(contextMenuSelection),
+    command: () => {
+      if (contextMenuSelection.value) {
+        deleteEntry(contextMenuSelection.value);
+      }
+    },
   },
 ];
 function onRowContextMenu(event: DataTableRowContextMenuEvent) {
   contextMenu.value?.show(event.originalEvent);
 }
 
-function deleteEntry(entry: Ref<Entry | undefined>) {
-  const entry_ = entry.value;
-  if (!entry_) return;
-
+function deleteEntry(entry: Entry) {
   confirm.require({
     header: "确认删除",
-    message: `确定要删除 “${entry_.fileName}” 吗？`,
+    message: `确定要删除 “${entry.fileName}” 吗？`,
     icon: "pi pi-trash",
     rejectProps: { label: "取消", severity: "secondary", outlined: true },
     acceptProps: { label: "删除", severity: "danger" },
-    accept: () => confirmDeleteEntry(entry_),
+    accept: () => confirmDeleteEntry(entry),
   });
 }
 
 function confirmDeleteEntry(entry: Entry) {
   if (activeEntry.value?.id === entry.id) {
-    activeEntry.value = undefined;
+    activeEntry.value = null;
   }
 
   api
