@@ -38,11 +38,35 @@ const selectedTags = computed({
   },
   set: (selectionKeys: TreeSelectionKeys) => {
     console.debug("Set selected tag", selectionKeys);
-    filter.value.tagIds = Object.keys(selectionKeys).map((id) =>
-      Number.parseInt(id),
-    );
+    const selectedTags = Object.keys(selectionKeys).map(Number.parseInt);
+
+    const filterTags = [];
+    for (const selectedTag of selectedTags) {
+      filterTags.push(...getTagDescendants(tags, selectedTag));
+    }
+    filter.value.tagIds = filterTags;
   },
 });
+
+function getTagDescendants(
+  tagTrees: TreeNode[],
+  matchTagId?: number,
+): number[] {
+  const descendants: number[] = [];
+  for (const tagTree of tagTrees) {
+    if (matchTagId === undefined || tagTree.data.id === matchTagId) {
+      descendants.push(tagTree.data.id);
+      if (tagTree.children) {
+        descendants.push(...getTagDescendants(tagTree.children));
+      }
+    } else {
+      if (tagTree.children) {
+        descendants.push(...getTagDescendants(tagTree.children, matchTagId));
+      }
+    }
+  }
+  return descendants;
+}
 
 const editingNewTag = ref(false);
 const editingTag = ref<Tag | null>(null);
