@@ -145,6 +145,7 @@ function confirmDeleteEntry(entry: Entry) {
         v-model:filters="tableFilters"
         dataKey="id"
         dragPreviewKey="fileName"
+        draggableType="entry"
         :rowClass="(data: Entry) => [{ viewed: data?.viewed }]"
         scrollable
         scrollHeight="flex"

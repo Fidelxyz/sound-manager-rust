@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Menu, MenuItem, Submenu } from "@tauri-apps/api/menu";
+import { Menu, type MenuItem, type Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
 import { onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 

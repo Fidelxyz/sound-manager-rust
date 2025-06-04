@@ -76,6 +76,8 @@
           :selectionKeys="selectionKeys"
           @checkbox-change="onCheckboxChange"
           :loadingMode="loadingMode"
+          :draggableType="draggableType"
+          :canDrop="canDrop"
           :lastInGroup="index === valueToRender.length - 1"
           :unstyled="unstyled"
           :pt="pt"
@@ -110,6 +112,16 @@ export default defineComponent({
   name: "Tree",
   extends: BaseTree,
   inheritAttrs: false,
+  props: {
+    draggableType: {
+      type: String,
+      default: null,
+    },
+    canDrop: {
+      type: Function,
+      default: () => false,
+    },
+  },
   emits: [
     "node-expand",
     "node-collapse",
@@ -119,7 +131,6 @@ export default defineComponent({
     "node-unselect",
     "filter",
     "node-reorder",
-    "add-tag-to-entry",
   ],
   data() {
     return {
@@ -309,10 +320,13 @@ export default defineComponent({
     },
     // ========== Drag and Drop BEGIN ==========
     registerDraggingMonitor() {
+      if (!this.draggableType) return;
+
       const tree = this;
       this.unregisterDraggingMonitor = combine(
+        // Monitor reordering
         monitorForElements({
-          canMonitor: ({ source }) => source.data.type === "tag",
+          canMonitor: ({ source }) => source.data.type === tree.draggableType,
           onDrop({ location, source }) {
             if (location.current.dropTargets.length === 0) return;
 
@@ -356,20 +370,6 @@ export default defineComponent({
               targetParentKey: inserted.parentKey,
               targetLocation: inserted.location,
             });
-          },
-        }),
-        monitorForElements({
-          canMonitor: ({ source }) => source.data.type === "entry",
-          onDrop({ location, source }) {
-            if (location.current.dropTargets.length === 0) return;
-
-            const sourceData = source.data;
-            const targetData = location.current.dropTargets[0].data;
-
-            const entryKey = sourceData.key;
-            const tagKey = targetData.key;
-
-            tree.$emit("add-tag-to-entry", { tagKey, entryKey });
           },
         }),
       );

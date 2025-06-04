@@ -144,6 +144,8 @@
         :selectionMode="selectionMode"
         :selectionKeys="selectionKeys"
         @checkbox-change="propagateUp"
+        :draggableType="draggableType"
+        :canDrop="canDrop"
         :lastInGroup="index === node.children.length - 1"
         :unstyled="unstyled"
         :pt="pt"
@@ -169,6 +171,7 @@ import {
   attachInstruction,
   extractInstruction,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import {
   draggable,
   dropTargetForElements,
@@ -213,6 +216,14 @@ export default defineComponent({
     root: {
       type: Object,
     },
+    draggableType: {
+      type: String,
+      default: null,
+    },
+    canDrop: {
+      type: Function,
+      default: () => false,
+    },
     lastInGroup: {
       type: Boolean,
     },
@@ -223,17 +234,15 @@ export default defineComponent({
       toggleClicked: false,
       dragging: false,
       dropTargetInstruction: null,
-      unregisterDraggable: () => {},
-      unregisterDropTarget: () => {},
+      unregisterDragAndDrop: () => {},
     };
   },
   mounted() {
     this.setAllNodesTabIndexes();
-    this.registerDraggable();
+    this.registerDragAndDrop();
   },
   beforeUnmount() {
-    this.unregisterDraggable();
-    this.unregisterDropTarget();
+    this.unregisterDragAndDrop();
   },
   methods: {
     toggle() {
@@ -606,76 +615,81 @@ export default defineComponent({
       );
     },
     // ========== Drag and Drop BEGIN ==========
-    registerDraggable() {
+    registerDragAndDrop() {
+      if (!this.draggableType) return;
+
       // Draggable
-      this.unregisterDraggable = draggable({
-        element: this.$refs.nodeContent,
-        getInitialData: () => ({
-          type: "tag",
-          key: this.node.key,
-          node: this.node,
-          expanded: this.expanded,
-        }),
-        onDragStart: ({ source }) => {
-          this.dragging = true;
-          if (source.data.expanded) {
-            this.toggle();
-          }
-        },
-        onDrop: ({ source }) => {
-          this.dragging = false;
-          if (source.data.expanded) {
-            this.toggle();
-          }
-        },
-      });
-      // Drop Target
-      this.unregisterDropTarget = dropTargetForElements({
-        element: this.$refs.nodeContent,
-        getData: ({ input, element }) => {
-          const data = {
-            type: "tag",
+      this.unregisterDragAndDrop = combine(
+        draggable({
+          element: this.$refs.nodeContent,
+          getInitialData: () => ({
+            type: this.draggableType,
             key: this.node.key,
-          };
-          return attachInstruction(data, {
-            input,
-            element,
-            currentLevel: 1,
-            indentPerLevel: 4,
-            mode: (() => {
-              if (this.hasChildren && this.expanded) {
-                return "expanded";
-              } else if (this.lastInGroup) {
-                return "last-in-group";
-              } else {
-                return "standard";
-              }
-            })(),
-          });
-        },
-        canDrop: ({ source }) =>
-          (source.data.type === "tag" && source.data.key !== this.node.key) ||
-          source.data.type === "entry",
-        onDrag: ({ self, source }) => {
-          let instruction = null;
-          if (source.data.type === "tag") {
-            instruction = extractInstruction(self.data);
-          } else if (source.data.type === "entry") {
-            instruction = {
-              type: "make-child",
+            node: this.node,
+            expanded: this.expanded,
+          }),
+          onDragStart: ({ source }) => {
+            this.dragging = true;
+            if (source.data.expanded) {
+              this.toggle();
+            }
+          },
+          onDrop: ({ source }) => {
+            this.dragging = false;
+            if (source.data.expanded) {
+              this.toggle();
+            }
+          },
+        }),
+        // Drop Target
+        (this.unregisterDropTarget = dropTargetForElements({
+          element: this.$refs.nodeContent,
+          getData: ({ input, element }) => {
+            const data = {
+              type: this.draggableType,
+              key: this.node.key,
+            };
+            return attachInstruction(data, {
+              input,
+              element,
               currentLevel: 1,
               indentPerLevel: 4,
-            };
-          }
-          this.dropTargetInstruction = instruction;
-        },
-        onDragLeave: () => {
-          this.dropTargetInstruction = null;
-        },
-        onDrop: () => {
-          this.dropTargetInstruction = null;
-        },
-      });
+              mode: (() => {
+                if (this.hasChildren && this.expanded) {
+                  return "expanded";
+                } else if (this.lastInGroup) {
+                  return "last-in-group";
+                } else {
+                  return "standard";
+                }
+              })(),
+            });
+          },
+          canDrop: (args) =>
+            (args.source.data.type === this.draggableType &&
+              args.source.data.key !== this.node.key) ||
+            this.canDrop(args),
+          onDrag: ({ self, source }) => {
+            let instruction = null;
+            if (source.data.type === this.draggableType) {
+              instruction = extractInstruction(self.data);
+            } else {
+              instruction = {
+                type: "make-child",
+                currentLevel: 1,
+                indentPerLevel: 4,
+              };
+            }
+            this.dropTargetInstruction = instruction;
+          },
+          onDragLeave: () => {
+            this.dropTargetInstruction = null;
+          },
+          onDrop: () => {
+            this.dropTargetInstruction = null;
+          },
+        })),
+      );
     },
 
     // ========== Drag and Drop END ==========

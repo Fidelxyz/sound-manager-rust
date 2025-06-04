@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from "vue";
+import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 
 import {
   Button,
@@ -12,6 +12,13 @@ import {
 } from "primevue";
 import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
 import type { TreeNode } from "primevue/treenode";
+
+import type {
+  CleanupFn,
+  DropTargetGetFeedbackArgs,
+  ElementDragType,
+} from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
 import type { ErrorKind, Filter, Tag } from "@/api";
 import { api } from "@/api";
@@ -27,6 +34,17 @@ const filter = defineModel<Filter>("filter", { required: true });
 const { tags } = defineProps<{
   tags: TreeNode[];
 }>();
+
+onMounted(() => {
+  registerDraggingMonitor();
+});
+
+onUnmounted(() => {
+  if (unregisterDraggingMonitor) {
+    unregisterDraggingMonitor();
+    unregisterDraggingMonitor = null;
+  }
+});
 
 const selectedTags = computed({
   get: () => {
@@ -162,16 +180,7 @@ function reorderTags({
     });
 }
 
-function addTagToEntry({
-  tagKey,
-  entryKey,
-}: {
-  tagKey: string;
-  entryKey: number;
-}) {
-  const tagId = Number.parseInt(tagKey);
-  const entryId = entryKey;
-
+function addTagToEntry(tagId: number, entryId: number) {
   api
     .addTagForEntry(entryId, tagId)
     .then(() => {
@@ -184,6 +193,29 @@ function addTagToEntry({
       error("添加标签到条目错误", e.message);
     });
 }
+
+// ========== Drag and Drop BEGIN ==========
+
+let unregisterDraggingMonitor: CleanupFn | null = null;
+
+function registerDraggingMonitor() {
+  unregisterDraggingMonitor = monitorForElements({
+    canMonitor: ({ source }) => source.data.type === "entry",
+    onDrop({ location, source }) {
+      if (location.current.dropTargets.length === 0) return;
+
+      const sourceData = source.data;
+      const targetData = location.current.dropTargets[0].data;
+
+      const entryId = sourceData.key as number;
+      const tagId = Number.parseInt(targetData.key as string);
+
+      addTagToEntry(tagId, entryId);
+    },
+  });
+}
+
+// ========== Drag and Drop END ==========
 
 // ========== Context Menu BEGIN ==========
 
@@ -347,8 +379,12 @@ function setTagColor(event: MenuItemCommandEvent) {
         :value="tags"
         v-model:selectionKeys="selectedTags"
         selectionMode="single"
+        draggableType="tag"
+        :canDrop="
+          ({ source }: DropTargetGetFeedbackArgs<ElementDragType>) =>
+            source.data.type === 'entry'
+        "
         @node-reorder="reorderTags"
-        @add-tag-to-entry="addTagToEntry"
         :pt="{
           root: {
             class: 'bg-transparent!',

@@ -187,6 +187,7 @@
               :first="d_first"
               :dataKey="dataKey"
               :dragPreviewKey="dragPreviewKey"
+              :draggableType="draggableType"
               :selection="selection"
               :selectionKeys="d_selectionKeys"
               :selectionMode="selectionMode"
@@ -245,6 +246,7 @@
               :first="d_first"
               :dataKey="dataKey"
               :dragPreviewKey="dragPreviewKey"
+              :draggableType="draggableType"
               :selection="selection"
               :selectionKeys="d_selectionKeys"
               :selectionMode="selectionMode"
@@ -492,6 +494,10 @@ export default defineComponent({
   extends: BaseDataTable,
   inheritAttrs: false,
   props: {
+    draggableType: {
+      type: String,
+      default: null,
+    },
     dragPreviewKey: {
       type: [String, Function],
       default: null,

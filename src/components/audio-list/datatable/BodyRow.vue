@@ -274,6 +274,10 @@ export default defineComponent({
       type: [String, Function],
       default: null,
     },
+    draggableType: {
+      type: String,
+      default: null,
+    },
     expandedRowIcon: {
       type: String,
       default: null,
@@ -599,10 +603,12 @@ export default defineComponent({
     },
     // ========== Drag and Drop BEGIN ==========
     registerDraggable() {
+      if (!this.draggableType) return;
+
       const draggableArgs = {
         element: this.$refs.row,
         getInitialData: () => ({
-          type: "entry",
+          type: this.draggableType,
           key: this.dataKey
             ? resolveFieldData(this.rowData, this.dataKey)
             : this.rowIndex,

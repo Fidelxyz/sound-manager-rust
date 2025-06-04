@@ -22,6 +22,7 @@
           :first="first"
           :dataKey="dataKey"
           :dragPreviewKey="dragPreviewKey"
+          :draggableType="draggableType"
           :selection="selection"
           :selectionKeys="selectionKeys"
           :selectionMode="selectionMode"
@@ -167,6 +168,10 @@ export default defineComponent({
     },
     dragPreviewKey: {
       type: [String, Function],
+      default: null,
+    },
+    draggableType: {
+      type: String,
       default: null,
     },
     expandedRowIcon: {
