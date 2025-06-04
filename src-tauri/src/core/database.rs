@@ -1210,11 +1210,11 @@ impl DatabaseData {
     ) -> Result<()> {
         debug_assert!(new_path.is_relative(), "Path must be relative");
 
+        info!("Moving entry {entry_id} to {new_path:?}");
+
         // check existance of entry and folders
         let entry = self.get_entry(entry_id).unwrap();
-
-        let old_folder_path = entry.path.parent().unwrap();
-        let old_folder_id = self.get_folder_by_path(old_folder_path).unwrap().id;
+        let old_folder_id = entry.folder_id;
 
         let new_folder_path = new_path.parent().unwrap();
         let new_folder_id = self.get_folder_by_path(new_folder_path).unwrap().id;
@@ -1224,6 +1224,7 @@ impl DatabaseData {
         let new_file_name = new_path.file_name().unwrap().to_owned();
         let new_file_name_str = new_file_name.to_string_lossy();
         let tx = db.transaction()?;
+        // override the old entry in the new position
         tx.execute(
             "DELETE FROM entries WHERE folder_id = ? AND file_name = ?",
             (new_folder_id, &new_file_name_str),
@@ -1248,6 +1249,54 @@ impl DatabaseData {
         entry.folder_id = new_folder_id;
         entry.path = new_path;
         entry.file_name = new_file_name;
+
+        info!("Moved entry {:?} to {:?}", entry_id, entry.path);
+
+        Ok(())
+    }
+
+    fn move_entry_to_folder(
+        &mut self,
+        entry_id: EntryId,
+        folder_id: FolderId,
+        db: &mut Connection,
+    ) -> Result<()> {
+        info!("Moving entry {entry_id} to folder {folder_id}");
+
+        // check existance of entry and folders
+        let entry = self.get_entry(entry_id).unwrap();
+        let file_name = entry.file_name.clone();
+        let old_folder_id = entry.folder_id;
+
+        let new_folder_path = &self.folders.get(&folder_id).unwrap().path;
+        let new_path = new_folder_path.join(&file_name);
+
+        // update entry in database
+        let tx = db.transaction()?;
+        // override the old entry in the new position
+        tx.execute(
+            "DELETE FROM entries WHERE folder_id = ? AND file_name = ?",
+            (folder_id, file_name.to_string_lossy()),
+        )?;
+        tx.execute(
+            "UPDATE entries SET folder_id = ? WHERE id = ?",
+            (folder_id, entry_id),
+        )?;
+        tx.commit()?;
+
+        // remove entry from the old folder
+        let old_folder = self.folders.get_mut(&old_folder_id).unwrap();
+        let removed = old_folder.entries.remove(&file_name);
+        debug_assert!(removed.is_some());
+
+        // add entry to the new folder
+        let new_folder = self.folders.get_mut(&folder_id).unwrap();
+        new_folder.entries.insert(file_name, entry_id);
+
+        // update entry path and file name
+        let entry = self.entries.get_mut(&entry_id).unwrap();
+        entry.folder_id = folder_id;
+        entry.path = new_path;
 
         info!("Moved entry {:?} to {:?}", entry_id, entry.path);
 

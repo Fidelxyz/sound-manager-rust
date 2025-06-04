@@ -1,6 +1,7 @@
-use super::{Database, DatabaseData, DatabaseEmitter, EntryId, Error, Result};
+use super::{Database, DatabaseData, DatabaseEmitter, EntryId, Error, FolderId, Result};
 
-use std::fs::copy;
+use log::warn;
+use std::fs::{copy, rename};
 use std::path::Path;
 use trash::delete;
 
@@ -17,6 +18,36 @@ where
         delete(path)?;
 
         data.remove_entry(entry_id, &self.db.lock().unwrap())?;
+        self.emitter.on_files_updated();
+
+        Ok(())
+    }
+
+    pub fn move_file(&self, entry_id: EntryId, folder_id: FolderId, force: bool) -> Result<()> {
+        let mut data = self.data.write().unwrap();
+
+        let entry = data.get_entry(entry_id).unwrap();
+        if entry.folder_id == folder_id {
+            warn!("File {:?} is already in the target folder.", entry.path);
+            return Ok(());
+        }
+
+        let new_path = data.to_absolute_path(
+            &data
+                .folders
+                .get(&folder_id)
+                .unwrap()
+                .path
+                .join(&entry.file_name),
+        );
+        if !force && new_path.exists() {
+            return Err(Error::FileAlreadyExists(new_path.to_string_lossy().into()));
+        }
+
+        let old_path = data.to_absolute_path(&entry.path);
+        rename(old_path, new_path)?;
+
+        data.move_entry_to_folder(entry_id, folder_id, &mut self.db.lock().unwrap())?;
         self.emitter.on_files_updated();
 
         Ok(())

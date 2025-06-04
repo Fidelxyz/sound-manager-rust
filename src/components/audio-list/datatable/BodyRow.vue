@@ -612,6 +612,7 @@ export default defineComponent({
           key: this.dataKey
             ? resolveFieldData(this.rowData, this.dataKey)
             : this.rowIndex,
+          data: this.rowData,
         }),
       };
       if (this.dragPreviewKey) {

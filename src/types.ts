@@ -1,4 +1,4 @@
-import type { Folder } from "@/api";
+import type { Entry, Folder } from "@/api";
 
 export type DropTargetData =
   | {
@@ -8,6 +8,7 @@ export type DropTargetData =
   | {
       type: "entry";
       key: number;
+      data: Entry;
     }
   | {
       type: "folder";

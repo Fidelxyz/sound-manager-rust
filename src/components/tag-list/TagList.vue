@@ -22,6 +22,7 @@ import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/ad
 
 import type { ErrorKind, Filter, Tag } from "@/api";
 import { api } from "@/api";
+import type { DropTargetData } from "@/types";
 import { error } from "@/utils/message";
 import Tree from "./tree";
 
@@ -204,11 +205,13 @@ function registerDraggingMonitor() {
     onDrop({ location, source }) {
       if (location.current.dropTargets.length === 0) return;
 
-      const sourceData = source.data;
-      const targetData = location.current.dropTargets[0].data;
+      const sourceData = source.data as DropTargetData;
+      const targetData = location.current.dropTargets[0].data as DropTargetData;
 
-      const entryId = sourceData.key as number;
-      const tagId = Number.parseInt(targetData.key as string);
+      if (sourceData.type !== "entry" || targetData.type !== "tag") return;
+
+      const entryId = sourceData.key;
+      const tagId = Number.parseInt(targetData.key);
 
       addTagToEntry(tagId, entryId);
     },

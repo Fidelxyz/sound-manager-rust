@@ -176,7 +176,8 @@ import {
   draggable,
   dropTargetForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import DropIndicator from "./dropindicator/DropIndicator.vue";
+
+import DropIndicator from "@/components/dropindicator/DropIndicator.vue";
 
 export default defineComponent({
   name: "TreeNode",

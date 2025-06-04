@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { onKeyStroke } from "@vueuse/core";
-import { ref, watch, computed } from "vue";
+import { computed, ref, watch } from "vue";
 
 import {
   Button,
@@ -17,7 +18,6 @@ import type { Entry, ErrorKind } from "@/api";
 import { api } from "@/api";
 import { useConfig } from "@/config";
 import { error, info } from "@/utils/message";
-import { basename } from "@tauri-apps/api/path";
 
 const { entry } = defineProps<{
   entry: Entry | null;

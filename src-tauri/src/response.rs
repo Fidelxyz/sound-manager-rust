@@ -72,9 +72,10 @@ impl Serialize for Entry {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Entry", 8)?;
+        let mut state = serializer.serialize_struct("Entry", 7)?;
         state.serialize_field("id", &self.id)?;
         state.serialize_field("fileName", &self.file_name.to_string_lossy())?;
+        state.serialize_field("folderId", &self.folder_id)?;
         if let Some(metadata) = &self.metadata {
             if let Some(title) = &metadata.title {
                 state.serialize_field("title", title)?;

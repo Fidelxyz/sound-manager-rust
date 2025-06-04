@@ -14,6 +14,7 @@ export type ErrorKind = {
 export type Entry = {
   id: number;
   fileName: string;
+  folderId: number;
   title?: string;
   artist?: string;
   album?: string;
@@ -181,6 +182,10 @@ export const api = {
 
   deleteFile(entryId: number): Promise<void> {
     return invoke<void>("delete_file", { entryId });
+  },
+
+  moveFile(entryId: number, folderId: number, force = false): Promise<void> {
+    return invoke<void>("move_file", { entryId, folderId, force });
   },
 
   spot(

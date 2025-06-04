@@ -19,6 +19,8 @@ use tauri::{
 };
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
+use crate::core::database::FolderId;
+
 struct AppData {
     database: RwLock<Option<Arc<Database<AppEmitter>>>>,
     player: RwLock<Player>,
@@ -454,6 +456,22 @@ async fn delete_file(entry_id: EntryId, state: State<'_, AppData>) -> Result<(),
 }
 
 #[tauri::command]
+async fn move_file(
+    entry_id: EntryId,
+    folder_id: FolderId,
+    force: bool,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
+    trace!("move_file: entry_id = {entry_id:?}, folder_id = {folder_id:?}, force = {force:?}");
+    get_database!(database, state.database);
+
+    database.move_file(entry_id, folder_id, force)?;
+
+    trace!("move_file done");
+    Ok(())
+}
+
+#[tauri::command]
 async fn spot(
     entry_id: EntryId,
     save_path: Option<&str>,
@@ -558,6 +576,7 @@ pub fn run() {
             set_volume,
             get_playing_pos,
             delete_file,
+            move_file,
             spot
         ])
         .run(tauri::generate_context!())
