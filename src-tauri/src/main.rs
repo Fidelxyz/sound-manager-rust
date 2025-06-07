@@ -5,13 +5,13 @@ use simplelog::{ColorChoice, TerminalMode};
 
 fn main() {
     #[cfg(debug_assertions)]
-    let log_level = log::LevelFilter::Debug;
+    let log_level = log::LevelFilter::Trace;
 
     #[cfg(not(debug_assertions))]
     let log_level = log::LevelFilter::Info;
 
     let log_config = simplelog::ConfigBuilder::new()
-        .add_filter_allow_str("sound_manager_rust_lib")
+        // .add_filter_allow_str("sound_manager_rust_lib")
         .build();
 
     simplelog::TermLogger::init(

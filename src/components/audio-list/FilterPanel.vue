@@ -95,7 +95,6 @@ function refresh() {
           :options="tags"
           selectionMode="checkbox"
           emptyMessage="无可用标签"
-          showClear
         />
         <label for="filter-tags">标签</label>
       </FloatLabel>

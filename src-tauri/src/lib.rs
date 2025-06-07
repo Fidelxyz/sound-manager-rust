@@ -375,13 +375,13 @@ async fn set_player_source(entry_id: EntryId, state: State<'_, AppData>) -> Resu
     };
     debug!("path: {path:?}");
 
-    state.player.write().unwrap().set_source(&path)?;
+    state.player.write().unwrap().set_source(path.clone())?;
 
     state
         .waveform_generator
         .lock()
         .unwrap()
-        .set_source(path.clone().into());
+        .set_source(path.into());
 
     trace!("set_player_source done");
     Ok(())

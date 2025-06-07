@@ -1,8 +1,8 @@
 use core::time::Duration;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{sleep, spawn};
 
 use log::{debug, warn};
@@ -32,6 +32,8 @@ pub enum Error {
     Symphonia(#[from] symphonia::core::errors::Error),
     #[error("player not started")]
     PlayerNotStarted,
+    #[error("source not set")]
+    SourceNotSet,
     #[error("tracks not found for source: {0}")]
     TracksNotFound(String),
     #[error("codec parameters missing")]
@@ -40,8 +42,13 @@ pub enum Error {
 
 pub struct Player {
     sink: Arc<RwLock<Option<Sink>>>,
-    first_transit_pos: Duration,
+    source: Mutex<Option<SourceInfo>>,
     emitter: Arc<dyn PlayerEmitter + Send + Sync>,
+}
+
+struct SourceInfo {
+    path: PathBuf,
+    first_transit_pos: Duration,
 }
 
 pub trait PlayerEmitter {
@@ -62,7 +69,7 @@ impl Player {
     {
         Self {
             sink: Arc::new(None.into()),
-            first_transit_pos: Duration::default(),
+            source: None.into(),
             emitter: Arc::new(emitter),
         }
     }
@@ -113,24 +120,24 @@ impl Player {
         self.sink.write().unwrap().take();
     }
 
-    pub fn set_source(&mut self, path: &Path) -> Result<(), Error> {
+    pub fn set_source(&mut self, path: PathBuf) -> Result<(), Error> {
         let sink = self.sink.read().unwrap();
         let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
 
-        sink.clear();
-
-        let file = BufReader::new(File::open(path)?);
-        let source = Decoder::new(file)?;
-        sink.append(source);
-
         debug!("set source: {path:?}");
+
+        sink.clear();
         self.emitter.on_player_state_updated(PlayerState {
             playing: !sink.is_paused(),
             pos: 0.,
         });
 
-        self.first_transit_pos = get_first_transit_pos(path)?;
-        debug!("first transit pos: {:?}", self.first_transit_pos);
+        let first_transit_pos = get_first_transit_pos(&path)?;
+        debug!("first transit pos: {first_transit_pos:?}");
+        self.source.lock().unwrap().replace(SourceInfo {
+            path,
+            first_transit_pos,
+        });
 
         Ok(())
     }
@@ -140,12 +147,24 @@ impl Player {
             let sink = self.sink.read().unwrap();
             let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
 
+            let source_info = self.source.lock().unwrap();
+            let source_info = source_info.as_ref().ok_or(Error::SourceNotSet)?;
+
+            if sink.empty() {
+                let source_path = source_info.path.as_path();
+                let file = BufReader::new(File::open(source_path)?);
+                let source = Decoder::new(file)?;
+                sink.append(source);
+            }
+
             debug!("continue playing");
 
             let mut seek_pos = seek.unwrap_or_default();
             if skip_silence {
-                seek_pos = seek_pos.max(self.first_transit_pos); // seek to the furthest allowed position
+                seek_pos = seek_pos.max(source_info.first_transit_pos); // seek to the furthest allowed position
             }
+
+            dbg!(sink.empty());
 
             sink.try_seek(seek_pos)?;
             sink.play();
