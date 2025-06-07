@@ -4,11 +4,8 @@ import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import { Button } from "primevue";
 
 import type { Instruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
-import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { dropTargetForExternal } from "@atlaskit/pragmatic-drag-and-drop/external/adapter";
-import { containsFiles } from "@atlaskit/pragmatic-drag-and-drop/external/file";
 
 import DropIndicator from "@/components/dropindicator/DropIndicator.vue";
 
@@ -54,46 +51,33 @@ let unregisterDropTarget: CleanupFn | null = null;
 
 function registerDragAndDrop() {
   if (nodeContent.value) {
-    unregisterDropTarget = combine(
-      dropTargetForElements({
-        element: nodeContent.value,
-        getData: () => {
-          const data: DropTargetData = {
-            type: "folder",
-            folder: folder.value,
-          };
-          return data;
-        },
-        canDrop: ({ source }) =>
-          (source.data.type === "folder" &&
-            source.data.folder !== folder.value) ||
-          source.data.type === "entry",
-        onDragEnter: () => {
-          dropTargetInstruction.value = {
-            type: "make-child",
-            currentLevel: depth,
-            indentPerLevel: INDENT_PX,
-          };
-        },
-        onDragLeave: () => {
-          dropTargetInstruction.value = null;
-        },
-        onDrop: () => {
-          dropTargetInstruction.value = null;
-        },
-      }),
-      dropTargetForExternal({
-        element: nodeContent.value,
-        canDrop: containsFiles,
-        getData: () => {
-          const data: DropTargetData = {
-            type: "folder",
-            folder: folder.value,
-          };
-          return data;
-        },
-      }),
-    );
+    unregisterDropTarget = dropTargetForElements({
+      element: nodeContent.value,
+      getData: () => {
+        const data: DropTargetData = {
+          type: "folder",
+          folder: folder.value,
+        };
+        return data;
+      },
+      canDrop: ({ source }) =>
+        (source.data.type === "folder" &&
+          source.data.folder !== folder.value) ||
+        source.data.type === "entry",
+      onDragEnter: () => {
+        dropTargetInstruction.value = {
+          type: "make-child",
+          currentLevel: depth,
+          indentPerLevel: INDENT_PX,
+        };
+      },
+      onDragLeave: () => {
+        dropTargetInstruction.value = null;
+      },
+      onDrop: () => {
+        dropTargetInstruction.value = null;
+      },
+    });
   }
 }
 
@@ -111,7 +95,7 @@ function unregisterDragAndDrop() {
   <li ref="nodeContent" class="relative">
     <Button
       variant="text"
-      class="z-1999 w-full justify-start!"
+      class="w-full justify-start!"
       :class="{ active: folder === selectedFolder }"
       :style="{
         paddingLeft: `calc(var(--p-button-padding-x) + ${depth * INDENT_PX}px)`,

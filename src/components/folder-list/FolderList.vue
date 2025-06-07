@@ -68,7 +68,7 @@ function moveEntryToFolder(entry: Entry, folder: Folder, force = false) {
       if (e.kind === "fileAlreadyExists") {
         confirm.require({
           header: "文件已存在",
-          message: `位于 ${folder.path} 中的文件 ${entry.fileName} 已存在。确定要覆盖文件吗？`,
+          message: `位于 ${folder.name} 文件夹中的文件 ${entry.fileName} 已存在。确定要覆盖文件吗？`,
           icon: "pi pi-exclamation-circle",
           rejectProps: {
             label: "取消",

@@ -25,10 +25,6 @@ export type Entry = {
 export type Folder = {
   id: number;
   name: string;
-  /**
-   * Relative path to the folder.
-   */
-  path: string;
 };
 
 export type FolderNode = {

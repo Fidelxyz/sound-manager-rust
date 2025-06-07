@@ -17,7 +17,6 @@ const databaseView = useTemplateRef("databaseView");
 
 // state
 const databaseOpen = ref(false);
-const databasePath = ref<string | null>(null);
 
 /// ========== Menu BEGIN ==========
 
@@ -196,7 +195,7 @@ async function openDatabase() {
   api
     .openDatabase(path)
     .then(() => {
-      onDatabaseLoaded(path);
+      onDatabaseLoaded();
     })
     .catch((e: ErrorKind) => {
       console.error(e);
@@ -225,7 +224,7 @@ async function createDatabase() {
   api
     .createDatabase(path)
     .then(() => {
-      onDatabaseLoaded(path);
+      onDatabaseLoaded();
     })
     .catch((e: ErrorKind) => {
       console.error(e);
@@ -251,10 +250,9 @@ function refresh() {
   });
 }
 
-function onDatabaseLoaded(path: string) {
+function onDatabaseLoaded() {
   console.info("Database loaded");
   databaseOpen.value = true;
-  databasePath.value = path;
 }
 </script>
 
@@ -263,11 +261,7 @@ function onDatabaseLoaded(path: string) {
     <Toast />
     <ConfirmDialog />
 
-    <DatabaseView
-      v-if="databaseOpen"
-      ref="databaseView"
-      :basePath="databasePath"
-    />
+    <DatabaseView v-if="databaseOpen" ref="databaseView" />
     <Startup v-else @database-loaded="onDatabaseLoaded" />
   </main>
 </template>
