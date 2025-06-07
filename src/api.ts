@@ -176,6 +176,10 @@ export const api = {
     return invoke<number>("request_waveform", { channel });
   },
 
+  importFile(path: string, force = false): Promise<void> {
+    return invoke<void>("import_file", { path, force });
+  },
+
   deleteFile(entryId: number): Promise<void> {
     return invoke<void>("delete_file", { entryId });
   },

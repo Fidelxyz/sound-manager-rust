@@ -84,7 +84,7 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 pub trait DatabaseEmitter {
-    fn on_files_updated(&self);
+    fn on_files_updated(&self, immediate: bool);
 }
 
 impl<E> Database<E>
@@ -263,7 +263,7 @@ where
             .write()
             .unwrap()
             .scan(&mut self.db.lock().unwrap())?;
-        self.emitter.on_files_updated();
+        self.emitter.on_files_updated(true);
         Ok(())
     }
 
@@ -1005,8 +1005,8 @@ impl DatabaseData {
         for entry in &mut new_entries {
             let query_row = db
                 .query_row(
-                    "SELECT id, deleted FROM entries WHERE folder_id = ?",
-                    [entry.folder_id],
+                    "SELECT id, deleted FROM entries WHERE folder_id = ? AND file_name = ?",
+                    (entry.folder_id, entry.file_name.to_string_lossy()),
                     |row| {
                         Ok((
                             row.get::<_, EntryId>(0)?,                  // id

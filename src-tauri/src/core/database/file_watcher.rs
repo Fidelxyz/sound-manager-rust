@@ -87,7 +87,7 @@ where
                         }
 
                         if updated {
-                            self.emitter.on_files_updated();
+                            self.emitter.on_files_updated(true);
                         }
                     }
                 }
@@ -267,7 +267,7 @@ fn file_created<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()>
 
     match data.get_entry_id(&relative_path) {
         // entry does not exist, add it
-        None => Ok(data.add_entries(&[relative_path], &database.db.lock().unwrap())?),
+        None => data.add_entries(&[relative_path], &database.db.lock().unwrap())?,
 
         // entry already exists, reread it
         Some(entry_id) => {
@@ -276,9 +276,9 @@ fn file_created<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()>
                 .get_mut(&entry_id)
                 .unwrap()
                 .read_file(&base_path);
-            Ok(())
         }
     }
+    Ok(())
 }
 
 fn file_removed<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()> {
@@ -326,15 +326,16 @@ fn file_moved<E>(
 
     if let Some(entry_id) = data.get_entry_id(&relative_old_path) {
         // if old entry exists, change its path
-        Ok(data.move_entry(
+        data.move_entry(
             entry_id,
             relative_new_path,
             &mut database.db.lock().unwrap(),
-        )?)
+        )?;
     } else {
         // if old entry does not exist, add new entry
-        Ok(data.add_entries(&[relative_new_path], &database.db.lock().unwrap())?)
+        data.add_entries(&[relative_new_path], &database.db.lock().unwrap())?;
     }
+    Ok(())
 }
 
 fn folder_moved<E>(
@@ -350,9 +351,10 @@ fn folder_moved<E>(
     let relative_old_path = data.to_relative_path(old_path);
     let relative_new_path = data.to_relative_path(new_path);
 
-    Ok(data.move_folder(
+    data.move_folder(
         &relative_old_path,
         &relative_new_path,
         &mut database.db.lock().unwrap(),
-    )?)
+    )?;
+    Ok(())
 }

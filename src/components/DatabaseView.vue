@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { onMounted, ref, useTemplateRef } from "vue";
 
-import { Splitter, SplitterPanel } from "primevue";
+import { Splitter, SplitterPanel, useConfirm } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
 import AudioList from "./audio-list/AudioList.vue";
@@ -13,7 +14,8 @@ import TagList from "./tag-list/TagList.vue";
 
 import type { Entry, Filter, FolderNode, TagNode } from "@/api";
 import { api } from "@/api";
-import { error } from "@/utils/message";
+import { error, info } from "@/utils/message";
+import { basename } from "@tauri-apps/api/path";
 
 const metadataPanel = useTemplateRef("metadataPanel");
 const audioList = useTemplateRef("audioList");
@@ -34,7 +36,10 @@ const filter = ref<Filter>({
 defineExpose({
   audioList,
   activeEntry,
+  importFiles,
 });
+
+const confirm = useConfirm();
 
 onMounted(() => {
   loadEntries();
@@ -107,6 +112,45 @@ function toTagTree(tags: TagNode[]): TreeNode[] {
       children: toTagTree(tagNode.children),
     };
   });
+}
+
+async function importFiles() {
+  const paths = await open({
+    title: "导入文件",
+    multiple: true,
+    filters: [{ name: "音频文件", extensions: ["wav", "mp3", "flac", "ogg"] }],
+  });
+  if (!paths) return;
+
+  for (const path of paths) {
+    console.info("Importing file", path);
+    confirmImportFile(path);
+  }
+}
+
+function confirmImportFile(path: string, force = false) {
+  api
+    .importFile(path, force)
+    .then(async () => {
+      info("导入文件成功", `已导入文件 ${await basename(path)}。`);
+      console.info("Imported file", path);
+    })
+    .catch(async (e) => {
+      if (e.kind === "fileAlreadyExists") {
+        confirm.require({
+          header: "文件已存在",
+          message: `位于 ${folder.value?.folder.name} 中的文件 ${await basename(path)} 已存在。确定要覆盖文件吗？`,
+          icon: "pi pi-exclamation-circle",
+          rejectProps: { label: "取消", severity: "secondary", outlined: true },
+          acceptProps: { label: "覆盖文件", severity: "danger" },
+          accept: () => confirmImportFile(path, true),
+        });
+        return;
+      }
+
+      error("导入文件失败", e.message);
+      console.error(e);
+    });
 }
 
 listen("files_updated", onFilesChanged);

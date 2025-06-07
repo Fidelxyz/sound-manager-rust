@@ -23,7 +23,13 @@ async function openDatabase(path?: string) {
   console.info("Opening Database");
 
   const path_ =
-    path || (await open({ multiple: false, directory: true, recursive: true }));
+    path ||
+    (await open({
+      title: "打开数据库",
+      multiple: false,
+      directory: true,
+      recursive: true,
+    }));
   if (!path_) return;
 
   loading.value = true;
@@ -59,7 +65,13 @@ async function createDatabase(path?: string) {
   console.info("Creating Database");
 
   const path_ =
-    path || (await open({ multiple: false, directory: true, recursive: true }));
+    path ||
+    (await open({
+      title: "选择创建数据库文件夹",
+      multiple: false,
+      directory: true,
+      recursive: true,
+    }));
   if (!path_) return;
 
   loading.value = true;

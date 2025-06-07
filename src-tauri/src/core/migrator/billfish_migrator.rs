@@ -20,7 +20,7 @@ pub enum Error {
 struct NullEmitter {}
 
 impl DatabaseEmitter for NullEmitter {
-    fn on_files_updated(&self) {}
+    fn on_files_updated(&self, _immediate: bool) {}
 }
 
 struct Folder {

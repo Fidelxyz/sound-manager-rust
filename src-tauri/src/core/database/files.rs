@@ -11,6 +11,26 @@ impl<E> Database<E>
 where
     E: DatabaseEmitter + Send + Sync + 'static,
 {
+    pub fn import_file(&self, path: &Path, force: bool) -> Result<()> {
+        let mut data = self.data.write().unwrap();
+
+        let file_name = path.file_name().unwrap();
+        let dst_relative_path = Path::new(file_name);
+        let dst_absolute_path = data.to_absolute_path(dst_relative_path);
+        if !force && dst_absolute_path.exists() {
+            return Err(Error::FileAlreadyExists(
+                dst_absolute_path.to_string_lossy().into(),
+            ));
+        }
+
+        copy(path, &dst_absolute_path)?;
+
+        data.add_entries(&[dst_relative_path.into()], &self.db.lock().unwrap())?;
+        self.emitter.on_files_updated(false);
+
+        Ok(())
+    }
+
     pub fn delete_file(&self, entry_id: EntryId) -> Result<()> {
         let mut data = self.data.write().unwrap();
 
@@ -18,7 +38,7 @@ where
         delete(path)?;
 
         data.remove_entry(entry_id, &self.db.lock().unwrap())?;
-        self.emitter.on_files_updated();
+        self.emitter.on_files_updated(false);
 
         Ok(())
     }
@@ -48,7 +68,7 @@ where
         rename(old_path, new_path)?;
 
         data.move_entry_to_folder(entry_id, folder_id, &mut self.db.lock().unwrap())?;
-        self.emitter.on_files_updated();
+        self.emitter.on_files_updated(false);
 
         Ok(())
     }

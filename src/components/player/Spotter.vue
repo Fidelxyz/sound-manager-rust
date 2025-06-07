@@ -50,7 +50,8 @@ const openInApplicationName = ref<string | null>(null);
 const spotToName = computed(() => {
   if (settings.value.openInApplicationEnabled) {
     return openInApplicationName.value ?? "…";
-  } else if (settings.value.saveEnabled) {
+  }
+  if (settings.value.saveEnabled) {
     return saveFolderName.value ?? "…";
   }
   return "…";
@@ -160,6 +161,7 @@ function saveSettings() {
 
 async function selectSavePath() {
   const path = await open({
+    title: "选择保存文件位置",
     multiple: false,
     directory: true,
   });
@@ -170,6 +172,7 @@ async function selectSavePath() {
 
 async function selectOpenInApplication() {
   const path = await open({
+    title: "选择发送至应用",
     multiple: false,
     directory: false,
   });

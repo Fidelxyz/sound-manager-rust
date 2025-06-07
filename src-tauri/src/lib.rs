@@ -47,7 +47,8 @@ impl PlayerEmitter for AppEmitter {
 }
 
 impl DatabaseEmitter for AppEmitter {
-    fn on_files_updated(&self) {
+    fn on_files_updated(&self, _immediate: bool) {
+        // [TODO] debounce
         trace!("Emit: files_updated");
         self.app.emit("files_updated", ()).unwrap();
     }
@@ -444,11 +445,21 @@ async fn get_playing_pos(state: State<'_, AppData>) -> Result<f32, Error> {
 // ========== Files ==========
 
 #[tauri::command]
+async fn import_file(path: String, force: bool, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("import_file: {path:?}, force = {force:?}");
+
+    get_database!(database, state.database);
+    database.import_file(Path::new(&path), force)?;
+
+    trace!("import_file done");
+    Ok(())
+}
+
+#[tauri::command]
 async fn delete_file(entry_id: EntryId, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("delete_file: {entry_id:?}");
 
     get_database!(database, state.database);
-
     database.delete_file(entry_id)?;
 
     trace!("delete_file done");
@@ -574,6 +585,7 @@ pub fn run() {
             stop,
             set_volume,
             get_playing_pos,
+            import_file,
             delete_file,
             move_file,
             spot

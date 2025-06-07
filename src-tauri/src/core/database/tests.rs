@@ -37,7 +37,8 @@ impl TestEmitter {
 }
 
 impl DatabaseEmitter for TestEmitter {
-    fn on_files_updated(&self) {
+    fn on_files_updated(&self, _immediate: bool) {
+        // [TODO] debounce
         self.files_updated
             .store(true, std::sync::atomic::Ordering::Release);
     }

@@ -76,6 +76,13 @@ async function setupMenu() {
             enabled: databaseOpen.value,
           },
           {
+            id: "import",
+            text: "导入…",
+            action: () => databaseView.value?.importFiles(),
+            accelerator: "Cmd+I",
+            enabled: databaseOpen.value,
+          },
+          {
             id: "spot",
             text: "发送至…",
             accelerator: "S",
@@ -141,21 +148,26 @@ async function setupMenu() {
   menu.setAsAppMenu();
   return menu;
 }
-let menuItems: Record<"refresh" | "previous" | "next" | "spot", MenuItem>;
+let menuItems: Record<
+  "refresh" | "import" | "spot" | "previous" | "next",
+  MenuItem
+>;
 setupMenu().then(async (menu) => {
   const fileSubmenu = (await menu.get("file")) as Submenu;
   const selectSubmenu = (await menu.get("select")) as Submenu;
   menuItems = {
     refresh: (await fileSubmenu.get("refresh")) as MenuItem,
+    import: (await fileSubmenu.get("import")) as MenuItem,
+    spot: (await fileSubmenu.get("spot")) as MenuItem,
     previous: (await selectSubmenu.get("previous")) as MenuItem,
     next: (await selectSubmenu.get("next")) as MenuItem,
-    spot: (await fileSubmenu.get("spot")) as MenuItem,
   };
 });
 
 watch(databaseOpen, async (databaseOpen) => {
   if (!menuItems) return;
   menuItems.refresh.setEnabled(databaseOpen);
+  menuItems.import.setEnabled(databaseOpen);
   menuItems.previous.setEnabled(databaseOpen);
   menuItems.next.setEnabled(databaseOpen);
 });
@@ -181,6 +193,7 @@ onUnmounted(() => {
 async function openDatabase() {
   console.info("Opening Database");
   const path = await open({
+    title: "打开数据库",
     multiple: false,
     directory: true,
     recursive: true,
@@ -210,6 +223,7 @@ async function openDatabase() {
 async function createDatabase() {
   console.info("Creating Database");
   const path = await open({
+    title: "选择创建数据库文件夹",
     multiple: false,
     directory: true,
     recursive: true,
