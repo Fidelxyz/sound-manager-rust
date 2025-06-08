@@ -130,7 +130,7 @@ function tagTreeToTreeNode(tagTree: TagNode[]): TreeNode[] {
   return tagTree.map((tagNode) => ({
     key: tagNode.tag.id.toString(),
     label: tagNode.tag.name,
-    data: tagNode,
+    data: tagNode.tag,
     icon: `pi pi-tag tag-color-${tagNode.tag.color}`,
     children: tagTreeToTreeNode(tagNode.children),
   }));

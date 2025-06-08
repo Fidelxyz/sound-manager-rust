@@ -80,7 +80,9 @@ function toFilterArg(filter: Filter): FilterArg {
 watch(
   [filter, () => entries],
   async ([filter, _]) => {
-    let entry_ids = await api.filter(toFilterArg(filter));
+    const filterArg = toFilterArg(filter);
+    console.debug("Applying filter", filter, filterArg);
+    let entry_ids = await api.filter(filterArg);
     console.debug("Filtered entries", entry_ids);
     if (Array.isArray(entry_ids) && entry_ids.length === 0) {
       entry_ids = [-1];

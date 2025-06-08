@@ -34,6 +34,7 @@ const selectedTags = computed({
     return selectionKeys;
   },
   set: (selectionKeys: TreeSelectionKeys) => {
+    console.debug("Selected tags changed", selectionKeys);
     const filteredTags: Tag[] = [];
     for (const [tagId, state] of Object.entries(selectionKeys)) {
       if (state.checked) {

@@ -57,31 +57,23 @@ const selectedTags = computed({
     return selectionKeys;
   },
   set: (selectionKeys: TreeSelectionKeys) => {
-    console.debug("Set selected tag", selectionKeys);
     const selectedTags = Object.keys(selectionKeys).map(Number.parseInt);
+    console.debug("Selected tags", selectedTags);
 
     const filteredTags: Tag[] = [];
     for (const selectedTag of selectedTags) {
-      filteredTags.push(...getTagDescendants(tagTreeNodes, tags[selectedTag]));
+      filteredTags.push(...getTagDescendants(tags[selectedTag]));
     }
+    console.debug("Filtered tags", filteredTags);
     filter.value.tags = filteredTags;
   },
 });
 
-function getTagDescendants(tagTrees: TreeNode[], matchTag?: Tag): Tag[] {
-  const descendants: Tag[] = [];
-  for (const tagTree of tagTrees) {
-    if (matchTag === undefined || tagTree.data === matchTag) {
-      descendants.push(tagTree.data.id);
-      if (tagTree.children) {
-        descendants.push(...getTagDescendants(tagTree.children));
-      }
-    } else {
-      if (tagTree.children) {
-        descendants.push(...getTagDescendants(tagTree.children, matchTag));
-      }
-    }
-  }
+function getTagDescendants(tag: Tag): Tag[] {
+  const descendants = tag.children.flatMap((childId) =>
+    getTagDescendants(tags[childId]),
+  );
+  descendants.push(tag);
   return descendants;
 }
 
