@@ -28,7 +28,7 @@ pub struct Database<E> {
     pub data: RwLock<DatabaseData>,
     pub db: Mutex<Connection>,
 
-    emitter: E,
+    emitter: Arc<E>,
     stop_tx: crossbeam_channel::Sender<()>,
 }
 
@@ -93,7 +93,7 @@ where
 {
     // ========== Constructor ==========
 
-    pub fn open(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
+    pub fn open(base_path: PathBuf, emitter: Arc<E>) -> Result<Arc<Self>> {
         info!("Opening database {base_path:?}");
 
         let database_file = base_path.join(SQLITE_DB_PATH);
@@ -144,7 +144,7 @@ where
         Ok(database)
     }
 
-    pub fn create(base_path: PathBuf, emitter: E) -> Result<Arc<Self>> {
+    pub fn create(base_path: PathBuf, emitter: Arc<E>) -> Result<Arc<Self>> {
         info!("Creating database {base_path:?}");
 
         let database_file = base_path.join(SQLITE_DB_PATH);

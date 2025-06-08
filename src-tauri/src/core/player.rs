@@ -63,14 +63,14 @@ pub struct PlayerState {
 }
 
 impl Player {
-    pub fn new<T>(emitter: T) -> Self
+    pub fn new<T>(emitter: Arc<T>) -> Self
     where
         T: PlayerEmitter + Send + Sync + 'static,
     {
         Self {
             sink: Arc::new(None.into()),
             source: None.into(),
-            emitter: Arc::new(emitter),
+            emitter,
         }
     }
 

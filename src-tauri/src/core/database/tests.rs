@@ -18,15 +18,14 @@ macro_rules! assert_err {
     }
 }
 
-#[derive(Clone)]
 struct TestEmitter {
-    files_updated: Arc<AtomicBool>,
+    files_updated: AtomicBool,
 }
 
 impl TestEmitter {
     fn new() -> Self {
-        TestEmitter {
-            files_updated: Arc::new(AtomicBool::new(false)),
+        Self {
+            files_updated: AtomicBool::new(false),
         }
     }
 
@@ -38,7 +37,6 @@ impl TestEmitter {
 
 impl DatabaseEmitter for TestEmitter {
     fn on_files_updated(&self, _immediate: bool) {
-        // [TODO] debounce
         self.files_updated
             .store(true, std::sync::atomic::Ordering::Release);
     }
@@ -73,9 +71,9 @@ fn setup_files(dir: &Path) -> PathBuf {
     base_path
 }
 
-fn setup_database(dir: &Path) -> (PathBuf, Arc<Database<TestEmitter>>, TestEmitter) {
+fn setup_database(dir: &Path) -> (PathBuf, Arc<Database<TestEmitter>>, Arc<TestEmitter>) {
     let base_path = setup_files(dir);
-    let emitter = TestEmitter::new();
+    let emitter = Arc::new(TestEmitter::new());
     let database = Database::create(base_path.clone(), emitter.clone()).unwrap();
     (base_path, database, emitter)
 }
@@ -94,7 +92,7 @@ fn test_open_database() {
         base_path
     };
 
-    let emitter = TestEmitter::new();
+    let emitter = Arc::new(TestEmitter::new());
     let _database = Database::open(base_path.clone(), emitter).unwrap();
 }
 
@@ -551,7 +549,7 @@ fn test_read_tags() {
     }
     drop(database);
 
-    let database = Database::open(_base_path, TestEmitter::new()).unwrap();
+    let database = Database::open(_base_path, Arc::new(TestEmitter::new())).unwrap();
     let data = database.data.read().unwrap();
     let tags = data.get_tags();
     let tag_1 = &tags[0];
@@ -605,7 +603,7 @@ fn test_rename_tag() {
     drop(database);
 
     // Reopen the database to verify the changes persist
-    let database = Database::open(_base_path, TestEmitter::new()).unwrap();
+    let database = Database::open(_base_path, Arc::new(TestEmitter::new())).unwrap();
     let mut data = database.data.write().unwrap();
     let db = database.db.lock().unwrap();
 
@@ -687,7 +685,7 @@ fn test_delete_tag() {
     drop(database);
 
     // Reopen the database to verify the changes persist
-    let database = Database::open(_base_path, TestEmitter::new()).unwrap();
+    let database = Database::open(_base_path, Arc::new(TestEmitter::new())).unwrap();
     let data = database.data.read().unwrap();
 
     // Tag 1 should be removed

@@ -6,10 +6,11 @@ use core::migrator::{migrate_from, MigrateFrom, MigratorResult};
 use core::player::{PlayerEmitter, PlayerState};
 use core::{Database, EntryId, Filter, Player, TagId, WaveformGenerator};
 use response::Error;
+use std::thread::spawn;
 
 use std::option::Option;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::time::Duration;
 
 use log::{debug, trace, warn};
@@ -25,32 +26,117 @@ struct AppData {
     database: RwLock<Option<Arc<Database<AppEmitter>>>>,
     player: RwLock<Player>,
     waveform_generator: Mutex<WaveformGenerator>,
-    emitter: AppEmitter,
+    emitter: Arc<AppEmitter>,
 }
 
-#[derive(Clone)]
 struct AppEmitter {
     app: AppHandle,
+    condvar: Condvar,
+    state: Mutex<AppEmitterState>,
+}
+
+struct AppEmitterState {
+    files_updated_immediate: bool,
+    files_updated_delayed: bool,
+    stopped: bool,
 }
 
 impl AppEmitter {
-    fn new(app: AppHandle) -> Self {
-        Self { app }
+    fn new(app: AppHandle) -> Arc<Self> {
+        let emitter = Arc::new(Self {
+            app,
+            condvar: Condvar::new(),
+            state: Mutex::new(AppEmitterState {
+                files_updated_immediate: false,
+                files_updated_delayed: false,
+                stopped: false,
+            }),
+        });
+
+        let emitter_clone = emitter.clone();
+        spawn(move || emitter_clone.run());
+
+        emitter
+    }
+
+    fn run(&self) {
+        debug!("Emitter thread started");
+
+        let mut state = self.state.lock().unwrap();
+
+        loop {
+            state = self.condvar.wait(state).unwrap();
+
+            if state.stopped {
+                break;
+            }
+
+            if state.files_updated_immediate {
+                drop(state);
+
+                debug!("Emit: files_updated");
+                self.app.emit("files_updated", ()).unwrap();
+
+                state = self.state.lock().unwrap();
+                state.files_updated_immediate = false;
+                state.files_updated_delayed = false;
+            } else if state.files_updated_delayed {
+                (state, _) = self
+                    .condvar
+                    .wait_timeout_while(state, Duration::from_millis(500), |state| {
+                        !state.files_updated_immediate && !state.stopped
+                    })
+                    .unwrap();
+
+                if state.stopped {
+                    break;
+                }
+
+                drop(state);
+
+                debug!("Emit: files_updated");
+                self.app.emit("files_updated", ()).unwrap();
+
+                state = self.state.lock().unwrap();
+                state.files_updated_immediate = false;
+                state.files_updated_delayed = false;
+            }
+        }
+
+        debug!("Emitter thread stopped");
+    }
+
+    fn stop(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.stopped = true;
+        self.condvar.notify_all();
+    }
+}
+
+impl Drop for AppEmitter {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
 impl PlayerEmitter for AppEmitter {
     fn on_player_state_updated(&self, state: PlayerState) {
-        trace!("Emit: player_state_updated, {state:?}");
+        debug!("Emit: player_state_updated, {state:?}");
         self.app.emit("player_state_updated", state).unwrap();
     }
 }
 
 impl DatabaseEmitter for AppEmitter {
-    fn on_files_updated(&self, _immediate: bool) {
-        // [TODO] debounce
-        trace!("Emit: files_updated");
-        self.app.emit("files_updated", ()).unwrap();
+    fn on_files_updated(&self, immediate: bool) {
+        trace!("on_files_updated, immediate = {immediate}");
+
+        let mut state = self.state.lock().unwrap();
+        if immediate {
+            state.files_updated_immediate = true;
+        } else {
+            state.files_updated_delayed = true;
+        }
+        self.condvar.notify_all();
     }
 }
 
@@ -88,18 +174,14 @@ macro_rules! get_db_mut {
 }
 
 #[tauri::command]
-async fn open_database(
-    path: String,
-    app: AppHandle,
-    state: State<'_, AppData>,
-) -> Result<(), Error> {
+async fn open_database(path: String, state: State<'_, AppData>) -> Result<(), Error> {
     trace!("open_database: {path:?}");
 
     let mut database = state.database.write().unwrap();
     if let Some(database) = database.as_ref() {
         database.close();
     }
-    database.replace(Database::open(path.into(), AppEmitter::new(app))?);
+    database.replace(Database::open(path.into(), state.emitter.clone())?);
 
     state.player.write().unwrap().run();
 

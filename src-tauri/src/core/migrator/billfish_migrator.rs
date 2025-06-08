@@ -5,6 +5,7 @@ use crate::core::{database::DatabaseEmitter, Database};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
+use std::sync::Arc;
 
 use rusqlite::{Connection, OpenFlags};
 use thiserror::Error;
@@ -45,7 +46,7 @@ pub struct BillfishMigrator {}
 
 impl Migrator<Error> for BillfishMigrator {
     fn migrate(base_path: &Path, result: &mut MigratorResult) -> Result<(), Error> {
-        let database = Database::create(base_path.into(), NullEmitter {})?;
+        let database = Database::create(base_path.into(), Arc::new(NullEmitter {}))?;
         let mut data = database.data.write().unwrap();
         let mut db = database.db.lock().unwrap();
 

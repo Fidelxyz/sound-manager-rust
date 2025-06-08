@@ -5,7 +5,7 @@ use simplelog::{ColorChoice, TerminalMode};
 
 fn main() {
     #[cfg(debug_assertions)]
-    let log_level = log::LevelFilter::Debug;
+    let log_level = log::LevelFilter::Trace;
 
     #[cfg(not(debug_assertions))]
     let log_level = log::LevelFilter::Info;
