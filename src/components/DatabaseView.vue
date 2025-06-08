@@ -12,8 +12,9 @@ import MetadataPanel from "./metadata-panel/MetadataPanel.vue";
 import Player from "./player/Player.vue";
 import TagList from "./tag-list/TagList.vue";
 
-import type { Entry, Filter, FolderNode, TagNode } from "@/api";
+import type { Entry, Folder, Tag } from "@/api";
 import { api } from "@/api";
+import type { Filter, FolderNode, TagNode } from "@/types";
 import { error, info } from "@/utils/message";
 import { basename } from "@tauri-apps/api/path";
 
@@ -22,15 +23,17 @@ const audioList = useTemplateRef("audioList");
 
 // data
 const entries = ref<Entry[]>([]);
-const folder = ref<FolderNode | null>(null);
-const tags = ref<TreeNode[]>([]);
+const folderTree = ref<FolderNode | null>(null);
+const tags = ref<Record<number, Tag>>({});
+const tagTree = ref<TagNode[]>([]);
+const tagTreeNodes = ref<TreeNode[]>([]);
 
 // state
 const activeEntry = ref<Entry | null>(null);
 const filter = ref<Filter>({
   search: "",
-  tagIds: [],
-  folderId: null,
+  tags: [],
+  folder: null,
 });
 
 defineExpose({
@@ -80,7 +83,7 @@ async function loadFolders() {
     .getFolder()
     .then((data) => {
       console.debug("Folder", data);
-      folder.value = data;
+      folderTree.value = buildFolderTree(data);
     })
     .catch((e) => {
       error("加载文件夹失败", e.message);
@@ -92,9 +95,11 @@ function loadTags() {
   console.info("Loading tags");
   api
     .getTags()
-    .then((tagNodes) => {
-      console.debug("Tags", tagNodes);
-      tags.value = toTagTree(tagNodes);
+    .then((newTags) => {
+      console.debug("Tags", newTags);
+      tags.value = newTags;
+      tagTree.value = buildTagTree(newTags).children;
+      tagTreeNodes.value = tagTreeToTreeNode(tagTree.value);
     })
     .catch((e) => {
       e("加载标签失败", e.message);
@@ -102,16 +107,33 @@ function loadTags() {
     });
 }
 
-function toTagTree(tags: TagNode[]): TreeNode[] {
-  return tags.map((tagNode): TreeNode => {
-    return {
-      key: tagNode.tag.id.toString(),
-      label: tagNode.tag.name,
-      data: tagNode.tag,
-      icon: `pi pi-tag tag-color-${tagNode.tag.color}`,
-      children: toTagTree(tagNode.children),
-    };
-  });
+function buildFolderTree(
+  folders: Record<number, Folder>,
+  folderId = -1,
+): FolderNode {
+  const folder = folders[folderId];
+  const subFolders = Object.values(folder.subFolders).map((subFolderId) =>
+    buildFolderTree(folders, subFolderId),
+  );
+  return { folder, subFolders };
+}
+
+function buildTagTree(tags: Record<number, Tag>, tagId = -1): TagNode {
+  const tag = tags[tagId];
+  const children = tag.children
+    .map((childTagId) => buildTagTree(tags, childTagId))
+    .sort((a, b) => a.tag.position - b.tag.position);
+  return { tag, children };
+}
+
+function tagTreeToTreeNode(tagTree: TagNode[]): TreeNode[] {
+  return tagTree.map((tagNode) => ({
+    key: tagNode.tag.id.toString(),
+    label: tagNode.tag.name,
+    data: tagNode,
+    icon: `pi pi-tag tag-color-${tagNode.tag.color}`,
+    children: tagTreeToTreeNode(tagNode.children),
+  }));
 }
 
 async function importFiles() {
@@ -139,7 +161,7 @@ function confirmImportFile(path: string, force = false) {
       if (e.kind === "fileAlreadyExists") {
         confirm.require({
           header: "文件已存在",
-          message: `位于 ${folder.value?.folder.name} 中的文件 ${await basename(path)} 已存在。确定要覆盖文件吗？`,
+          message: `位于 ${folderTree.value?.folder.name} 中的文件 ${await basename(path)} 已存在。确定要覆盖文件吗？`,
           icon: "pi pi-exclamation-circle",
           rejectProps: { label: "取消", severity: "secondary", outlined: true },
           acceptProps: { label: "覆盖文件", severity: "danger" },
@@ -163,12 +185,13 @@ listen("files_updated", onFilesChanged);
         <SplitterPanel class="min-w-2xs" :size="15">
           <Splitter layout="vertical" class="h-full" :gutterSize="2">
             <SplitterPanel :minSize="20">
-              <FolderList :folder="folder" v-model:filter="filter" />
+              <FolderList :folderTree="folderTree" v-model:filter="filter" />
             </SplitterPanel>
 
             <SplitterPanel :minSize="20">
               <TagList
                 :tags="tags"
+                :tagTreeNodes="tagTreeNodes"
                 v-model:filter="filter"
                 @tags-changed="onTagsChanged"
               />
@@ -181,6 +204,7 @@ listen("files_updated", onFilesChanged);
             ref="audioList"
             :entries="entries"
             :tags="tags"
+            :tagTreeNodes="tagTreeNodes"
             v-model:filter="filter"
             v-model:activeEntry="activeEntry"
           />
@@ -190,7 +214,7 @@ listen("files_updated", onFilesChanged);
           <MetadataPanel
             ref="metadataPanel"
             :entry="activeEntry"
-            :allTags="tags"
+            :tagTreeNodes="tagTreeNodes"
           />
         </SplitterPanel>
       </Splitter>

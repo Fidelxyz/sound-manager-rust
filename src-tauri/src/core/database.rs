@@ -10,8 +10,8 @@ mod tests;
 
 pub use entry::{Entry, EntryId};
 pub use filter::Filter;
-pub use folder::{Folder, FolderId, FolderNode};
-pub use tag::{Tag, TagId, TagNode};
+pub use folder::{Folder, FolderId};
+pub use tag::{Tag, TagId};
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -619,8 +619,8 @@ impl DatabaseData {
 
     // ========== Folder ==========
 
-    pub fn get_folders(&self) -> FolderNode {
-        FolderNode::build(&self.folders)
+    pub fn get_folders(&self) -> &HashMap<FolderId, Folder> {
+        &self.folders
     }
 
     fn get_folder_by_path(&self, path: &Path) -> Option<&Folder> {
@@ -1305,8 +1305,8 @@ impl DatabaseData {
 
     // ========= Tag ==========
 
-    pub fn get_tags(&self) -> Vec<TagNode> {
-        TagNode::build(&self.tags)
+    pub fn get_tags(&self) -> &HashMap<TagId, Tag> {
+        &self.tags
     }
 
     pub fn get_tag_order(&self, tag_id: TagId) -> Vec<i32> {

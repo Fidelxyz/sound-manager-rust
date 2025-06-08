@@ -20,9 +20,9 @@ import type {
 } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
-import type { ErrorKind, Filter, Tag } from "@/api";
+import type { ErrorKind, Tag } from "@/api";
 import { api } from "@/api";
-import type { DropTargetData } from "@/types";
+import type { DropTargetData, Filter } from "@/types";
 import { error } from "@/utils/message";
 import Tree from "./tree";
 
@@ -32,8 +32,9 @@ const emit = defineEmits<{
 
 const filter = defineModel<Filter>("filter", { required: true });
 
-const { tags } = defineProps<{
-  tags: TreeNode[];
+const { tags, tagTreeNodes } = defineProps<{
+  tags: Record<number, Tag>;
+  tagTreeNodes: TreeNode[];
 }>();
 
 onMounted(() => {
@@ -50,8 +51,8 @@ onUnmounted(() => {
 const selectedTags = computed({
   get: () => {
     const selectionKeys: TreeSelectionKeys = {};
-    for (const tagId of filter.value.tagIds) {
-      selectionKeys[tagId.toString()] = true;
+    for (const tag of filter.value.tags) {
+      selectionKeys[tag.id] = true;
     }
     return selectionKeys;
   },
@@ -59,28 +60,25 @@ const selectedTags = computed({
     console.debug("Set selected tag", selectionKeys);
     const selectedTags = Object.keys(selectionKeys).map(Number.parseInt);
 
-    const filterTags = [];
+    const filteredTags: Tag[] = [];
     for (const selectedTag of selectedTags) {
-      filterTags.push(...getTagDescendants(tags, selectedTag));
+      filteredTags.push(...getTagDescendants(tagTreeNodes, tags[selectedTag]));
     }
-    filter.value.tagIds = filterTags;
+    filter.value.tags = filteredTags;
   },
 });
 
-function getTagDescendants(
-  tagTrees: TreeNode[],
-  matchTagId?: number,
-): number[] {
-  const descendants: number[] = [];
+function getTagDescendants(tagTrees: TreeNode[], matchTag?: Tag): Tag[] {
+  const descendants: Tag[] = [];
   for (const tagTree of tagTrees) {
-    if (matchTagId === undefined || tagTree.data.id === matchTagId) {
+    if (matchTag === undefined || tagTree.data === matchTag) {
       descendants.push(tagTree.data.id);
       if (tagTree.children) {
         descendants.push(...getTagDescendants(tagTree.children));
       }
     } else {
       if (tagTree.children) {
-        descendants.push(...getTagDescendants(tagTree.children, matchTagId));
+        descendants.push(...getTagDescendants(tagTree.children, matchTag));
       }
     }
   }
@@ -379,7 +377,7 @@ function setTagColor(event: MenuItemCommandEvent) {
       <ContextMenu ref="contextMenu" :model="contextMenuItems" />
       <Tree
         class="p-0!"
-        :value="tags"
+        :value="tagTreeNodes"
         v-model:selectionKeys="selectedTags"
         selectionMode="single"
         draggableType="tag"

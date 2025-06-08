@@ -12,43 +12,52 @@ import {
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 
-import type { Entry, Filter } from "@/api";
+import type { Entry, Tag } from "@/api";
 import { api } from "@/api";
+import type { Filter } from "@/types";
 import { error } from "@/utils/message";
 
 const filter = defineModel<Filter>({ required: true });
 
-const { entries, tags } = defineProps<{
+const { entries, tags, tagTreeNodes } = defineProps<{
   entries: Entry[];
-  tags: TreeNode[];
+  tags: Record<number, Tag>;
+  tagTreeNodes: TreeNode[];
 }>();
 
 const selectedTags = computed({
   get: () => {
     const selectionKeys: TreeSelectionKeys = {};
-    for (const tagId of filter.value.tagIds) {
-      selectionKeys[tagId.toString()] = { checked: true };
+    for (const tag of filter.value.tags) {
+      selectionKeys[tag.id] = { checked: true };
     }
     return selectionKeys;
   },
   set: (selectionKeys: TreeSelectionKeys) => {
-    const tagIds = [];
+    const filteredTags: Tag[] = [];
     for (const [tagId, state] of Object.entries(selectionKeys)) {
       if (state.checked) {
-        tagIds.push(Number.parseInt(tagId));
+        filteredTags.push(tags[Number.parseInt(tagId)]);
       }
     }
-    filter.value.tagIds = tagIds;
+    filter.value.tags = filteredTags;
   },
 });
 
 const filterEnabled = computed(() => {
-  return filter.value.search.length > 0 || filter.value.tagIds.length > 0;
+  return (
+    filter.value.search.length > 0 ||
+    filter.value.tags.length > 0 ||
+    filter.value.folder !== null
+  );
 });
 
 function clearFilter() {
-  filter.value.search = "";
-  filter.value.tagIds = [];
+  filter.value = {
+    search: "",
+    tags: [],
+    folder: null,
+  };
 }
 
 function shuffle() {
@@ -92,7 +101,7 @@ function refresh() {
           id="filter-tags"
           class="w-48"
           v-model="selectedTags"
-          :options="tags"
+          :options="tagTreeNodes"
           selectionMode="checkbox"
           emptyMessage="无可用标签"
         />

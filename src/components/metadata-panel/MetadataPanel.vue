@@ -8,9 +8,9 @@ import type { Entry } from "@/api";
 import { formatDuration } from "@/utils/utils";
 import MetadataTagEditor from "./MetadataTagEditor.vue";
 
-const { entry, allTags } = defineProps<{
+const { entry, tagTreeNodes } = defineProps<{
   entry?: Entry | null;
-  allTags: TreeNode[];
+  tagTreeNodes: TreeNode[];
 }>();
 const metadataTagEditor = useTemplateRef("metadataTagEditor");
 
@@ -31,7 +31,7 @@ defineExpose({
       <MetadataTagEditor
         ref="metadataTagEditor"
         :entry="entry"
-        :allTags="allTags"
+        :allTags="tagTreeNodes"
       />
 
       <table class="w-full border-separate border-spacing-y-2">

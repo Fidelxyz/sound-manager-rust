@@ -1,4 +1,14 @@
-import type { Entry, Folder } from "@/api";
+import type { Entry, Folder, Tag } from "@/api";
+
+export type FolderNode = {
+  folder: Folder;
+  subFolders: FolderNode[];
+};
+
+export type TagNode = {
+  tag: Tag;
+  children: TagNode[];
+};
 
 export type DropTargetData =
   | {
@@ -14,3 +24,9 @@ export type DropTargetData =
       type: "folder";
       folder: Folder;
     };
+
+export type Filter = {
+  search: string;
+  tags: Tag[];
+  folder: Folder | null;
+};

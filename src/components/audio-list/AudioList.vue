@@ -15,17 +15,20 @@ import type { MenuItem } from "primevue/menuitem";
 import type { TreeNode } from "primevue/treenode";
 import DataTable from "./datatable";
 
-import type { Entry, Filter } from "@/api";
+import FilterPanel from "./FilterPanel.vue";
+
+import type { Entry, FilterArg, Tag } from "@/api";
 import { api } from "@/api";
+import type { Filter } from "@/types";
 import { info } from "@/utils/message";
 import { formatDuration } from "@/utils/utils";
-import FilterPanel from "./FilterPanel.vue";
 
 const confirm = useConfirm();
 
-const { entries, tags } = defineProps<{
+const { entries, tags, tagTreeNodes } = defineProps<{
   entries: Entry[];
-  tags: TreeNode[];
+  tags: Record<number, Tag>;
+  tagTreeNodes: TreeNode[];
 }>();
 
 const filter = defineModel<Filter>("filter", { required: true });
@@ -66,10 +69,18 @@ const tableFilters = ref<DataTableFilterMeta>({
   id: { value: undefined, matchMode: FilterMatchMode.IN },
 });
 
+function toFilterArg(filter: Filter): FilterArg {
+  return {
+    search: filter.search,
+    tagIds: filter.tags.map((tag) => tag.id),
+    folderId: filter.folder ? filter.folder.id : null,
+  };
+}
+
 watch(
   [filter, () => entries],
   async ([filter, _]) => {
-    let entry_ids = await api.filter(filter);
+    let entry_ids = await api.filter(toFilterArg(filter));
     console.debug("Filtered entries", entry_ids);
     if (Array.isArray(entry_ids) && entry_ids.length === 0) {
       entry_ids = [-1];
@@ -133,7 +144,12 @@ function confirmDeleteEntry(entry: Entry) {
 
 <template>
   <div class="flex h-full flex-col">
-    <FilterPanel v-model="filter" :entries="entries" :tags="tags" />
+    <FilterPanel
+      v-model="filter"
+      :entries="entries"
+      :tags="tags"
+      :tagTreeNodes="tagTreeNodes"
+    />
 
     <div class="flex-auto overflow-hidden">
       <ContextMenu ref="contextMenu" :model="contextMenuItems" />

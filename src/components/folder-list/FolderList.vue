@@ -7,15 +7,15 @@ import { useConfirm } from "primevue";
 
 import FolderItem from "./FolderItem.vue";
 
-import type { Entry, ErrorKind, Filter, Folder, FolderNode } from "@/api";
+import type { Entry, ErrorKind, Folder } from "@/api";
 import { api } from "@/api";
-import type { DropTargetData } from "@/types";
+import type { DropTargetData, Filter, FolderNode } from "@/types";
 import { error, info } from "@/utils/message";
 
 const filter = defineModel<Filter>("filter", { required: true });
 
-const { folder } = defineProps<{
-  folder: FolderNode | null;
+const { folderTree } = defineProps<{
+  folderTree: FolderNode | null;
 }>();
 
 const confirm = useConfirm();
@@ -36,11 +36,11 @@ const selectedFolder = ref<Folder | null>(null);
 function selectFolder(folder: Folder) {
   if (selectedFolder.value === folder) {
     selectedFolder.value = null;
-    filter.value.folderId = null;
+    filter.value.folder = null;
     return;
   }
   selectedFolder.value = folder;
-  filter.value.folderId = folder.id;
+  filter.value.folder = folder;
 }
 
 function moveEntryToFolder(entry: Entry, folder: Folder, force = false) {
@@ -121,8 +121,8 @@ function registerDraggingMonitor() {
     <div class="p-2 font-bold">文件夹</div>
     <ul class="flex-auto overflow-auto">
       <FolderItem
-        v-if="folder"
-        :folderNode="folder"
+        v-if="folderTree"
+        :folderNode="folderTree"
         :selectedFolder="selectedFolder"
         @select="selectFolder"
       />

@@ -1,11 +1,11 @@
 mod core;
 mod response;
 
-use core::database::DatabaseEmitter;
+use core::database::{DatabaseEmitter, FolderId};
 use core::migrator::{migrate_from, MigrateFrom, MigratorResult};
 use core::player::{PlayerEmitter, PlayerState};
 use core::{Database, EntryId, Filter, Player, TagId, WaveformGenerator};
-use response::Error;
+use response::{to_serializable_map, Error};
 use std::thread::spawn;
 
 use std::option::Option;
@@ -19,8 +19,6 @@ use tauri::{
     App, AppHandle, Emitter, Manager, State, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
-
-use crate::core::database::FolderId;
 
 struct AppData {
     database: RwLock<Option<Arc<Database<AppEmitter>>>>,
@@ -269,7 +267,7 @@ async fn get_folder(state: State<'_, AppData>) -> Result<Response, Error> {
     get_data!(data, database);
 
     let folder = data.get_folders();
-    let response = serde_json::to_string(&folder).unwrap();
+    let response = serde_json::to_string(&to_serializable_map(folder.iter()).unwrap()).unwrap();
     Ok(Response::new(response))
 }
 

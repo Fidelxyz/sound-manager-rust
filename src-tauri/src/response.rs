@@ -1,8 +1,12 @@
-use std::ffi::OsStr;
+use std::{
+    collections::HashMap,
+    ffi::{OsStr, OsString},
+};
 
 use super::core::Entry;
 
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::ser::{Serialize, SerializeMap, SerializeStruct, Serializer};
+use serde_json::{Map, Value};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -99,4 +103,29 @@ where
     S: Serializer,
 {
     str.to_string_lossy().serialize(serializer)
+}
+
+pub fn serialize_hashmap_with_os_string_keys<V, S>(
+    map: &HashMap<OsString, V>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    V: Serialize,
+    S: Serializer,
+{
+    let mut state = serializer.serialize_map(Some(map.len()))?;
+    for (key, value) in map {
+        state.serialize_entry(&key.to_string_lossy(), value)?;
+    }
+    state.end()
+}
+
+pub fn to_serializable_map<K, V, M>(map: M) -> Result<Map<String, Value>, serde_json::Error>
+where
+    K: ToString,
+    V: Serialize,
+    M: Iterator<Item = (K, V)>,
+{
+    map.map(|(k, v)| Ok::<_, _>((k.to_string(), serde_json::to_value(v)?)))
+        .collect()
 }

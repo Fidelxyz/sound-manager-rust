@@ -25,22 +25,15 @@ export type Entry = {
 export type Folder = {
   id: number;
   name: string;
-};
-
-export type FolderNode = {
-  folder: Folder;
-  subFolders: FolderNode[];
+  subFolders: Record<string, number>;
 };
 
 export type Tag = {
   id: number;
   name: string;
   color: number;
-};
-
-export type TagNode = {
-  tag: Tag;
-  children: TagNode[];
+  position: number;
+  children: number[];
 };
 
 export type PlayerState = {
@@ -48,7 +41,7 @@ export type PlayerState = {
   pos: number;
 };
 
-export type Filter = {
+export type FilterArg = {
   search: string;
   tagIds: number[];
   folderId: number | null;
@@ -96,12 +89,12 @@ export const api = {
     return invoke<Entry[]>("get_entries");
   },
 
-  getTags(): Promise<TagNode[]> {
-    return invoke<TagNode[]>("get_tags");
+  getTags(): Promise<Record<number, Tag>> {
+    return invoke<Record<number, Tag>>("get_tags");
   },
 
-  getFolder(): Promise<FolderNode> {
-    return invoke<FolderNode>("get_folder");
+  getFolder(): Promise<Record<number, Folder>> {
+    return invoke<Record<number, Folder>>("get_folder");
   },
 
   newTag(name: string): Promise<number> {
@@ -140,7 +133,7 @@ export const api = {
     return invoke<void>("remove_tag_for_entry", { entryId, tagId });
   },
 
-  filter(filter: Filter): Promise<number[] | undefined> {
+  filter(filter: FilterArg): Promise<number[] | undefined> {
     return invoke<number[] | undefined>("filter", { filter });
   },
 
