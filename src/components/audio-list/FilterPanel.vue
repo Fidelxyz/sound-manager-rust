@@ -7,10 +7,10 @@ import {
   Button,
   FloatLabel,
   InputText,
-  TreeSelect,
   type TreeSelectionKeys,
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
+import TreeSelect from "./treeselect";
 
 import type { Entry, Tag } from "@/api";
 import { api } from "@/api";
@@ -29,8 +29,17 @@ const selectedTags = computed({
   get: () => {
     const selectionKeys: TreeSelectionKeys = {};
     for (const tag of filter.value.tags) {
-      selectionKeys[tag.id] = { checked: true };
+      selectionKeys[tag.id] = { checked: true, partialChecked: false };
+
+      let parentTag = tags[tag.parentId];
+      while (parentTag.id !== -1) {
+        if (selectionKeys[parentTag.id]) break;
+        selectionKeys[parentTag.id] = { checked: false, partialChecked: true };
+        parentTag = tags[parentTag.parentId];
+      }
     }
+
+    console.debug("Get selected tags", selectionKeys);
     return selectionKeys;
   },
   set: (selectionKeys: TreeSelectionKeys) => {

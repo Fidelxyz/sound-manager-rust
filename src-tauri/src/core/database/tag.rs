@@ -10,7 +10,6 @@ pub struct Tag {
     pub id: TagId,
     pub name: String,
     pub color: i32,
-    #[serde(skip)]
     pub parent_id: TagId,
     pub position: i32,
     pub children: HashSet<TagId>,

@@ -32,6 +32,7 @@ export type Tag = {
   id: number;
   name: string;
   color: number;
+  parentId: number;
   position: number;
   children: number[];
 };
