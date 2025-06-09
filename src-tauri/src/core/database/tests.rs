@@ -1,7 +1,7 @@
 use super::{Database, DatabaseEmitter, Error, ROOT_FOLDER_ID, ROOT_TAG_ID};
 
 use std::collections::{HashMap, HashSet};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{create_dir, exists, remove_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -142,89 +142,43 @@ fn test_get_folders() {
 
     let data = database.data.read().unwrap();
 
-    let root = data.get_folders();
-    assert_eq!(root.folder.name, "test_database");
-    assert_eq!(root.folder.id, ROOT_FOLDER_ID);
-    assert_eq!(root.folder.parent_id, ROOT_FOLDER_ID);
-    assert_eq!(root.folder.path, Path::new(""));
-    assert_eq!(root.folder.sub_folders.len(), 2);
-    assert_eq!(root.folder.entries.len(), 4);
+    let folders = data.get_folders();
 
-    assert_eq!(root.sub_folders.len(), 2);
+    let root_folder = &folders[&ROOT_FOLDER_ID];
+    assert_eq!(root_folder.name, "test_database");
+    assert_eq!(root_folder.id, ROOT_FOLDER_ID);
+    assert_eq!(root_folder.parent_id, ROOT_FOLDER_ID);
+    assert_eq!(root_folder.path, Path::new(""));
+    assert_eq!(root_folder.sub_folders.len(), 2);
+    assert_eq!(root_folder.entries.len(), 4);
 
-    let folder1 = root
-        .sub_folders
-        .iter()
-        .find(|node| node.folder.name == "folder1")
-        .unwrap();
-    assert_eq!(folder1.folder.name, "folder1");
-    assert_eq!(
-        &folder1.folder.id,
-        root.folder
-            .sub_folders
-            .get(&OsString::from("folder1"))
-            .unwrap()
-    );
-    assert_eq!(folder1.folder.parent_id, root.folder.id);
-    assert_eq!(folder1.folder.path, Path::new("folder1"));
-    assert_eq!(folder1.folder.sub_folders.len(), 2);
-    assert_eq!(folder1.folder.entries.len(), 1);
+    let folder1 = &folders[&root_folder.sub_folders[OsStr::new("folder1")]];
+    assert_eq!(folder1.name, "folder1");
+    assert_eq!(folder1.parent_id, root_folder.id);
+    assert_eq!(folder1.path, Path::new("folder1"));
+    assert_eq!(folder1.sub_folders.len(), 2);
+    assert_eq!(folder1.entries.len(), 1);
 
-    let folder1_1 = folder1
-        .sub_folders
-        .iter()
-        .find(|node| node.folder.name == "folder1-1")
-        .unwrap();
-    assert_eq!(folder1_1.folder.name, "folder1-1");
-    assert_eq!(
-        &folder1_1.folder.id,
-        folder1
-            .folder
-            .sub_folders
-            .get(&OsString::from("folder1-1"))
-            .unwrap()
-    );
-    assert_eq!(folder1_1.folder.parent_id, folder1.folder.id);
-    assert_eq!(folder1_1.folder.path, Path::new("folder1/folder1-1"));
-    assert_eq!(folder1_1.folder.sub_folders.len(), 0);
-    assert_eq!(folder1_1.folder.entries.len(), 1);
+    let folder1_1 = &folders[&folder1.sub_folders[OsStr::new("folder1-1")]];
+    assert_eq!(folder1_1.name, "folder1-1");
+    assert_eq!(folder1_1.parent_id, folder1.id);
+    assert_eq!(folder1_1.path, Path::new("folder1/folder1-1"));
+    assert_eq!(folder1_1.sub_folders.len(), 0);
+    assert_eq!(folder1_1.entries.len(), 1);
 
-    let folder1_2 = folder1
-        .sub_folders
-        .iter()
-        .find(|node| node.folder.name == "folder1-2")
-        .unwrap();
-    assert_eq!(folder1_2.folder.name, "folder1-2");
-    assert_eq!(
-        &folder1_2.folder.id,
-        folder1
-            .folder
-            .sub_folders
-            .get(&OsString::from("folder1-2"))
-            .unwrap()
-    );
-    assert_eq!(folder1_2.folder.parent_id, folder1.folder.id);
-    assert_eq!(folder1_2.folder.path, Path::new("folder1/folder1-2"));
-    assert_eq!(folder1_2.folder.sub_folders.len(), 0);
-    assert_eq!(folder1_2.folder.entries.len(), 1);
+    let folder1_2 = &folders[&folder1.sub_folders[OsStr::new("folder1-2")]];
+    assert_eq!(folder1_2.name, "folder1-2");
+    assert_eq!(folder1_2.parent_id, folder1.id);
+    assert_eq!(folder1_2.path, Path::new("folder1/folder1-2"));
+    assert_eq!(folder1_2.sub_folders.len(), 0);
+    assert_eq!(folder1_2.entries.len(), 1);
 
-    let folder2 = root
-        .sub_folders
-        .iter()
-        .find(|node| node.folder.name == "folder2")
-        .unwrap();
-    assert_eq!(folder2.folder.name, "folder2");
-    assert_eq!(
-        &folder2.folder.id,
-        root.folder
-            .sub_folders
-            .get(&OsString::from("folder2"))
-            .unwrap()
-    );
-    assert_eq!(folder2.folder.parent_id, root.folder.id);
-    assert_eq!(folder2.folder.path, Path::new("folder2"));
-    assert_eq!(folder2.folder.sub_folders.len(), 0);
-    assert_eq!(folder2.folder.entries.len(), 1);
+    let folder2 = &folders[&root_folder.sub_folders[OsStr::new("folder2")]];
+    assert_eq!(folder2.name, "folder2");
+    assert_eq!(folder2.parent_id, root_folder.id);
+    assert_eq!(folder2.path, Path::new("folder2"));
+    assert_eq!(folder2.sub_folders.len(), 0);
+    assert_eq!(folder2.entries.len(), 1);
 }
 
 #[test]
@@ -242,20 +196,19 @@ fn test_new_tag() {
     }
 
     let tags = data.get_tags();
-    assert_eq!(tags.len(), TAGS_NUM);
-    for (i, tag) in tags.iter().enumerate() {
-        assert_eq!(tag.children.len(), 0);
-        assert_eq!(&tag.tag.name, &format!("tag{i}"));
-        assert_eq!(tag.tag.color, 0);
-        assert_eq!(tag.tag.parent_id, ROOT_TAG_ID);
-        assert_eq!(tag.tag.children.len(), 0);
-        assert_eq!(tag.tag.position, i32::try_from(i).unwrap());
+    assert_eq!(tags[&ROOT_TAG_ID].children, tag_ids.into());
+    for i in 0..TAGS_NUM {
+        let tag_i = &tags[&tag_ids[i]];
+        assert_eq!(tag_i.name, format!("tag{i}"));
+        assert_eq!(tag_i.color, 0);
+        assert_eq!(tag_i.parent_id, ROOT_TAG_ID);
+        assert_eq!(tag_i.children.len(), 0);
+        assert_eq!(tag_i.position, i32::try_from(i).unwrap());
     }
 
     for i in 0..TAGS_NUM {
-        let tag_name = format!("tag{i}");
         assert_err!(
-            data.new_tag(tag_name.clone(), &db),
+            data.new_tag(format!("tag{i}"), &db),
             Err(Error::TagAlreadyExists(..))
         );
     }
@@ -279,9 +232,13 @@ fn test_set_tag_color() {
     }
 
     let tags = data.get_tags();
+    let tags = tags[&ROOT_TAG_ID]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id]);
     let mut actual_tag_id_to_color = HashMap::with_capacity(TAGS_NUM);
     for tag in tags {
-        actual_tag_id_to_color.insert(tag.tag.id, tag.tag.color);
+        actual_tag_id_to_color.insert(tag.id, tag.color);
     }
 
     assert_eq!(actual_tag_id_to_color, expected_tag_id_to_color);
@@ -308,19 +265,25 @@ fn test_reorder_tag_reparent() {
 
         let tags = data.get_tags();
 
-        assert_eq!(tags.len(), TAGS_NUM - i);
-        let tag_0 = &tags[0];
-        assert_eq!(tag_0.tag.id, tag_ids[0]);
-        assert_eq!(tag_0.children.len(), i);
+        assert_eq!(tags[&ROOT_TAG_ID].children.len(), TAGS_NUM - i);
+        let tag_0 = &tags[&tag_ids[0]];
+        assert_eq!(tag_0.id, tag_ids[0]);
         assert_eq!(
-            tag_0.tag.children,
+            tag_0.children,
             tag_ids[1..=i].iter().copied().collect::<HashSet<_>>()
         );
 
-        let tag_i = &tag_0.children[i - 1];
-        assert_eq!(tag_i.tag.id, tag_ids[i]);
-        assert_eq!(tag_i.tag.parent_id, tag_ids[0]);
-        assert_eq!(tag_i.tag.position, i32::try_from(i).unwrap() - 1);
+        let child_tags = &mut tag_0
+            .children
+            .iter()
+            .map(|tag_id| &tags[tag_id])
+            .collect::<Vec<_>>();
+        child_tags.sort_unstable_by_key(|tag| tag.position);
+
+        let tag_i = &child_tags[i - 1];
+        assert_eq!(tag_i.id, tag_ids[i]);
+        assert_eq!(tag_i.parent_id, tag_ids[0]);
+        assert_eq!(tag_i.position, i32::try_from(i).unwrap() - 1);
     }
 }
 
@@ -347,9 +310,15 @@ fn test_reorder_tag_same_parent() {
             .unwrap();
     }
     let tags = data.get_tags();
-    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    let mut child_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child_tags.sort_unstable_by_key(|tag| tag.position);
+    let child_ids = child_tags.iter().map(|tag| tag.id);
     assert!(child_ids.eq([1, 2, 3, 4, 5, 6, 7, 8, 9].map(|i| tag_ids[i])));
-    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    let child_positions = child_tags.iter().map(|tag| tag.position);
     assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
 
     // Reorder children of tag 0
@@ -362,9 +331,15 @@ fn test_reorder_tag_same_parent() {
     data.reorder_tag(tag_ids[1], tag_ids[0], 8, &mut db)
         .unwrap();
     let tags = data.get_tags();
-    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
-    assert!(child_ids.eq([2, 3, 4, 5, 6, 7, 8, 9, 1].map(|i| tag_ids[i])));
-    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    let mut child_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child_tags.sort_unstable_by_key(|tag| tag.position);
+    let child_ids = child_tags.iter().map(|tag| tag.id).collect::<Vec<_>>();
+    assert_eq!(child_ids, [2, 3, 4, 5, 6, 7, 8, 9, 1].map(|i| tag_ids[i]));
+    let child_positions = child_tags.iter().map(|tag| tag.position);
     assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
 
     // Move to the front
@@ -375,9 +350,15 @@ fn test_reorder_tag_same_parent() {
     data.reorder_tag(tag_ids[1], tag_ids[0], 0, &mut db)
         .unwrap();
     let tags = data.get_tags();
-    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
-    assert!(child_ids.eq([1, 2, 3, 4, 5, 6, 7, 8, 9].map(|i| tag_ids[i])));
-    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    let mut child_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child_tags.sort_unstable_by_key(|tag| tag.position);
+    let child_ids = child_tags.iter().map(|tag| tag.id).collect::<Vec<_>>();
+    assert_eq!(child_ids, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(|i| tag_ids[i]));
+    let child_positions = child_tags.iter().map(|tag| tag.position);
     assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
 
     // Move to the middle
@@ -388,9 +369,15 @@ fn test_reorder_tag_same_parent() {
     data.reorder_tag(tag_ids[7], tag_ids[0], 2, &mut db)
         .unwrap();
     let tags = data.get_tags();
-    let child_ids = tags[0].children.iter().map(|tag| tag.tag.id);
-    assert!(child_ids.eq([1, 2, 7, 3, 4, 5, 6, 8, 9].map(|i| tag_ids[i])));
-    let child_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    let mut child_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child_tags.sort_unstable_by_key(|tag| tag.position);
+    let child_ids = child_tags.iter().map(|tag| tag.id).collect::<Vec<_>>();
+    assert_eq!(child_ids, [1, 2, 7, 3, 4, 5, 6, 8, 9].map(|i| tag_ids[i]));
+    let child_positions = child_tags.iter().map(|tag| tag.position);
     assert!(child_positions.eq([0, 1, 2, 3, 4, 5, 6, 7, 8]));
 }
 
@@ -422,13 +409,25 @@ fn test_reorder_tag_across_parents() {
             .unwrap();
     }
     let tags = data.get_tags();
-    let child0_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    let mut child0_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child0_tags.sort_unstable_by_key(|tag| tag.position);
+    let child0_ids = child0_tags.iter().map(|tag| tag.id);
     assert!(child0_ids.eq([2, 3, 4, 5].map(|i| tag_ids[i])));
-    let child0_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    let child0_positions = child0_tags.iter().map(|tag| tag.position);
     assert!(child0_positions.eq([0, 1, 2, 3]));
-    let child1_ids = tags[1].children.iter().map(|tag| tag.tag.id);
+    let mut child1_tags = tags[&tag_ids[1]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child1_tags.sort_unstable_by_key(|tag| tag.position);
+    let child1_ids = child1_tags.iter().map(|tag| tag.id);
     assert!(child1_ids.eq([6, 7, 8, 9].map(|i| tag_ids[i])));
-    let child1_positions = tags[1].children.iter().map(|tag| tag.tag.position);
+    let child1_positions = child1_tags.iter().map(|tag| tag.position);
     assert!(child1_positions.eq([0, 1, 2, 3]));
 
     // Move tag 4 to tag 1 at position 1
@@ -438,13 +437,25 @@ fn test_reorder_tag_across_parents() {
     data.reorder_tag(tag_ids[4], tag_ids[1], 1, &mut db)
         .unwrap();
     let tags = data.get_tags();
-    let child0_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    let mut child0_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child0_tags.sort_unstable_by_key(|tag| tag.position);
+    let child0_ids = child0_tags.iter().map(|tag| tag.id);
     assert!(child0_ids.eq([2, 3, 5].map(|i| tag_ids[i])));
-    let child0_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    let child0_positions = child0_tags.iter().map(|tag| tag.position);
     assert!(child0_positions.eq([0, 1, 2]));
-    let child1_ids = tags[1].children.iter().map(|tag| tag.tag.id);
+    let mut child1_tags = tags[&tag_ids[1]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child1_tags.sort_unstable_by_key(|tag| tag.position);
+    let child1_ids = child1_tags.iter().map(|tag| tag.id);
     assert!(child1_ids.eq([6, 4, 7, 8, 9].map(|i| tag_ids[i])));
-    let child1_positions = tags[1].children.iter().map(|tag| tag.tag.position);
+    let child1_positions = child1_tags.iter().map(|tag| tag.position);
     assert!(child1_positions.eq([0, 1, 2, 3, 4]));
 
     // Move tag 8 to tag 0 at position 1
@@ -454,13 +465,25 @@ fn test_reorder_tag_across_parents() {
     data.reorder_tag(tag_ids[8], tag_ids[0], 1, &mut db)
         .unwrap();
     let tags = data.get_tags();
-    let child0_ids = tags[0].children.iter().map(|tag| tag.tag.id);
+    let mut child0_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child0_tags.sort_unstable_by_key(|tag| tag.position);
+    let child0_ids = child0_tags.iter().map(|tag| tag.id);
     assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
-    let child0_positions = tags[0].children.iter().map(|tag| tag.tag.position);
+    let child0_positions = child0_tags.iter().map(|tag| tag.position);
     assert!(child0_positions.eq([0, 1, 2, 3]));
-    let child1_ids = tags[1].children.iter().map(|tag| tag.tag.id);
+    let mut child1_tags = tags[&tag_ids[1]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child1_tags.sort_unstable_by_key(|tag| tag.position);
+    let child1_ids = child1_tags.iter().map(|tag| tag.id);
     assert!(child1_ids.eq([6, 4, 7, 9].map(|i| tag_ids[i])));
-    let child1_positions = tags[1].children.iter().map(|tag| tag.tag.position);
+    let child1_positions = child1_tags.iter().map(|tag| tag.position);
     assert!(child1_positions.eq([0, 1, 2, 3]));
 
     // Move tag 0 to tag 1 at position 2
@@ -472,15 +495,25 @@ fn test_reorder_tag_across_parents() {
     data.reorder_tag(tag_ids[0], tag_ids[1], 2, &mut db)
         .unwrap();
     let tags = data.get_tags();
-    let tag_1 = &tags[0];
-    let child1_ids = tag_1.children.iter().map(|tag| tag.tag.id);
+    let mut child1_tags = tags[&tag_ids[1]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child1_tags.sort_unstable_by_key(|tag| tag.position);
+    let child1_ids = child1_tags.iter().map(|tag| tag.id);
     assert!(child1_ids.eq([6, 4, 0, 7, 9].map(|i| tag_ids[i])));
-    let child1_positions = tag_1.children.iter().map(|tag| tag.tag.position);
+    let child1_positions = child1_tags.iter().map(|tag| tag.position);
     assert!(child1_positions.eq([0, 1, 2, 3, 4]));
-    let tag_0 = &tags[0].children[2];
-    let child0_ids = tag_0.children.iter().map(|tag| tag.tag.id);
+    let mut child0_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child0_tags.sort_unstable_by_key(|tag| tag.position);
+    let child0_ids = child0_tags.iter().map(|tag| tag.id);
     assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
-    let child0_positions = tag_0.children.iter().map(|tag| tag.tag.position);
+    let child0_positions = child0_tags.iter().map(|tag| tag.position);
     assert!(child0_positions.eq([0, 1, 2, 3]));
 }
 
@@ -536,15 +569,25 @@ fn test_read_tags() {
         data.reorder_tag(tag_ids[0], tag_ids[1], 2, &mut db)
             .unwrap();
         let tags = data.get_tags();
-        let tag_1 = &tags[0];
-        let child1_ids = tag_1.children.iter().map(|tag| tag.tag.id);
+        let mut child1_tags = tags[&tag_ids[1]]
+            .children
+            .iter()
+            .map(|tag_id| &tags[tag_id])
+            .collect::<Vec<_>>();
+        child1_tags.sort_unstable_by_key(|tag| tag.position);
+        let child1_ids = child1_tags.iter().map(|tag| tag.id);
         assert!(child1_ids.eq([6, 4, 0, 7, 9].map(|i| tag_ids[i])));
-        let child1_positions = tag_1.children.iter().map(|tag| tag.tag.position);
+        let child1_positions = child1_tags.iter().map(|tag| tag.position);
         assert!(child1_positions.eq([0, 1, 2, 3, 4]));
-        let tag_0 = &tags[0].children[2];
-        let child0_ids = tag_0.children.iter().map(|tag| tag.tag.id);
+        let mut child0_tags = tags[&tag_ids[0]]
+            .children
+            .iter()
+            .map(|tag_id| &tags[tag_id])
+            .collect::<Vec<_>>();
+        child0_tags.sort_unstable_by_key(|tag| tag.position);
+        let child0_ids = child0_tags.iter().map(|tag| tag.id);
         assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
-        let child0_positions = tag_0.children.iter().map(|tag| tag.tag.position);
+        let child0_positions = child0_tags.iter().map(|tag| tag.position);
         assert!(child0_positions.eq([0, 1, 2, 3]));
     }
     drop(database);
@@ -552,15 +595,25 @@ fn test_read_tags() {
     let database = Database::open(_base_path, Arc::new(TestEmitter::new())).unwrap();
     let data = database.data.read().unwrap();
     let tags = data.get_tags();
-    let tag_1 = &tags[0];
-    let child1_ids = tag_1.children.iter().map(|tag| tag.tag.id);
+    let mut child1_tags = tags[&tag_ids[1]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child1_tags.sort_unstable_by_key(|tag| tag.position);
+    let child1_ids = child1_tags.iter().map(|tag| tag.id);
     assert!(child1_ids.eq([6, 4, 0, 7, 9].map(|i| tag_ids[i])));
-    let child1_positions = tag_1.children.iter().map(|tag| tag.tag.position);
+    let child1_positions = child1_tags.iter().map(|tag| tag.position);
     assert!(child1_positions.eq([0, 1, 2, 3, 4]));
-    let tag_0 = &tags[0].children[2];
-    let child0_ids = tag_0.children.iter().map(|tag| tag.tag.id);
+    let mut child0_tags = tags[&tag_ids[0]]
+        .children
+        .iter()
+        .map(|tag_id| &tags[tag_id])
+        .collect::<Vec<_>>();
+    child0_tags.sort_unstable_by_key(|tag| tag.position);
+    let child0_ids = child0_tags.iter().map(|tag| tag.id);
     assert!(child0_ids.eq([2, 8, 3, 5].map(|i| tag_ids[i])));
-    let child0_positions = tag_0.children.iter().map(|tag| tag.tag.position);
+    let child0_positions = child0_tags.iter().map(|tag| tag.position);
     assert!(child0_positions.eq([0, 1, 2, 3]));
 }
 
@@ -585,14 +638,11 @@ fn test_rename_tag() {
 
         // Tag 1 should now have the new name
         let tags = data.get_tags();
-        let tag_1 = tags.iter().find(|tag| tag.tag.id == tag_ids[1]).unwrap();
-        assert_eq!(tag_1.tag.name, "renamed_tag");
+        assert_eq!(tags[&tag_ids[1]].name, "renamed_tag");
 
         // Other tags should remain unchanged
-        let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
-        assert_eq!(tag_0.tag.name, format!("tag0"));
-        let tag_2 = tags.iter().find(|tag| tag.tag.id == tag_ids[2]).unwrap();
-        assert_eq!(tag_2.tag.name, format!("tag2"));
+        assert_eq!(tags[&tag_ids[0]].name, "tag0");
+        assert_eq!(tags[&tag_ids[2]].name, "tag2");
 
         // Rename to an existing tag name should fail
         assert_err!(
@@ -609,14 +659,11 @@ fn test_rename_tag() {
 
     // Tag 1 should now have the new name
     let tags = data.get_tags();
-    let tag_1 = tags.iter().find(|tag| tag.tag.id == tag_ids[1]).unwrap();
-    assert_eq!(tag_1.tag.name, "renamed_tag");
+    assert_eq!(tags[&tag_ids[1]].name, "renamed_tag");
 
     // Other tags should remain unchanged
-    let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
-    assert_eq!(tag_0.tag.name, format!("tag0"));
-    let tag_2 = tags.iter().find(|tag| tag.tag.id == tag_ids[2]).unwrap();
-    assert_eq!(tag_2.tag.name, format!("tag2"));
+    assert_eq!(tags[&tag_ids[0]].name, "tag0");
+    assert_eq!(tags[&tag_ids[2]].name, "tag2");
 
     // Rename to an existing tag name should fail
     assert_err!(
@@ -661,26 +708,13 @@ fn test_delete_tag() {
 
         // Tag 1 should be removed
         let tags = data.get_tags();
-        assert_eq!(tags.len(), 2);
-
-        let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
-        assert_eq!(tag_0.tag.children, [tag_ids[3]].into());
-        assert_eq!(tag_0.children.len(), 1);
+        assert_eq!(tags[&ROOT_TAG_ID].children, [tag_ids[0], tag_ids[4]].into());
+        assert_eq!(tags[&tag_ids[0]].children, [tag_ids[3]].into());
 
         // Other tags should remain unchanged
-        let tag_3 = &tag_0.children[0];
-        assert_eq!(tag_3.tag.id, tag_ids[3]);
-        assert_eq!(tag_3.tag.children.len(), 0);
-        assert_eq!(tag_3.children.len(), 0);
-
-        let tag_4 = tags.iter().find(|tag| tag.tag.id == tag_ids[4]).unwrap();
-        assert_eq!(tag_4.tag.children, [tag_ids[5]].into());
-        assert_eq!(tag_4.children.len(), 1);
-
-        let tag_5 = &tag_4.children[0];
-        assert_eq!(tag_5.tag.id, tag_ids[5]);
-        assert_eq!(tag_5.tag.children.len(), 0);
-        assert_eq!(tag_5.children.len(), 0);
+        assert_eq!(tags[&tag_ids[3]].children.len(), 0);
+        assert_eq!(tags[&tag_ids[4]].children, [tag_ids[5]].into());
+        assert_eq!(tags[&tag_ids[5]].children.len(), 0);
     }
     drop(database);
 
@@ -690,24 +724,11 @@ fn test_delete_tag() {
 
     // Tag 1 should be removed
     let tags = data.get_tags();
-    assert_eq!(tags.len(), 2);
-
-    let tag_0 = tags.iter().find(|tag| tag.tag.id == tag_ids[0]).unwrap();
-    assert_eq!(tag_0.tag.children, [tag_ids[3]].into());
-    assert_eq!(tag_0.children.len(), 1);
+    assert_eq!(tags[&ROOT_TAG_ID].children, [tag_ids[0], tag_ids[4]].into());
+    assert_eq!(tags[&tag_ids[0]].children, [tag_ids[3]].into());
 
     // Other tags should remain unchanged
-    let tag_3 = &tag_0.children[0];
-    assert_eq!(tag_3.tag.id, tag_ids[3]);
-    assert_eq!(tag_3.tag.children.len(), 0);
-    assert_eq!(tag_3.children.len(), 0);
-
-    let tag_4 = tags.iter().find(|tag| tag.tag.id == tag_ids[4]).unwrap();
-    assert_eq!(tag_4.tag.children, [tag_ids[5]].into());
-    assert_eq!(tag_4.children.len(), 1);
-
-    let tag_5 = &tag_4.children[0];
-    assert_eq!(tag_5.tag.id, tag_ids[5]);
-    assert_eq!(tag_5.tag.children.len(), 0);
-    assert_eq!(tag_5.children.len(), 0);
+    assert_eq!(tags[&tag_ids[3]].children.len(), 0);
+    assert_eq!(tags[&tag_ids[4]].children, [tag_ids[5]].into());
+    assert_eq!(tags[&tag_ids[5]].children.len(), 0);
 }
