@@ -28,5 +28,7 @@ export type DropTargetData =
 export type Filter = {
   search: string;
   tags: Tag[];
+  includeChildTags: boolean;
   folder: Folder | null;
+  includeSubfolders: boolean;
 };

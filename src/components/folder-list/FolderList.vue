@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -33,15 +33,13 @@ onUnmounted(() => {
 
 const selectedFolder = ref<Folder | null>(null);
 
-function selectFolder(folder: Folder) {
-  if (selectedFolder.value === folder) {
-    selectedFolder.value = null;
+watch(selectedFolder, (newFolder) => {
+  if (newFolder) {
+    filter.value.folder = newFolder;
+  } else {
     filter.value.folder = null;
-    return;
   }
-  selectedFolder.value = folder;
-  filter.value.folder = folder;
-}
+});
 
 function moveEntryToFolder(entry: Entry, folder: Folder, force = false) {
   if (entry.folderId === folder.id) {
@@ -123,8 +121,7 @@ function registerDraggingMonitor() {
       <FolderItem
         v-if="folderTree"
         :folderNode="folderTree"
-        :selectedFolder="selectedFolder"
-        @select="selectFolder"
+        v-model:selectedFolder="selectedFolder"
       />
     </ul>
   </div>

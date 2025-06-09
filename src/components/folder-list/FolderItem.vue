@@ -9,28 +9,23 @@ import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element
 
 import DropIndicator from "@/components/dropindicator/DropIndicator.vue";
 
-import type { Folder, FolderNode } from "@/api";
-import type { DropTargetData } from "@/types";
+import type { Folder } from "@/api";
+import type { DropTargetData, FolderNode } from "@/types";
 
 const INDENT_PX = 14;
 
-const {
-  folderNode,
-  selectedFolder,
-  depth = 0,
-} = defineProps<{
+const { folderNode, depth = 0 } = defineProps<{
   folderNode: FolderNode;
-  selectedFolder?: Folder | null;
   depth?: number;
 }>();
+
+const selectedFolder = defineModel<Folder | null>("selectedFolder", {
+  default: null,
+});
 
 const nodeContent = useTemplateRef("nodeContent");
 
 const folder = computed(() => folderNode.folder);
-
-const emit = defineEmits<{
-  select: [folder: Folder];
-}>();
 
 onMounted(() => {
   registerDragAndDrop();
@@ -40,8 +35,12 @@ onUnmounted(() => {
   unregisterDragAndDrop();
 });
 
-function selectFolder(folder: Folder) {
-  emit("select", folder);
+function onClick(folder: Folder) {
+  if (selectedFolder.value !== folder) {
+    selectedFolder.value = folder;
+  } else {
+    selectedFolder.value = null;
+  }
 }
 
 // ========== Drag and Drop BEGIN ==========
@@ -101,7 +100,7 @@ function unregisterDragAndDrop() {
         paddingLeft: `calc(var(--p-button-padding-x) + ${depth * INDENT_PX}px)`,
       }"
       :label="folder.name"
-      @click.stop="selectFolder(folder)"
+      @click.stop="onClick(folder)"
       :dt="{
         label: {
           font: {
@@ -124,8 +123,7 @@ function unregisterDragAndDrop() {
     v-for="subFolder in folderNode.subFolders"
     :folderNode="subFolder"
     :depth="depth + 1"
-    :selectedFolder="selectedFolder"
-    @select="selectFolder"
+    v-model:selectedFolder="selectedFolder"
   />
 </template>
 

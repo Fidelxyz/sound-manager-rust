@@ -19,14 +19,15 @@ import FilterPanel from "./FilterPanel.vue";
 
 import type { Entry, FilterArg, Tag } from "@/api";
 import { api } from "@/api";
-import type { Filter } from "@/types";
+import type { Filter, FolderNode } from "@/types";
 import { info } from "@/utils/message";
 import { formatDuration } from "@/utils/utils";
 
 const confirm = useConfirm();
 
-const { entries, tags, tagTreeNodes } = defineProps<{
+const { entries, folderTree, tags, tagTreeNodes } = defineProps<{
   entries: Entry[];
+  folderTree: FolderNode | null;
   tags: Record<number, Tag>;
   tagTreeNodes: TreeNode[];
 }>();
@@ -73,7 +74,9 @@ function toFilterArg(filter: Filter): FilterArg {
   return {
     search: filter.search,
     tagIds: filter.tags.map((tag) => tag.id),
+    includeChildTags: filter.includeChildTags,
     folderId: filter.folder ? filter.folder.id : null,
+    includeSubfolders: filter.includeSubfolders,
   };
 }
 
@@ -149,6 +152,7 @@ function confirmDeleteEntry(entry: Entry) {
     <FilterPanel
       v-model="filter"
       :entries="entries"
+      :folderTree="folderTree"
       :tags="tags"
       :tagTreeNodes="tagTreeNodes"
     />

@@ -45,7 +45,9 @@ export type PlayerState = {
 export type FilterArg = {
   search: string;
   tagIds: number[];
+  includeChildTags: boolean;
   folderId: number | null;
+  includeSubfolders: boolean;
 };
 
 // ========== Migrator ==========

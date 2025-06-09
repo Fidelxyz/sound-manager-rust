@@ -33,7 +33,9 @@ const activeEntry = ref<Entry | null>(null);
 const filter = ref<Filter>({
   search: "",
   tags: [],
+  includeChildTags: true,
   folder: null,
+  includeSubfolders: true,
 });
 
 defineExpose({
@@ -203,6 +205,7 @@ listen("files_updated", onFilesChanged);
           <AudioList
             ref="audioList"
             :entries="entries"
+            :folderTree="folderTree"
             :tags="tags"
             :tagTreeNodes="tagTreeNodes"
             v-model:filter="filter"

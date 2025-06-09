@@ -57,25 +57,13 @@ const selectedTags = computed({
     return selectionKeys;
   },
   set: (selectionKeys: TreeSelectionKeys) => {
-    const selectedTags = Object.keys(selectionKeys).map(Number.parseInt);
+    const selectedTags = Object.keys(selectionKeys).map(
+      (tagId) => tags[Number.parseInt(tagId)],
+    );
     console.debug("Selected tags", selectedTags);
-
-    const filteredTags: Tag[] = [];
-    for (const selectedTag of selectedTags) {
-      filteredTags.push(...getTagDescendants(tags[selectedTag]));
-    }
-    console.debug("Filtered tags", filteredTags);
-    filter.value.tags = filteredTags;
+    filter.value.tags = selectedTags;
   },
 });
-
-function getTagDescendants(tag: Tag): Tag[] {
-  const descendants = tag.children.flatMap((childId) =>
-    getTagDescendants(tags[childId]),
-  );
-  descendants.push(tag);
-  return descendants;
-}
 
 const editingNewTag = ref(false);
 const editingTag = ref<Tag | null>(null);
