@@ -4,4 +4,3 @@
 - Testing
 - Clipboard
 - Mark new files
-- Debounce emitter

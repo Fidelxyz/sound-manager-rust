@@ -2,12 +2,15 @@ use super::{Database, DatabaseEmitter, Error, ROOT_FOLDER_ID, ROOT_TAG_ID};
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
-use std::fs::{create_dir, exists, remove_dir_all, File};
+use std::fs::{create_dir, exists, remove_dir_all, remove_file, rename, File};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
 
+use test_log::test;
 use testdir::testdir;
+
+const EMITTER_TIMEOUT: Duration = Duration::from_secs(2);
 
 macro_rules! assert_err {
     ( $expression:expr, $($pattern:tt)+ ) => {
@@ -19,26 +22,39 @@ macro_rules! assert_err {
 }
 
 struct TestEmitter {
-    files_updated: AtomicBool,
+    condvar: Condvar,
+    files_updated: Mutex<bool>,
 }
 
 impl TestEmitter {
     fn new() -> Self {
         Self {
-            files_updated: AtomicBool::new(false),
+            condvar: Condvar::new(),
+            files_updated: Mutex::new(false),
         }
     }
 
-    fn files_updated(&self) -> bool {
-        self.files_updated
-            .swap(false, std::sync::atomic::Ordering::AcqRel)
+    fn wait_for_files_updated(&self, timeout: Duration) -> bool {
+        let mut files_updated_guard = self.files_updated.lock().unwrap();
+        files_updated_guard = self
+            .condvar
+            .wait_timeout_while(files_updated_guard, timeout, |&mut files_updated| {
+                !files_updated
+            })
+            .unwrap()
+            .0;
+
+        let files_updated = *files_updated_guard;
+        *files_updated_guard = false;
+        files_updated
     }
 }
 
 impl DatabaseEmitter for TestEmitter {
     fn on_files_updated(&self, _immediate: bool) {
-        self.files_updated
-            .store(true, std::sync::atomic::Ordering::Release);
+        let mut files_updated = self.files_updated.lock().unwrap();
+        *files_updated = true;
+        self.condvar.notify_all();
     }
 }
 
@@ -53,7 +69,6 @@ fn setup_files(dir: &Path) -> PathBuf {
     // create directories
     create_dir(base_path.join("folder1")).unwrap();
     create_dir(base_path.join("folder2")).unwrap();
-
     create_dir(base_path.join("folder1/folder1-1")).unwrap();
     create_dir(base_path.join("folder1/folder1-2")).unwrap();
 
@@ -62,7 +77,6 @@ fn setup_files(dir: &Path) -> PathBuf {
     File::create(base_path.join("flac_audio_1.flac")).unwrap();
     File::create(base_path.join("mp3_audio_1.mp3")).unwrap();
     File::create(base_path.join("ogg_audio_1.ogg")).unwrap();
-
     File::create(base_path.join("folder1/wave_audio_2.wav")).unwrap();
     File::create(base_path.join("folder1/folder1-1/flac_audio_2.flac")).unwrap();
     File::create(base_path.join("folder1/folder1-2/mp3_audio_2.mp3")).unwrap();
@@ -102,7 +116,7 @@ fn test_refresh() {
 
     database.refresh().unwrap();
 
-    assert!(emitter.files_updated());
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
 }
 
 #[test]
@@ -731,4 +745,232 @@ fn test_delete_tag() {
     assert_eq!(tags[&tag_ids[3]].children.len(), 0);
     assert_eq!(tags[&tag_ids[4]].children, [tag_ids[5]].into());
     assert_eq!(tags[&tag_ids[5]].children.len(), 0);
+}
+
+#[test]
+fn test_file_watcher_create_single_file() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let new_file_path = PathBuf::from("new_mp3_audio.mp3");
+    File::create(base_path.join(&new_file_path)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 9); // 8 existing + 1 new files
+    let new_entry = &entries[&data.get_entry_id(&new_file_path).unwrap()];
+    assert_eq!(new_entry.path, new_file_path);
+    assert_eq!(new_entry.folder_id, ROOT_FOLDER_ID);
+}
+
+#[test]
+fn test_file_watcher_create_single_file_in_subfolder() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let new_file_path = PathBuf::from("folder1/new_flac_audio.flac");
+    File::create(base_path.join(&new_file_path)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 9); // 8 existing + 1 new files
+    let new_entry = &entries[&data.get_entry_id(&new_file_path).unwrap()];
+    assert_eq!(new_entry.path, new_file_path);
+    assert_eq!(
+        new_entry.folder_id,
+        data.get_folder_by_path(new_file_path.parent().unwrap())
+            .unwrap()
+            .id
+    );
+}
+
+#[test]
+fn test_file_watcher_create_multiple_files() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let new_file_path_1 = PathBuf::from("new_mp3_audio.mp3");
+    let new_file_path_2 = PathBuf::from("folder1/new_flac_audio.flac");
+    let new_file_path_3 = PathBuf::from("folder1/folder1-1/new_wave_audio.wav");
+    File::create(base_path.join(&new_file_path_1)).unwrap();
+    File::create(base_path.join(&new_file_path_2)).unwrap();
+    File::create(base_path.join(&new_file_path_3)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 11); // 8 existing + 3 new files
+
+    let new_entry_1 = &entries[&data.get_entry_id(&new_file_path_1).unwrap()];
+    assert_eq!(new_entry_1.path, new_file_path_1);
+    assert_eq!(new_entry_1.folder_id, ROOT_FOLDER_ID);
+
+    let new_entry_2 = &entries[&data.get_entry_id(&new_file_path_2).unwrap()];
+    assert_eq!(new_entry_2.path, new_file_path_2);
+    assert_eq!(
+        new_entry_2.folder_id,
+        data.get_folder_by_path(new_file_path_2.parent().unwrap())
+            .unwrap()
+            .id
+    );
+
+    let new_entry_3 = &entries[&data.get_entry_id(&new_file_path_3).unwrap()];
+    assert_eq!(new_entry_3.path, new_file_path_3);
+    assert_eq!(
+        new_entry_3.folder_id,
+        data.get_folder_by_path(new_file_path_3.parent().unwrap())
+            .unwrap()
+            .id
+    );
+}
+
+#[test]
+fn test_file_watcher_delete_single_file() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_path = PathBuf::from("wave_audio_1.wav");
+    remove_file(base_path.join(&file_path)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 7); // 8 existing files - 1 deleted file
+    assert!(data.get_entry_id(&file_path).is_none());
+}
+
+#[test]
+fn test_file_watcher_delete_single_file_in_subfolder() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_path = PathBuf::from("folder1/folder1-1/flac_audio_2.flac");
+    remove_file(base_path.join(&file_path)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 7); // 8 existing files - 1 deleted file
+    assert!(data.get_entry_id(&file_path).is_none());
+}
+
+#[test]
+fn test_file_watcher_delete_multiple_files() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_path_1 = PathBuf::from("wave_audio_1.wav");
+    let file_path_2 = PathBuf::from("folder1/wave_audio_2.wav");
+    let file_path_3 = PathBuf::from("folder1/folder1-2/mp3_audio_2.mp3");
+    remove_file(base_path.join(&file_path_1)).unwrap();
+    remove_file(base_path.join(&file_path_2)).unwrap();
+    remove_file(base_path.join(&file_path_3)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 5); // 8 existing files - 3 deleted files
+    assert!(data.get_entry_id(&file_path_1).is_none());
+    assert!(data.get_entry_id(&file_path_2).is_none());
+    assert!(data.get_entry_id(&file_path_3).is_none());
+}
+
+#[ignore]
+#[test]
+fn test_file_watcher_move_single_file() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let old_file_path = PathBuf::from("mp3_audio_1.mp3");
+    let new_file_path = PathBuf::from("folder1/folder1-1/mp3_audio_1.mp3");
+    rename(
+        base_path.join(&old_file_path),
+        base_path.join(&new_file_path),
+    )
+    .unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 8); // 8 existing files
+    let moved_entry = &entries[&data.get_entry_id(&new_file_path).unwrap()];
+    assert_eq!(moved_entry.path, new_file_path);
+    assert_eq!(
+        moved_entry.folder_id,
+        data.get_folder_by_path(new_file_path.parent().unwrap())
+            .unwrap()
+            .id
+    );
+}
+
+#[ignore]
+#[test]
+fn test_file_watcher_move_multiple_files() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let old_file_path_1 = PathBuf::from("mp3_audio_1.mp3");
+    let new_file_path_1 = PathBuf::from("folder1/folder1-1/mp3_audio_1.mp3");
+    let old_file_path_2 = PathBuf::from("flac_audio_1.flac");
+    let new_file_path_2 = PathBuf::from("folder1/flac_audio_1.flac");
+    let old_file_path_3 = PathBuf::from("folder1/folder1-2/mp3_audio_2.mp3");
+    let new_file_path_3 = PathBuf::from("mp3_audio_2.mp3");
+
+    rename(
+        base_path.join(&old_file_path_1),
+        base_path.join(&new_file_path_1),
+    )
+    .unwrap();
+    rename(
+        base_path.join(&old_file_path_2),
+        base_path.join(&new_file_path_2),
+    )
+    .unwrap();
+    rename(
+        base_path.join(&old_file_path_3),
+        base_path.join(&new_file_path_3),
+    )
+    .unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 8); // 8 existing files
+
+    let moved_entry_1 = &entries[&data.get_entry_id(&new_file_path_1).unwrap()];
+    assert_eq!(moved_entry_1.path, new_file_path_1);
+    assert_eq!(
+        moved_entry_1.folder_id,
+        data.get_folder_by_path(new_file_path_1.parent().unwrap())
+            .unwrap()
+            .id
+    );
+
+    let moved_entry_2 = &entries[&data.get_entry_id(&new_file_path_2).unwrap()];
+    assert_eq!(moved_entry_2.path, new_file_path_2);
+    assert_eq!(
+        moved_entry_2.folder_id,
+        data.get_folder_by_path(new_file_path_2.parent().unwrap())
+            .unwrap()
+            .id
+    );
+
+    let moved_entry_3 = &entries[&data.get_entry_id(&new_file_path_3).unwrap()];
+    assert_eq!(moved_entry_3.path, new_file_path_3);
+    assert_eq!(
+        moved_entry_3.folder_id,
+        data.get_folder_by_path(new_file_path_3.parent().unwrap())
+            .unwrap()
+            .id
+    );
 }

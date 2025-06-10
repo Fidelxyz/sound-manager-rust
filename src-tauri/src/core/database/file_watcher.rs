@@ -191,6 +191,10 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
         Modify(ModifyKind::Name(RenameMode::Any)) => {
             // move in or move out of the watching folder will trigger this event
             let path = &event.paths[0];
+            if is_hidden_file(path) {
+                return Ok(false);
+            }
+
             debug!("File or folder moved: {event:?}");
             file_or_folder_updated(path.as_path(), database)?;
             Ok(true)
@@ -198,13 +202,12 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
 
         Modify(_) => {
             let path = &event.paths[0];
-
-            if !path.is_file() || is_hidden_file(path) || !is_audio_file(path) {
+            if is_hidden_file(path) {
                 return Ok(false);
             }
 
-            debug!("File modified: {event:?}");
-            file_created(path.as_path(), database)?;
+            debug!("File or folder modified: {event:?}");
+            file_or_folder_updated(path.as_path(), database)?;
             Ok(true)
         }
 
