@@ -43,19 +43,11 @@ defineExpose({
 const dataTable = useTemplateRef("dataTable");
 
 function selectPrev() {
-  if (activeEntry.value) {
-    dataTable.value?.selectPrevRow();
-  } else {
-    dataTable.value?.selectRow(undefined, 0);
-  }
+  dataTable.value?.selectPrevRow();
 }
 
 function selectNext() {
-  if (activeEntry.value) {
-    dataTable.value?.selectNextRow();
-  } else {
-    dataTable.value?.selectRow(undefined, 0);
-  }
+  dataTable.value?.selectNextRow();
 }
 
 function onEntrySelected(event: DataTableRowSelectEvent) {

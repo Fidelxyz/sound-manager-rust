@@ -196,6 +196,7 @@ onKeyStroke("s", () => {
       icon="pi pi-file-export"
       @click="spot"
       :disabled="!entry"
+      class="whitespace-nowrap"
     />
     <Button
       icon="pi pi-cog"

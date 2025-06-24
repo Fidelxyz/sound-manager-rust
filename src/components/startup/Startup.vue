@@ -94,8 +94,8 @@ async function createDatabase(path?: string) {
     });
 }
 
-function onDatabaseExists(path: string) {
-  const folder_name = basename(path);
+async function onDatabaseExists(path: string) {
+  const folder_name = await basename(path);
   confirm.require({
     header: "数据库已存在",
     message: `是否打开数据库 ${folder_name} ？`,

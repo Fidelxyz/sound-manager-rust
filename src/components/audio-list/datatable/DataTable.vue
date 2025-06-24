@@ -543,7 +543,7 @@ export default defineComponent({
     "row-edit-save",
     "row-edit-cancel",
   ],
-  expose: ["selectRow", "selectPrevRow", "selectNextRow"],
+  expose: ["selectPrevRow", "selectNextRow"],
   provide() {
     return {
       $columns: this.d_columns,
@@ -1230,19 +1230,17 @@ export default defineComponent({
 
       nextRow && this.focusRowChange(row, nextRow);
 
-      /*
-      if (event.shiftKey) {
-        const data = this.dataToRender(slotProps.rows);
-        const nextRowIndex =
-          rowIndex + 1 >= data.length ? data.length - 1 : rowIndex + 1;
+      // if (event.shiftKey) {
+      const data = this.dataToRender(slotProps.rows);
+      const nextRowIndex =
+        rowIndex + 1 >= data.length ? data.length - 1 : rowIndex + 1;
 
-        this.onRowClick({
-          originalEvent: event,
-          data: data[nextRowIndex],
-          index: nextRowIndex,
-        });
-      }
-      */
+      this.onRowClick({
+        originalEvent: event,
+        data: data[nextRowIndex],
+        index: nextRowIndex,
+      });
+      // }
 
       event.preventDefault();
     },
@@ -1251,18 +1249,16 @@ export default defineComponent({
 
       prevRow && this.focusRowChange(row, prevRow);
 
-      /*
-      if (event.shiftKey) {
-        const data = this.dataToRender(slotProps.rows);
-        const prevRowIndex = rowIndex - 1 <= 0 ? 0 : rowIndex - 1;
+      // if (event.shiftKey) {
+      const data = this.dataToRender(slotProps.rows);
+      const prevRowIndex = rowIndex - 1 <= 0 ? 0 : rowIndex - 1;
 
-        this.onRowClick({
-          originalEvent: event,
-          data: data[prevRowIndex],
-          index: prevRowIndex,
-        });
-      }
-      */
+      this.onRowClick({
+        originalEvent: event,
+        data: data[prevRowIndex],
+        index: prevRowIndex,
+      });
+      // }
 
       event.preventDefault();
     },
@@ -2702,56 +2698,58 @@ export default defineComponent({
         focusedItem.tabIndex = "-1";
       }
     },
-    selectRow(event, index) {
+    selectPrevRow(event) {
       const data = this.dataToRender();
       if (!data || data.length === 0) return;
 
-      if (index < 0 || index >= data.length) return;
+      let prevRowIndex;
+      if (this.selection) {
+        const selection = Array.isArray(this.selection)
+          ? this.selection[this.selection.length - 1]
+          : this.selection;
+        const rowIndex = this.findIndex(this.selection, data);
+
+        if (rowIndex !== -1) {
+          prevRowIndex = rowIndex - 1 <= 0 ? 0 : rowIndex - 1;
+        } else {
+          prevRowIndex = 0;
+        }
+      } else {
+        prevRowIndex = 0;
+      }
 
       this.onRowSelected({
         originalEvent: event,
-        data: data[index],
-        index: index,
+        data: data[prevRowIndex],
+        index: prevRowIndex,
       });
     },
-    selectPrevRow(event) {
-      if (this.selection) {
-        const data = this.dataToRender();
-        if (!data || data.length === 0) return;
-
-        const selection = Array.isArray(this.selection)
-          ? this.selection[this.selection.length - 1]
-          : this.selection;
-        const rowIndex = this.findIndex(this.selection, data);
-
-        const prevRowIndex = rowIndex - 1 <= 0 ? 0 : rowIndex - 1;
-
-        this.onRowSelected({
-          originalEvent: event,
-          data: data[prevRowIndex],
-          index: prevRowIndex,
-        });
-      }
-    },
     selectNextRow(event) {
-      if (this.selection) {
-        const data = this.dataToRender();
-        if (!data || data.length === 0) return;
+      const data = this.dataToRender();
+      if (!data || data.length === 0) return;
 
+      let nextRowIndex;
+      if (this.selection) {
         const selection = Array.isArray(this.selection)
           ? this.selection[this.selection.length - 1]
           : this.selection;
         const rowIndex = this.findIndex(this.selection, data);
 
-        const nextRowIndex =
-          rowIndex + 1 >= data.length ? data.length - 1 : rowIndex + 1;
-
-        this.onRowSelected({
-          originalEvent: event,
-          data: data[nextRowIndex],
-          index: nextRowIndex,
-        });
+        if (rowIndex !== -1) {
+          nextRowIndex =
+            rowIndex + 1 >= data.length ? data.length - 1 : rowIndex + 1;
+        } else {
+          nextRowIndex = 0;
+        }
+      } else {
+        nextRowIndex = 0;
       }
+
+      this.onRowSelected({
+        originalEvent: event,
+        data: data[nextRowIndex],
+        index: nextRowIndex,
+      });
     },
   },
   computed: {
