@@ -46,6 +46,7 @@ export type FilterArg = {
   search: string;
   tagIds: number[];
   includeChildTags: boolean;
+  noTags: boolean;
   folderId: number | null;
   includeSubfolders: boolean;
 };

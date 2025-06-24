@@ -67,6 +67,7 @@ function toFilterArg(filter: Filter): FilterArg {
     search: filter.search,
     tagIds: filter.tags.map((tag) => tag.id),
     includeChildTags: filter.includeChildTags,
+    noTags: filter.noTags,
     folderId: filter.folder ? filter.folder.id : null,
     includeSubfolders: filter.includeSubfolders,
   };

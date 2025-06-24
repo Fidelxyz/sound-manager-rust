@@ -34,6 +34,7 @@ const filter = ref<Filter>({
   search: "",
   tags: [],
   includeChildTags: true,
+  noTags: false,
   folder: null,
   includeSubfolders: true,
 });

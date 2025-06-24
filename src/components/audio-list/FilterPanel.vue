@@ -7,6 +7,7 @@ import {
   Button,
   FloatLabel,
   InputText,
+  SelectButton,
   ToggleButton,
   type TreeSelectionKeys,
 } from "primevue";
@@ -57,17 +58,62 @@ const selectedTags = computed({
   },
 });
 
+// ========== Filter By Tags Options BEGIN ==========
+
+enum FilterByTagsOption {
+  IncludeChildTags = 0,
+  NoTags = 1,
+}
+
+const filterByTagsOptions = computed<
+  { label: string; value: FilterByTagsOption; disabled: boolean }[]
+>(() => [
+  {
+    label: "包含子标签",
+    value: FilterByTagsOption.IncludeChildTags,
+    disabled: filter.value.noTags,
+  },
+  {
+    label: "无标签",
+    value: FilterByTagsOption.NoTags,
+    disabled: false,
+  },
+]);
+
+const filterByTagsOptionValues = computed({
+  get: () => {
+    const options: FilterByTagsOption[] = [];
+    if (filter.value.includeChildTags) {
+      options.push(FilterByTagsOption.IncludeChildTags);
+    }
+    if (filter.value.noTags) {
+      options.push(FilterByTagsOption.NoTags);
+    }
+    return options;
+  },
+  set: (value: FilterByTagsOption[]) => {
+    filter.value.includeChildTags = value.includes(
+      FilterByTagsOption.IncludeChildTags,
+    );
+    filter.value.noTags = value.includes(FilterByTagsOption.NoTags);
+  },
+});
+
 const filterEnabled = computed(() => {
   return (
     filter.value.search.length > 0 ||
     filter.value.tags.length > 0 ||
+    filter.value.noTags ||
     filter.value.folder !== null
   );
 });
 
+// ========== Filter By Tags Options END ==========
+
 function clearFilter() {
   filter.value.search = "";
   filter.value.tags = [];
+  filter.value.noTags = false;
   filter.value.folder = null;
 }
 
@@ -133,17 +179,23 @@ function refresh() {
             :options="tagTreeNodes"
             selectionMode="checkbox"
             emptyMessage="无可用标签"
+            :disabled="filter.noTags"
           />
           <label for="filter-tags">标签</label>
         </FloatLabel>
-        <ToggleButton
-          v-model="filter.includeChildTags"
-          onLabel="包含子标签"
-          offLabel="不包含子标签"
+        <SelectButton
+          v-model="filterByTagsOptionValues"
+          :options="filterByTagsOptions"
+          optionLabel="label"
+          optionValue="value"
+          optionDisabled="disabled"
+          multiple
           size="small"
           :pt="{
-            content: {
-              class: 'px-2!',
+            pcToggleButton: {
+              content: {
+                class: 'px-2!',
+              },
             },
           }"
         />

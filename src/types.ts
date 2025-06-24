@@ -29,6 +29,7 @@ export type Filter = {
   search: string;
   tags: Tag[];
   includeChildTags: boolean;
+  noTags: boolean;
   folder: Folder | null;
   includeSubfolders: boolean;
 };

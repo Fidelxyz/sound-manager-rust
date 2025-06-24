@@ -9,24 +9,31 @@ pub struct Filter {
     pub search: String,
     pub tag_ids: Vec<TagId>,
     pub include_child_tags: bool,
+    pub no_tags: bool,
     pub folder_id: Option<FolderId>,
     pub include_subfolders: bool,
 }
 
 impl DatabaseData {
     pub fn filter(&self, filter: &Filter) -> Option<Vec<EntryId>> {
-        let tag_ids = filter
-            .tag_ids
-            .iter()
-            .flat_map(|tag_id| {
-                // include child tags
-                if filter.include_child_tags {
-                    self.get_tag_descendants(*tag_id)
-                } else {
-                    vec![*tag_id]
-                }
-            })
-            .collect::<HashSet<_>>();
+        let search = filter.search.to_lowercase();
+
+        let tag_ids = if filter.no_tags {
+            HashSet::new()
+        } else {
+            filter
+                .tag_ids
+                .iter()
+                .flat_map(|tag_id| {
+                    // include child tags
+                    if filter.include_child_tags {
+                        self.get_tag_descendants(*tag_id)
+                    } else {
+                        vec![*tag_id]
+                    }
+                })
+                .collect::<HashSet<_>>()
+        };
 
         let folder_ids = filter
             .folder_id
@@ -48,7 +55,8 @@ impl DatabaseData {
             })
             .map(|vec| vec.into_iter().collect::<HashSet<_>>());
 
-        if filter.search.is_empty() && tag_ids.is_empty() && folder_ids.is_none() {
+        if filter.search.is_empty() && tag_ids.is_empty() && !filter.no_tags && folder_ids.is_none()
+        {
             return None;
         }
 
@@ -61,12 +69,14 @@ impl DatabaseData {
                     keep &= folder_ids.contains(&entry.folder_id);
                 }
 
-                if !filter.tag_ids.is_empty() {
+                if filter.no_tags {
+                    keep &= entry.tag_ids.is_empty();
+                } else if !tag_ids.is_empty() {
                     keep &= !entry.tag_ids.is_disjoint(&tag_ids);
                 }
 
-                if !filter.search.is_empty() {
-                    let search = filter.search.to_lowercase();
+                if !search.is_empty() {
+                    let search = search.to_lowercase();
 
                     let mut match_search = false;
 
