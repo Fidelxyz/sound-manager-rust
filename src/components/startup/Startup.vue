@@ -138,6 +138,17 @@ async function migrateFrom(from: MigrateFrom) {
   // show migration message if there are any logs
   if (migratorResult.value.logs.length > 0) {
     showMigrationMessage();
+  } else {
+    const databasePath = migratedPath.value;
+    await api
+      .openDatabase(databasePath)
+      .then(() => {
+        emit("database-loaded", databasePath);
+      })
+      .catch((e: ErrorKind) => {
+        console.error(e);
+        error("打开数据库错误", e.message);
+      });
   }
 
   loading.value = false;
