@@ -47,8 +47,8 @@ struct FileDiff {
 }
 
 struct FolderDiff {
-    pub existing_folders: Vec<FolderId>,
     pub new_folders: Vec<PathBuf>,
+    pub deleted_folders: Vec<FolderId>,
 }
 
 const ROOT_FOLDER_ID: FolderId = -1;
@@ -350,6 +350,13 @@ impl DatabaseData {
     /// * `folder_id` - The current folder ID to read from.
     fn read_dir(&self, path: &Path, folder_id: Option<FolderId>) -> Result<FileDiff> {
         debug_assert!(path.is_absolute(), "Path must be absolute");
+        if let Some(folder_id) = folder_id {
+            debug_assert!(
+                self.to_relative_path(path) == self.folders.get(&folder_id).unwrap().path,
+                "path ({}) does not match folder_id ({folder_id:?})",
+                path.display()
+            );
+        }
 
         info!("reading directory: {}", path.display());
 
@@ -480,18 +487,26 @@ impl DatabaseData {
     /// * `folder_id` - The current folder ID to read from.
     fn read_dir_folders(&self, path: &Path, folder_id: Option<FolderId>) -> Result<FolderDiff> {
         debug_assert!(path.is_absolute(), "Path must be absolute");
+        if let Some(folder_id) = folder_id {
+            debug_assert!(
+                self.to_relative_path(path) == self.folders.get(&folder_id).unwrap().path,
+                "path ({}) does not match folder_id ({folder_id:?})",
+                path.display()
+            );
+        }
 
         info!(
-            "Reading directory: {}",
-            self.to_absolute_path(path).display()
+            "Reading directory: {} (folder_id = {folder_id:?})",
+            path.display()
         );
 
-        let mut existing_folders = Vec::new();
         let mut new_folders = Vec::new();
+        let mut deleted_folders = Vec::new();
+        let mut existing_folders = Vec::new();
 
         let folder = folder_id.map(|folder_id| self.folders.get(&folder_id).unwrap());
 
-        for dir_entry in self.to_absolute_path(path).read_dir()? {
+        for dir_entry in path.read_dir()? {
             let dir_entry = match dir_entry {
                 Ok(dir_entry) => dir_entry,
                 Err(err) => {
@@ -528,17 +543,27 @@ impl DatabaseData {
                 match self.read_dir_folders(&sub_folder_path, sub_folder_id) {
                     Ok(diff) => {
                         // Merge results from sub-folder
-                        existing_folders.extend(diff.existing_folders);
                         new_folders.extend(diff.new_folders);
+                        deleted_folders.extend(diff.deleted_folders);
                     }
                     Err(err) => warn!("Failed to read directory: {err}"),
                 }
             }
         }
 
+        if let Some(folder) = folder {
+            deleted_folders.extend(
+                folder
+                    .sub_folders
+                    .values()
+                    .filter(|sub_folder_id| !existing_folders.contains(sub_folder_id))
+                    .copied(),
+            );
+        }
+
         Ok(FolderDiff {
-            existing_folders,
             new_folders,
+            deleted_folders,
         })
     }
 
@@ -546,17 +571,7 @@ impl DatabaseData {
     fn scan_folders(&mut self, db: &mut Connection) -> Result<()> {
         let diff = self.read_dir_folders(&self.base_path, ROOT_FOLDER_ID.into())?;
 
-        // remove deleted folders
-        let existing_folders = diff.existing_folders.into_iter().collect::<HashSet<_>>();
-        let removed_folders = self
-            .folders
-            .keys()
-            .filter(|folder_id| !existing_folders.contains(folder_id))
-            .copied()
-            .collect::<Vec<_>>();
-        self.remove_folders(removed_folders, db);
-
-        // read new entries
+        self.remove_folders(diff.deleted_folders, db);
         self.add_folders(&diff.new_folders, db)?;
 
         Ok(())
