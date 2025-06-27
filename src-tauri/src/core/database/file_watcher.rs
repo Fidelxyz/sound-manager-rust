@@ -1,6 +1,6 @@
 use super::{is_audio_file, is_hidden_file, Database, DatabaseEmitter, Result};
 
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::spawn;
@@ -106,7 +106,7 @@ where
 fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileWatcherResult<bool> {
     match event.kind {
         Create(CreateKind::Folder) => {
-            debug!("Folder created: {event:?}");
+            info!("Folder created: {event:?}");
 
             // Create(Folder) event is untrushworthy, rescan the folder
             database
@@ -123,7 +123,7 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
                 return Ok(false);
             }
 
-            debug!("File created: {event:?}");
+            info!("File created: {event:?}");
             file_created(path.as_path(), database)?;
             Ok(true)
         }
@@ -134,7 +134,7 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
                 return Ok(false);
             }
 
-            debug!("Folder removed: {event:?}");
+            info!("Folder removed: {event:?}");
             folder_removed(path.as_path(), database)?;
             Ok(true)
         }
@@ -145,7 +145,7 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
                 return Ok(false);
             }
 
-            debug!("File removed: {event:?}");
+            info!("File removed: {event:?}");
             file_removed(path.as_path(), database)?;
             Ok(true)
         }
@@ -155,7 +155,7 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
             let new_path = &event.paths[1];
 
             if new_path.is_dir() {
-                debug!("Folder moved: {event:?}");
+                info!("Folder moved: {event:?}");
                 folder_moved(old_path, new_path, database)?;
                 Ok(true)
             } else if new_path.is_file() {
@@ -165,21 +165,21 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
                 ) {
                     (true, true) => {
                         // audio -> audio
-                        debug!("File moved: {event:?}");
+                        info!("File moved: {event:?}");
                         file_moved(old_path, new_path, database)?;
                         Ok(true)
                     }
 
                     (false, true) => {
                         // non-audio -> audio
-                        debug!("File moved: {event:?}");
+                        info!("File moved: {event:?}");
                         file_created(new_path.as_path(), database)?;
                         Ok(true)
                     }
 
                     (true, false) => {
                         // audio -> non-audio
-                        debug!("File moved: {event:?}");
+                        info!("File moved: {event:?}");
                         file_removed(old_path.as_path(), database)?;
                         Ok(true)
                     }
@@ -198,7 +198,7 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
                 return Ok(false);
             }
 
-            debug!("File or folder moved: {event:?}");
+            info!("File or folder moved: {event:?}");
             file_or_folder_updated(path.as_path(), database)?;
             Ok(true)
         }
@@ -209,7 +209,7 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
                 return Ok(false);
             }
 
-            debug!("File or folder modified: {event:?}");
+            info!("File or folder modified: {event:?}");
             file_or_folder_updated(path.as_path(), database)?;
             Ok(true)
         }

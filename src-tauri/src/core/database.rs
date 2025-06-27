@@ -14,7 +14,7 @@ pub use folder::{Folder, FolderId};
 pub use tag::{Tag, TagId};
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 use crossbeam_channel;
@@ -1668,5 +1668,10 @@ fn is_audio_file(path: &Path) -> bool {
 }
 
 fn is_hidden_file(path: &Path) -> bool {
-    path.file_name().unwrap().to_string_lossy().starts_with('.')
+    path.components()
+        .filter_map(|c| match c {
+            Component::Normal(str) => Some(str),
+            _ => None,
+        })
+        .any(|str| str.to_string_lossy().starts_with('.'))
 }
