@@ -454,7 +454,7 @@ async fn set_player_source(entry_id: EntryId, state: State<'_, AppData>) -> Resu
         get_data!(data, database);
         data.get_entry_path(entry_id).unwrap()
     };
-    debug!("path: {path:?}");
+    debug!("path: {}", path.display());
 
     state.player.write().unwrap().set_source(path.clone())?;
 

@@ -48,7 +48,10 @@ where
 
         let entry = data.get_entry(entry_id).unwrap();
         if entry.folder_id == folder_id {
-            warn!("File {:?} is already in the target folder.", entry.path);
+            warn!(
+                "File {} is already in the target folder.",
+                entry.path.display()
+            );
             return Ok(());
         }
 

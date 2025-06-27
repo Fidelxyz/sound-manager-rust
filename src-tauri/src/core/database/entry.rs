@@ -52,8 +52,8 @@ impl Entry {
         match metadata {
             Ok(metadata) => self.metadata = Some(metadata),
             Err(err) => warn!(
-                "Failed to read metadata of file {:?}: {:?}",
-                base_path.join(&self.path),
+                "Failed to read metadata of file {}: {:?}",
+                base_path.join(&self.path).display(),
                 err
             ),
         }

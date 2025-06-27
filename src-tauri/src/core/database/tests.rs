@@ -883,7 +883,7 @@ fn test_file_watcher_delete_multiple_files() {
     assert!(data.get_entry_id(&file_path_3).is_none());
 }
 
-#[ignore]
+#[ignore = "notify-rs emits incorrect events for auto-test-triggered file moves for unknown reason."]
 #[test]
 fn test_file_watcher_move_single_file() {
     let (base_path, database, emitter) = setup_database(testdir!().as_path());
@@ -912,7 +912,7 @@ fn test_file_watcher_move_single_file() {
     );
 }
 
-#[ignore]
+#[ignore = "notify-rs emits incorrect events for auto-test-triggered file moves for unknown reason."]
 #[test]
 fn test_file_watcher_move_multiple_files() {
     let (base_path, database, emitter) = setup_database(testdir!().as_path());

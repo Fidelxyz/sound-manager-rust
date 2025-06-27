@@ -124,7 +124,7 @@ impl Player {
         let sink = self.sink.read().unwrap();
         let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
 
-        debug!("set source: {path:?}");
+        debug!("set source: {}", path.display());
 
         sink.clear();
         self.emitter.on_player_state_updated(PlayerState {

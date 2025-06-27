@@ -40,7 +40,10 @@ where
             &self.data.read().unwrap().base_path,
             RecursiveMode::Recursive,
         )?;
-        debug!("watch directory: {:?}", self.data.read().unwrap().base_path);
+        debug!(
+            "watch directory: {}",
+            self.data.read().unwrap().base_path.display()
+        );
 
         spawn(move || {
             debug!("start directory watcher thread");
@@ -184,7 +187,7 @@ fn handle_file_event<E>(event: &DebouncedEvent, database: &Database<E>) -> FileW
                     _ => Ok(false), // non-audio -> non-audio
                 }
             } else {
-                panic!("Unexpected file type for path {new_path:?}");
+                panic!("Unexpected file type for path {}", new_path.display());
             }
         }
 
@@ -239,7 +242,7 @@ fn file_or_folder_updated<E>(path: &Path, database: &Database<E>) -> FileWatcher
             file_created(path, database)?;
             Ok(true)
         } else {
-            panic!("Unexpected file type for path {path:?}");
+            panic!("Unexpected file type for path {}", path.display());
         }
     } else {
         // file does not exists, try to remove it

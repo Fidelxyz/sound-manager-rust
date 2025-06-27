@@ -94,7 +94,7 @@ where
     // ========== Constructor ==========
 
     pub fn open(base_path: PathBuf, emitter: Arc<E>) -> Result<Arc<Self>> {
-        info!("Opening database {base_path:?}");
+        info!("Opening database {}", base_path.display());
 
         let database_file = base_path.join(SQLITE_DB_PATH);
         if !database_file.try_exists()? {
@@ -145,7 +145,7 @@ where
     }
 
     pub fn create(base_path: PathBuf, emitter: Arc<E>) -> Result<Arc<Self>> {
-        info!("Creating database {base_path:?}");
+        info!("Creating database {}", base_path.display());
 
         let database_file = base_path.join(SQLITE_DB_PATH);
         if database_file.try_exists()? {
@@ -351,7 +351,7 @@ impl DatabaseData {
     fn read_dir(&self, path: &Path, folder_id: Option<FolderId>) -> Result<FileDiff> {
         debug_assert!(path.is_absolute(), "Path must be absolute");
 
-        info!("Reading directory: {path:?}");
+        info!("reading directory: {}", path.display());
 
         let mut new_folders = Vec::new();
         let mut deleted_folders = Vec::new();
@@ -421,8 +421,8 @@ impl DatabaseData {
                 }
             } else {
                 warn!(
-                    "Failed to read file for path {:?}: unknown directory entry type.",
-                    dir_entry.path()
+                    "Failed to read file for path {}: unknown directory entry type.",
+                    dir_entry.path().display()
                 );
             }
         }
@@ -481,7 +481,10 @@ impl DatabaseData {
     fn read_dir_folders(&self, path: &Path, folder_id: Option<FolderId>) -> Result<FolderDiff> {
         debug_assert!(path.is_absolute(), "Path must be absolute");
 
-        info!("Reading directory: {:?}", self.to_absolute_path(path));
+        info!(
+            "Reading directory: {}",
+            self.to_absolute_path(path).display()
+        );
 
         let mut existing_folders = Vec::new();
         let mut new_folders = Vec::new();
@@ -673,11 +676,12 @@ impl DatabaseData {
                 let folder = self.folders.get(&folder_id).unwrap();
 
                 let sub_folder_name = component.as_os_str();
-                let sub_folder_id = match folder.sub_folders.get(sub_folder_name).copied() {
-                    Some(sub_folder_id) => sub_folder_id,
+                let sub_folder_id =
+                    if let Some(sub_folder_id) = folder.sub_folders.get(sub_folder_name).copied() {
+                        sub_folder_id
+                    } else {
+                        // folder does not exist, create new folder
 
-                    // folder does not exist, create new folder
-                    None => {
                         let query_row = stmt_select
                             .query_row((folder_id, sub_folder_name.to_string_lossy()), |row| {
                                 Ok((
@@ -719,8 +723,7 @@ impl DatabaseData {
                         self.folders.insert(new_folder_id, new_folder);
 
                         new_folder_id
-                    }
-                };
+                    };
 
                 folder_id = sub_folder_id;
             }
@@ -761,11 +764,12 @@ impl DatabaseData {
                 let folder = self.folders.get(&folder_id).unwrap();
 
                 let sub_folder_name = component.as_os_str();
-                let sub_folder_id = match folder.sub_folders.get(sub_folder_name).copied() {
-                    Some(sub_folder_id) => sub_folder_id,
+                let sub_folder_id =
+                    if let Some(sub_folder_id) = folder.sub_folders.get(sub_folder_name).copied() {
+                        sub_folder_id
+                    } else {
+                        // folder does not exist, create new folder
 
-                    // folder does not exist, create new folder
-                    None => {
                         // find matching folder in queried rows
                         let new_folder_id = if let Some((id, deleted)) = query_rows
                             .get(&(folder_id, sub_folder_name.to_string_lossy().into()))
@@ -803,8 +807,7 @@ impl DatabaseData {
                         self.folders.insert(new_folder_id, new_folder);
 
                         new_folder_id
-                    }
-                };
+                    };
 
                 folder_id = sub_folder_id;
             }
@@ -914,7 +917,11 @@ impl DatabaseData {
             self.scan_dir(new_path, db)?;
         }
 
-        info!("Moved folder from {old_path:?} to {new_path:?}");
+        info!(
+            "Moved folder from {} to {}",
+            old_path.display(),
+            new_path.display()
+        );
 
         Ok(())
     }
@@ -989,7 +996,11 @@ impl DatabaseData {
             .filter_map(|path| {
                 let folder_path = path.parent().unwrap();
                 let Some(folder) = self.get_folder_by_path(folder_path) else {
-                    warn!("Failed to add entry for {path:?}: folder {folder_path:?} not found");
+                    warn!(
+                        "Failed to add entry for {}: folder {} not found",
+                        path.display(),
+                        folder_path.display()
+                    );
                     return None;
                 };
                 let mut entry = Entry::new(path.into(), folder.id);
@@ -1069,7 +1080,11 @@ impl DatabaseData {
             .filter_map(|path| {
                 let folder_path = path.parent().unwrap();
                 let Some(folder) = self.get_folder_by_path(folder_path) else {
-                    warn!("Failed to add entry for {path:?}: folder {folder_path:?} not found");
+                    warn!(
+                        "Failed to add entry for {}: folder {} not found",
+                        path.display(),
+                        folder_path.display()
+                    );
                     return None;
                 };
                 let mut entry = Entry::new(path.into(), folder.id);
@@ -1210,7 +1225,7 @@ impl DatabaseData {
     ) -> Result<()> {
         debug_assert!(new_path.is_relative(), "Path must be relative");
 
-        info!("Moving entry {entry_id} to {new_path:?}");
+        info!("Moving entry {entry_id} to {}", new_path.display());
 
         // check existance of entry and folders
         let entry = self.get_entry(entry_id).unwrap();
@@ -1250,7 +1265,7 @@ impl DatabaseData {
         entry.path = new_path;
         entry.file_name = new_file_name;
 
-        info!("Moved entry {:?} to {:?}", entry_id, entry.path);
+        info!("Moved entry {:?} to {}", entry_id, entry.path.display());
 
         Ok(())
     }
@@ -1298,7 +1313,7 @@ impl DatabaseData {
         entry.folder_id = folder_id;
         entry.path = new_path;
 
-        info!("Moved entry {:?} to {:?}", entry_id, entry.path);
+        info!("Moved entry {:?} to {}", entry_id, entry.path.display());
 
         Ok(())
     }
@@ -1595,8 +1610,8 @@ impl DatabaseData {
         )?;
 
         info!(
-            "Added tag {tag_id} to entry {:?} ({entry_id})",
-            entry.file_name
+            "Added tag {tag_id} to entry {} ({entry_id})",
+            entry.file_name.display()
         );
 
         Ok(())
@@ -1619,8 +1634,8 @@ impl DatabaseData {
         debug_assert!(removed);
 
         info!(
-            "Removed tag {tag_id} from entry {:?} ({entry_id})",
-            entry.file_name
+            "Removed tag {tag_id} from entry {} ({entry_id})",
+            entry.file_name.display()
         );
 
         Ok(())
