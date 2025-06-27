@@ -631,6 +631,16 @@ fn setup_window(app: &App) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(
+                    #[cfg(debug_assertions)]
+                    log::LevelFilter::Debug,
+                    #[cfg(not(debug_assertions))]
+                    log::LevelFilter::Info,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
