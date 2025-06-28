@@ -1197,17 +1197,8 @@ export default defineComponent({
             this.onEnterKey(event, rowData, rowIndex);
             break;
 
-          // case "Space":
-          //   this.onSpaceKey(event, rowData, rowIndex, slotProps);
-          //   break;
-
           case "Tab":
             this.onTabKey(event, rowIndex);
-            break;
-
-          case "ArrowLeft":
-          case "ArrowRight":
-          case "Space":
             break;
 
           default: {
@@ -1221,10 +1212,6 @@ export default defineComponent({
               this.$emit("update:selection", data);
             }
 
-            const isCopyShortcut = event.code === "KeyC" && metaKey;
-
-            if (!isCopyShortcut) event.preventDefault();
-
             break;
           }
         }
@@ -1235,7 +1222,6 @@ export default defineComponent({
 
       nextRow && this.focusRowChange(row, nextRow);
 
-      // if (event.shiftKey) {
       const data = this.dataToRender(slotProps.rows);
       const nextRowIndex =
         rowIndex + 1 >= data.length ? data.length - 1 : rowIndex + 1;
@@ -1245,7 +1231,6 @@ export default defineComponent({
         data: data[nextRowIndex],
         index: nextRowIndex,
       });
-      // }
 
       event.preventDefault();
     },
@@ -1254,7 +1239,6 @@ export default defineComponent({
 
       prevRow && this.focusRowChange(row, prevRow);
 
-      // if (event.shiftKey) {
       const data = this.dataToRender(slotProps.rows);
       const prevRowIndex = rowIndex - 1 <= 0 ? 0 : rowIndex - 1;
 
@@ -1263,7 +1247,6 @@ export default defineComponent({
         data: data[prevRowIndex],
         index: prevRowIndex,
       });
-      // }
 
       event.preventDefault();
     },
@@ -1297,44 +1280,6 @@ export default defineComponent({
       this.onRowClick({ originalEvent: event, data: rowData, index: rowIndex });
       event.preventDefault();
     },
-    /*
-    onSpaceKey(event, rowData, rowIndex, slotProps) {
-      this.onEnterKey(event, rowData, rowIndex);
-
-      if (event.shiftKey && this.selection !== null) {
-        const data = this.dataToRender(slotProps.rows);
-        let index;
-
-        if (this.selection.length > 0) {
-          const firstSelectedRowIndex = findIndexInList(
-            this.selection[0],
-            data,
-          );
-          const lastSelectedRowIndex = findIndexInList(
-            this.selection[this.selection.length - 1],
-            data,
-          );
-
-          index =
-            rowIndex <= firstSelectedRowIndex
-              ? lastSelectedRowIndex
-              : firstSelectedRowIndex;
-        } else {
-          index = findIndexInList(this.selection, data);
-        }
-
-        const _selection =
-          index !== rowIndex
-            ? data.slice(
-                Math.min(index, rowIndex),
-                Math.max(index, rowIndex) + 1,
-              )
-            : rowData;
-
-        this.$emit("update:selection", _selection);
-      }
-    },
-    */
     onTabKey(event, rowIndex) {
       const body = this.$refs.bodyRef?.$el;
       const rows = find(body, 'tr[data-p-selectable-row="true"]');
