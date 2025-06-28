@@ -142,7 +142,31 @@ impl Player {
         Ok(())
     }
 
-    pub fn play(&self, seek: Option<Duration>, skip_silence: bool) -> Result<(), Error> {
+    pub fn seek(&self, pos: Duration) -> Result<(), Error> {
+        let sink = self.sink.read().unwrap();
+        let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
+
+        let source_info = self.source.lock().unwrap();
+        let source_info = source_info.as_ref().ok_or(Error::SourceNotSet)?;
+
+        if sink.empty() {
+            let source_path = source_info.path.as_path();
+            let file = BufReader::new(File::open(source_path)?);
+            let source = Decoder::new(file)?;
+            sink.append(source);
+        }
+
+        sink.try_seek(pos)?;
+
+        self.emitter.on_player_state_updated(PlayerState {
+            playing: !sink.is_paused(),
+            pos: pos.as_secs_f32(),
+        });
+
+        Ok(())
+    }
+
+    pub fn play(&self, skip_silence: bool) -> Result<(), Error> {
         {
             let sink = self.sink.read().unwrap();
             let sink = sink.as_ref().ok_or(Error::PlayerNotStarted)?;
@@ -159,14 +183,10 @@ impl Player {
 
             debug!("continue playing");
 
-            let mut seek_pos = seek.unwrap_or_default();
-            if skip_silence {
-                seek_pos = seek_pos.max(source_info.first_transit_pos); // seek to the furthest allowed position
+            if skip_silence && sink.get_pos() < source_info.first_transit_pos {
+                sink.try_seek(source_info.first_transit_pos)?;
             }
 
-            dbg!(sink.empty());
-
-            sink.try_seek(seek_pos)?;
             sink.play();
         }
 
@@ -217,6 +237,7 @@ impl Player {
         Ok(())
     }
 
+    /// Get the current position of the player in seconds.
     pub fn get_pos(&self) -> f32 {
         let sink = self.sink.read().unwrap();
 

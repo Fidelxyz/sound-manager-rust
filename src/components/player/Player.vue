@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
-import { onUnmounted, ref, watch } from "vue";
+import { onUnmounted, ref, watch, useTemplateRef } from "vue";
 
 import { Button, Slider, ToggleSwitch } from "primevue";
 import Spotter from "./Spotter.vue";
@@ -10,11 +10,21 @@ import type { Entry, PlayerState } from "@/api";
 import { api } from "@/api";
 import { useConfig } from "@/config";
 import { error } from "@/utils/message";
-import { onKeyStroke } from "@vueuse/core";
+
+const STEP_SECONDS = 5;
+
+const spotter = useTemplateRef("spotter");
 
 const { entry } = defineProps<{
   entry: Entry | null;
 }>();
+
+defineExpose({
+  spotter,
+  togglePlayPause,
+  stepForward,
+  stepBackward,
+});
 
 const activeEntry = ref<Entry | null>(null);
 
@@ -27,6 +37,7 @@ const settings = useConfig("player", {
 
 // states
 const playing = ref(false);
+/** The current playing position in seconds. */
 let playingPos = 0;
 let seeking = false;
 
@@ -61,7 +72,7 @@ async function play() {
   console.debug("play");
   setVolume(settings.value.volume);
   await api
-    .play(playingPos, settings.value.skipSilence)
+    .play(settings.value.skipSilence)
     .then(() => {
       playing.value = true;
     })
@@ -85,15 +96,27 @@ function stop() {
   playingPos = 0;
 }
 
-async function seek(time: number) {
+/**
+ * @param pos The position in seconds to seek to.
+ */
+function seek(pos: number) {
   if (seeking) return;
-  console.debug("seek", time);
+  console.debug("seek", pos);
+  playingPos = pos;
   seeking = true;
-  playingPos = time;
-  if (playing.value) {
-    await play();
-  }
-  seeking = false;
+  api.seek(pos).finally(() => {
+    seeking = false;
+  });
+}
+
+function stepForward() {
+  console.debug("stepForward");
+  seek(playingPos + STEP_SECONDS);
+}
+
+function stepBackward() {
+  console.debug("stepBackward");
+  seek(Math.max(0, playingPos - STEP_SECONDS));
 }
 
 function syncPlayingPos() {
@@ -134,13 +157,6 @@ listen<PlayerState>("player_state_updated", (event) => {
   playing.value = event.payload.playing;
   playingPos = event.payload.pos;
 });
-
-onKeyStroke(" ", (event) => {
-  if (document.activeElement?.tagName.toLowerCase() === "input") return;
-
-  togglePlayPause();
-  event.preventDefault();
-});
 </script>
 
 <template>
@@ -171,7 +187,7 @@ onKeyStroke(" ", (event) => {
           <Slider class="w-48" v-model="settings.volume" @change="setVolume" />
         </div>
 
-        <Spotter :entry="entry" @pause="pause" />
+        <Spotter ref="spotter" :entry="entry" @pause="pause" />
       </div>
     </div>
   </div>

@@ -90,27 +90,27 @@ export const api = {
   },
 
   getEntries(): Promise<Entry[]> {
-    return invoke<Entry[]>("get_entries");
+    return invoke("get_entries");
   },
 
   getTags(): Promise<Record<number, Tag>> {
-    return invoke<Record<number, Tag>>("get_tags");
+    return invoke("get_tags");
   },
 
   getFolder(): Promise<Record<number, Folder>> {
-    return invoke<Record<number, Folder>>("get_folder");
+    return invoke("get_folder");
   },
 
   newTag(name: string): Promise<number> {
-    return invoke<number>("new_tag", { name });
+    return invoke("new_tag", { name });
   },
 
   deleteTag(tagId: number): Promise<void> {
-    return invoke<void>("delete_tag", { tagId });
+    return invoke("delete_tag", { tagId });
   },
 
   renameTag(tagId: number, name: string): Promise<void> {
-    return invoke<void>("rename_tag", { tagId, name });
+    return invoke("rename_tag", { tagId, name });
   },
 
   reorderTag(
@@ -118,35 +118,39 @@ export const api = {
     newParentId: number,
     newPos: number,
   ): Promise<void> {
-    return invoke<void>("reorder_tag", { tagId, newParentId, newPos });
+    return invoke("reorder_tag", { tagId, newParentId, newPos });
   },
 
   setTagColor(tagId: number, color: number): Promise<void> {
-    return invoke<void>("set_tag_color", { tagId, color });
+    return invoke("set_tag_color", { tagId, color });
   },
 
   getTagsForEntry(entryId: number): Promise<Tag[]> {
-    return invoke<Tag[]>("get_tags_for_entry", { entryId });
+    return invoke("get_tags_for_entry", { entryId });
   },
 
   addTagForEntry(entryId: number, tagId: number): Promise<void> {
-    return invoke<void>("add_tag_for_entry", { entryId, tagId });
+    return invoke("add_tag_for_entry", { entryId, tagId });
   },
 
   removeTagForEntry(entryId: number, tagId: number): Promise<void> {
-    return invoke<void>("remove_tag_for_entry", { entryId, tagId });
+    return invoke("remove_tag_for_entry", { entryId, tagId });
   },
 
   filter(filter: FilterArg): Promise<number[] | undefined> {
-    return invoke<number[] | undefined>("filter", { filter });
+    return invoke("filter", { filter });
   },
 
   setPlayerSource(entryId: number): Promise<void> {
-    return invoke<void>("set_player_source", { entryId });
+    return invoke("set_player_source", { entryId });
   },
 
-  play(seek: number, skipSilence: boolean): Promise<void> {
-    return invoke("play", { seek, skipSilence });
+  seek(pos: number): Promise<void> {
+    return invoke("seek", { pos });
+  },
+
+  play(skipSilence: boolean): Promise<void> {
+    return invoke("play", { skipSilence });
   },
 
   pause(): Promise<void> {
@@ -158,7 +162,7 @@ export const api = {
   },
 
   getPlayingPos(): Promise<number> {
-    return invoke<number>("get_playing_pos");
+    return invoke("get_playing_pos");
   },
 
   setVolume(volume: number): Promise<void> {
@@ -166,23 +170,23 @@ export const api = {
   },
 
   prepareWaveform(): Promise<number> {
-    return invoke<number>("prepare_waveform");
+    return invoke("prepare_waveform");
   },
 
   requestWaveform(channel: Channel<ArrayBuffer>): Promise<number> {
-    return invoke<number>("request_waveform", { channel });
+    return invoke("request_waveform", { channel });
   },
 
   importFile(path: string, force = false): Promise<void> {
-    return invoke<void>("import_file", { path, force });
+    return invoke("import_file", { path, force });
   },
 
   deleteFile(entryId: number): Promise<void> {
-    return invoke<void>("delete_file", { entryId });
+    return invoke("delete_file", { entryId });
   },
 
   moveFile(entryId: number, folderId: number, force = false): Promise<void> {
-    return invoke<void>("move_file", { entryId, folderId, force });
+    return invoke("move_file", { entryId, folderId, force });
   },
 
   spot(
@@ -191,7 +195,7 @@ export const api = {
     openInApplication?: string,
     force = false,
   ): Promise<void> {
-    return invoke<void>("spot", {
+    return invoke("spot", {
       entryId,
       savePath,
       openInApplication,

@@ -18,8 +18,10 @@ import type { Filter, FolderNode, TagNode } from "@/types";
 import { error, info } from "@/utils/message";
 import { basename } from "@tauri-apps/api/path";
 
+// refs
 const metadataPanel = useTemplateRef("metadataPanel");
 const audioList = useTemplateRef("audioList");
+const player = useTemplateRef("player");
 
 // data
 const entries = ref<Entry[]>([]);
@@ -41,6 +43,7 @@ const filter = ref<Filter>({
 
 defineExpose({
   audioList,
+  player,
   activeEntry,
   importFiles,
 });
@@ -224,7 +227,7 @@ listen("files_updated", onFilesChanged);
       </Splitter>
     </div>
     <div>
-      <Player :entry="activeEntry" />
+      <Player ref="player" :entry="activeEntry" />
     </div>
   </div>
 </template>

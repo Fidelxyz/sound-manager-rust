@@ -82,12 +82,6 @@ async function setupMenu() {
             accelerator: "Cmd+I",
             enabled: databaseOpen.value,
           },
-          {
-            id: "spot",
-            text: "发送至…",
-            accelerator: "S",
-            enabled: false,
-          },
         ],
       },
       {
@@ -124,8 +118,8 @@ async function setupMenu() {
       },
       {
         // ===== Select menu =====
-        id: "select",
-        text: "选择",
+        id: "control",
+        text: "控制",
         items: [
           {
             id: "previous",
@@ -141,6 +135,36 @@ async function setupMenu() {
             accelerator: "ArrowDown",
             enabled: databaseOpen.value,
           },
+          { item: "Separator" },
+          {
+            id: "playPause",
+            text: "播放/暂停",
+            action: () => databaseView.value?.player?.togglePlayPause(),
+            accelerator: "Space",
+            enabled: false,
+          },
+          {
+            id: "stepForward",
+            text: "前进",
+            action: () => databaseView.value?.player?.stepForward(),
+            accelerator: "ArrowRight",
+            enabled: false,
+          },
+          {
+            id: "stepBackward",
+            text: "后退",
+            action: () => databaseView.value?.player?.stepBackward(),
+            accelerator: "ArrowLeft",
+            enabled: false,
+          },
+          { item: "Separator" },
+          {
+            id: "spot",
+            text: "发送至…",
+            action: () => databaseView.value?.player?.spotter?.spot(),
+            accelerator: "S",
+            enabled: false,
+          },
         ],
       },
     ],
@@ -149,18 +173,28 @@ async function setupMenu() {
   return menu;
 }
 let menuItems: Record<
-  "refresh" | "import" | "spot" | "previous" | "next",
+  | "refresh"
+  | "import"
+  | "previous"
+  | "next"
+  | "playPause"
+  | "stepForward"
+  | "stepBackward"
+  | "spot",
   MenuItem
 >;
 setupMenu().then(async (menu) => {
   const fileSubmenu = (await menu.get("file")) as Submenu;
-  const selectSubmenu = (await menu.get("select")) as Submenu;
+  const controlSubmenu = (await menu.get("control")) as Submenu;
   menuItems = {
     refresh: (await fileSubmenu.get("refresh")) as MenuItem,
     import: (await fileSubmenu.get("import")) as MenuItem,
-    spot: (await fileSubmenu.get("spot")) as MenuItem,
-    previous: (await selectSubmenu.get("previous")) as MenuItem,
-    next: (await selectSubmenu.get("next")) as MenuItem,
+    previous: (await controlSubmenu.get("previous")) as MenuItem,
+    next: (await controlSubmenu.get("next")) as MenuItem,
+    playPause: (await controlSubmenu.get("playPause")) as MenuItem,
+    stepForward: (await controlSubmenu.get("stepForward")) as MenuItem,
+    stepBackward: (await controlSubmenu.get("stepBackward")) as MenuItem,
+    spot: (await controlSubmenu.get("spot")) as MenuItem,
   };
 });
 
@@ -175,7 +209,10 @@ watch(
   () => !!databaseView.value?.activeEntry,
   (hasActiveEntry) => {
     if (!menuItems) return;
+    menuItems.playPause.setEnabled(hasActiveEntry);
     menuItems.spot.setEnabled(hasActiveEntry);
+    menuItems.stepForward.setEnabled(hasActiveEntry);
+    menuItems.stepBackward.setEnabled(hasActiveEntry);
   },
 );
 

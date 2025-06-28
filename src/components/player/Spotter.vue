@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { onKeyStroke } from "@vueuse/core";
 import { computed, ref, watch } from "vue";
 
 import {
@@ -26,6 +25,10 @@ const { entry } = defineProps<{
 const emit = defineEmits<{
   pause: [];
 }>();
+
+defineExpose({
+  spot,
+});
 
 type SpotSettings = {
   saveEnabled: boolean;
@@ -180,13 +183,6 @@ async function selectOpenInApplication() {
 
   tempSettings.value.openInApplication = path;
 }
-
-onKeyStroke("s", () => {
-  if (document.activeElement?.tagName.toLowerCase() === "input") return;
-
-  if (!entry) return;
-  spot();
-});
 </script>
 
 <template>

@@ -469,18 +469,24 @@ async fn set_player_source(entry_id: EntryId, state: State<'_, AppData>) -> Resu
 }
 
 #[tauri::command]
-async fn play(
-    seek: Option<f32>,
-    skip_silence: bool,
-    state: State<'_, AppData>,
-) -> Result<(), Error> {
-    trace!("play: {seek:?}");
+async fn seek(pos: f32, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("seek: {pos:?}");
 
     state
         .player
         .read()
         .unwrap()
-        .play(seek.map(Duration::from_secs_f32), skip_silence)?;
+        .seek(Duration::from_secs_f32(pos))?;
+
+    trace!("seek done");
+    Ok(())
+}
+
+#[tauri::command]
+async fn play(skip_silence: bool, state: State<'_, AppData>) -> Result<(), Error> {
+    trace!("play: {skip_silence:?}");
+
+    state.player.read().unwrap().play(skip_silence)?;
 
     trace!("play done");
     Ok(())
@@ -670,6 +676,7 @@ pub fn run() {
             prepare_waveform,
             request_waveform,
             set_player_source,
+            seek,
             play,
             pause,
             stop,

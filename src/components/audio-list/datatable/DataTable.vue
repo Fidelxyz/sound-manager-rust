@@ -1205,6 +1205,11 @@ export default defineComponent({
             this.onTabKey(event, rowIndex);
             break;
 
+          case "ArrowLeft":
+          case "ArrowRight":
+          case "Space":
+            break;
+
           default: {
             if (
               event.code === "KeyA" &&
