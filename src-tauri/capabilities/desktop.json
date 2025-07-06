@@ -9,6 +9,6 @@
     "main"
   ],
   "permissions": [
-    "window-state:default"
+    "window-state:allow-save-window-state"
   ]
 }
