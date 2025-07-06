@@ -974,3 +974,171 @@ fn test_file_watcher_move_multiple_files() {
             .id
     );
 }
+
+#[test]
+fn test_file_watcher_move_in_single_file() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_name = PathBuf::from("new_mp3_audio.mp3");
+    File::create(testdir!().join(&file_name)).unwrap();
+
+    let new_file_path = file_name.clone();
+    rename(testdir!().join(&file_name), base_path.join(&new_file_path)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 9); // 8 existing + 1 new files
+    let new_entry = &entries[&data.get_entry_id(&new_file_path).unwrap()];
+    assert_eq!(new_entry.path, new_file_path);
+    assert_eq!(new_entry.folder_id, ROOT_FOLDER_ID);
+}
+
+#[test]
+fn test_file_watcher_move_in_single_file_in_subfolder() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_name = PathBuf::from("new_flac_audio.flac");
+    File::create(testdir!().join(&file_name)).unwrap();
+
+    let new_file_path = PathBuf::from("folder1").join(&file_name);
+    rename(testdir!().join(&file_name), base_path.join(&new_file_path)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 9); // 8 existing + 1 new files
+    let new_entry = &entries[&data.get_entry_id(&new_file_path).unwrap()];
+    assert_eq!(new_entry.path, new_file_path);
+    assert_eq!(
+        new_entry.folder_id,
+        data.get_folder_by_path(new_file_path.parent().unwrap())
+            .unwrap()
+            .id
+    );
+}
+
+#[test]
+fn test_file_watcher_move_in_multiple_files() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_name_1 = PathBuf::from("new_mp3_audio.mp3");
+    let file_name_2 = PathBuf::from("new_flac_audio.flac");
+    let file_name_3 = PathBuf::from("new_wave_audio.wav");
+    File::create(testdir!().join(&file_name_1)).unwrap();
+    File::create(testdir!().join(&file_name_2)).unwrap();
+    File::create(testdir!().join(&file_name_3)).unwrap();
+
+    let new_file_path_1 = file_name_1.clone();
+    let new_file_path_2 = PathBuf::from("folder1").join(&file_name_2);
+    let new_file_path_3 = PathBuf::from("folder1/folder1-1").join(&file_name_3);
+    rename(
+        testdir!().join(&file_name_1),
+        base_path.join(&new_file_path_1),
+    )
+    .unwrap();
+    rename(
+        testdir!().join(&file_name_2),
+        base_path.join(&new_file_path_2),
+    )
+    .unwrap();
+    rename(
+        testdir!().join(&file_name_3),
+        base_path.join(&new_file_path_3),
+    )
+    .unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 11); // 8 existing + 3 new files
+
+    let new_entry_1 = &entries[&data.get_entry_id(&new_file_path_1).unwrap()];
+    assert_eq!(new_entry_1.path, new_file_path_1);
+    assert_eq!(new_entry_1.folder_id, ROOT_FOLDER_ID);
+
+    let new_entry_2 = &entries[&data.get_entry_id(&new_file_path_2).unwrap()];
+    assert_eq!(new_entry_2.path, new_file_path_2);
+    assert_eq!(
+        new_entry_2.folder_id,
+        data.get_folder_by_path(new_file_path_2.parent().unwrap())
+            .unwrap()
+            .id
+    );
+
+    let new_entry_3 = &entries[&data.get_entry_id(&new_file_path_3).unwrap()];
+    assert_eq!(new_entry_3.path, new_file_path_3);
+    assert_eq!(
+        new_entry_3.folder_id,
+        data.get_folder_by_path(new_file_path_3.parent().unwrap())
+            .unwrap()
+            .id
+    );
+}
+
+#[test]
+fn test_file_watcher_move_out_single_file() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_path = PathBuf::from("wave_audio_1.wav");
+    let file_name = file_path.file_name().unwrap();
+    rename(base_path.join(&file_path), testdir!().join(file_name)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 7); // 8 existing files - 1 deleted file
+    assert!(data.get_entry_id(&file_path).is_none());
+}
+
+#[test]
+fn test_file_watcher_move_out_single_file_in_subfolder() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_path = PathBuf::from("folder1/folder1-1/flac_audio_2.flac");
+    let file_name = file_path.file_name().unwrap();
+    rename(base_path.join(&file_path), testdir!().join(file_name)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 7); // 8 existing files - 1 deleted file
+    assert!(data.get_entry_id(&file_path).is_none());
+}
+
+#[test]
+fn test_file_watcher_move_out_multiple_files() {
+    let (base_path, database, emitter) = setup_database(testdir!().as_path());
+
+    let file_path_1 = PathBuf::from("wave_audio_1.wav");
+    let file_path_2 = PathBuf::from("folder1/wave_audio_2.wav");
+    let file_path_3 = PathBuf::from("folder1/folder1-2/mp3_audio_2.mp3");
+
+    let file_name_1 = file_path_1.file_name().unwrap();
+    let file_name_2 = file_path_2.file_name().unwrap();
+    let file_name_3 = file_path_3.file_name().unwrap();
+
+    rename(base_path.join(&file_path_1), testdir!().join(file_name_1)).unwrap();
+    rename(base_path.join(&file_path_2), testdir!().join(file_name_2)).unwrap();
+    rename(base_path.join(&file_path_3), testdir!().join(file_name_3)).unwrap();
+
+    assert!(emitter.wait_for_files_updated(EMITTER_TIMEOUT));
+
+    let data = database.data.read().unwrap();
+    let entries = data.get_entries();
+
+    assert_eq!(entries.len(), 5); // 8 existing files - 3 deleted files
+    assert!(data.get_entry_id(&file_path_1).is_none());
+    assert!(data.get_entry_id(&file_path_2).is_none());
+    assert!(data.get_entry_id(&file_path_3).is_none());
+}

@@ -21,6 +21,8 @@ enum FileWatcherError {
     EntryNotFound(PathBuf),
     #[error("Folder not found for path: {0}")]
     FolderNotFound(PathBuf),
+    #[error("Invalid path argument: {0}, Reason: {1}")]
+    InvalidPath(PathBuf, &'static str),
     #[error("Io error: {0}")]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -264,8 +266,14 @@ fn file_or_folder_updated<E>(path: &Path, database: &Database<E>) -> FileWatcher
 }
 
 fn file_created<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()> {
-    debug_assert!(path.is_file());
     debug_assert!(path.is_absolute());
+
+    if !path.is_file() {
+        return Err(FileWatcherError::InvalidPath(
+            path.to_owned(),
+            "File created event for non-file path",
+        ));
+    }
 
     let mut data = database.data.write().unwrap();
 
@@ -302,8 +310,14 @@ fn file_removed<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()>
 }
 
 fn folder_removed<E>(path: &Path, database: &Database<E>) -> FileWatcherResult<()> {
-    debug_assert!(path.is_dir());
     debug_assert!(path.is_absolute());
+
+    if !path.is_dir() {
+        return Err(FileWatcherError::InvalidPath(
+            path.to_owned(),
+            "Folder removed event for non-directory path",
+        ));
+    }
 
     let mut data = database.data.write().unwrap();
 
@@ -322,8 +336,14 @@ fn file_moved<E>(
     new_path: &Path,
     database: &Database<E>,
 ) -> FileWatcherResult<()> {
-    debug_assert!(new_path.is_file());
     debug_assert!(new_path.is_absolute());
+
+    if !new_path.is_file() {
+        return Err(FileWatcherError::InvalidPath(
+            new_path.to_owned(),
+            "File moved event for non-file path",
+        ));
+    }
 
     let mut data = database.data.write().unwrap();
 
@@ -349,8 +369,14 @@ fn folder_moved<E>(
     new_path: &Path,
     database: &Database<E>,
 ) -> FileWatcherResult<()> {
-    debug_assert!(new_path.is_dir());
     debug_assert!(new_path.is_absolute());
+
+    if !new_path.is_dir() {
+        return Err(FileWatcherError::InvalidPath(
+            new_path.to_owned(),
+            "Folder moved event for non-directory path",
+        ));
+    }
 
     let mut data = database.data.write().unwrap();
 
