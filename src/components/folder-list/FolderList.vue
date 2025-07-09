@@ -79,8 +79,29 @@ function moveEntryToFolder(entry: Entry, folder: Folder, force = false) {
         });
         return;
       }
-      console.error("Failed to move file:", e);
+      console.error("Failed to move file", e);
       error("移动文件失败", e.message);
+    });
+}
+
+function moveFolderToFolder(folder: Folder, newParent: Folder) {
+  api
+    .moveFolder(folder.id, newParent.id)
+    .then(() => {
+      console.info(`Moved folder ${folder.name} to folder ${newParent.name}.`);
+      info(
+        "移动文件夹成功",
+        `已将文件夹 ${folder.name} 移动至 ${newParent.name} 文件夹。`,
+      );
+    })
+    .catch((e: ErrorKind) => {
+      if (e.kind === "folderAlreadyExists") {
+        error("文件夹已存在", `文件夹 ${folder.name} 已经存在于目标文件夹。`);
+        return;
+      }
+
+      console.error("Failed to move folder", e);
+      error("移动文件夹失败", e.message);
     });
 }
 
@@ -93,7 +114,6 @@ function registerDraggingMonitor() {
     canMonitor: ({ source }) =>
       source.data.type === "folder" || source.data.type === "entry",
     onDrop({ location, source }) {
-      console.debug(1);
       if (location.current.dropTargets.length === 0) return;
 
       const sourceData = source.data as DropTargetData;
@@ -102,7 +122,9 @@ function registerDraggingMonitor() {
       if (targetData.type !== "folder") return;
 
       if (sourceData.type === "folder") {
-        // [TODO]
+        const sourceFolder = sourceData.folder;
+        const targetFolder = targetData.folder;
+        moveFolderToFolder(sourceFolder, targetFolder);
       } else if (sourceData.type === "entry") {
         const entry = sourceData.data;
         const folder = targetData.folder;
@@ -156,5 +178,3 @@ function onContextmenu(event: MouseEvent, folder: Folder) {
     </div>
   </div>
 </template>
-
-<style scoped></style>

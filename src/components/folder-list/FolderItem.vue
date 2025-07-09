@@ -5,7 +5,11 @@ import { Button } from "primevue";
 
 import type { Instruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
-import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import {
+  draggable,
+  dropTargetForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 
 import DropIndicator from "@/components/dropindicator/DropIndicator.vue";
 
@@ -49,45 +53,68 @@ function onClick(folder: Folder) {
 
 // ========== Drag and Drop BEGIN ==========
 
+const dragging = ref(false);
+
 const dropTargetInstruction = ref<Instruction | null>(null);
-let unregisterDropTarget: CleanupFn | null = null;
+let unregisterDragAndDrop: CleanupFn = () => {};
 
 function registerDragAndDrop() {
   if (nodeContent.value) {
-    unregisterDropTarget = dropTargetForElements({
-      element: nodeContent.value,
-      getData: () => {
-        const data: DropTargetData = {
-          type: "folder",
-          folder: folder.value,
-        };
-        return data;
-      },
-      canDrop: ({ source }) =>
-        (source.data.type === "folder" &&
-          source.data.folder !== folder.value) ||
-        source.data.type === "entry",
-      onDragEnter: () => {
-        dropTargetInstruction.value = {
-          type: "make-child",
-          currentLevel: depth,
-          indentPerLevel: INDENT_PX,
-        };
-      },
-      onDragLeave: () => {
-        dropTargetInstruction.value = null;
-      },
-      onDrop: () => {
-        dropTargetInstruction.value = null;
-      },
-    });
-  }
-}
-
-function unregisterDragAndDrop() {
-  if (unregisterDropTarget) {
-    unregisterDropTarget();
-    unregisterDropTarget = null;
+    unregisterDragAndDrop = combine(
+      draggable({
+        element: nodeContent.value,
+        getInitialData: () => {
+          const data: DropTargetData = {
+            type: "folder",
+            folder: folder.value,
+          };
+          return data;
+        },
+        onDragStart: () => {
+          dragging.value = true;
+        },
+        onDrop: () => {
+          dragging.value = false;
+        },
+      }),
+      dropTargetForElements({
+        element: nodeContent.value,
+        getData: () => {
+          const data: DropTargetData = {
+            type: "folder",
+            folder: folder.value,
+          };
+          return data;
+        },
+        canDrop: ({ source }) => {
+          const sourceData = source.data as DropTargetData;
+          switch (sourceData.type) {
+            case "folder":
+              return (
+                sourceData.folder !== folder.value &&
+                sourceData.folder.parentId !== folder.value.id
+              );
+            case "entry":
+              return true;
+            default:
+              return false;
+          }
+        },
+        onDragEnter: () => {
+          dropTargetInstruction.value = {
+            type: "make-child",
+            currentLevel: depth,
+            indentPerLevel: INDENT_PX,
+          };
+        },
+        onDragLeave: () => {
+          dropTargetInstruction.value = null;
+        },
+        onDrop: () => {
+          dropTargetInstruction.value = null;
+        },
+      }),
+    );
   }
 }
 
@@ -99,7 +126,7 @@ function unregisterDragAndDrop() {
     <Button
       variant="text"
       class="w-full justify-start!"
-      :class="{ active: folder === selectedFolder }"
+      :class="{ active: folder === selectedFolder, 'opacity-50': dragging }"
       :style="{
         paddingLeft: `calc(var(--p-button-padding-x) + ${depth * INDENT_PX}px)`,
       }"
@@ -125,6 +152,7 @@ function unregisterDragAndDrop() {
     />
   </li>
   <FolderItem
+    v-if="!dragging"
     v-for="subFolder in folderNode.subFolders"
     :folderNode="subFolder"
     :depth="depth + 1"

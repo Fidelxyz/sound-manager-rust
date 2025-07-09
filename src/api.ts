@@ -7,6 +7,7 @@ export type ErrorKind = {
     | "tagAlreadyExists"
     | "tagAlreadyExistsForEntry"
     | "fileAlreadyExists"
+    | "folderAlreadyExists"
     | "other";
   message: string;
 };
@@ -25,6 +26,7 @@ export type Entry = {
 export type Folder = {
   id: number;
   name: string;
+  parentId: number;
   subFolders: Record<string, number>;
 };
 
@@ -187,6 +189,10 @@ export const api = {
 
   moveFile(entryId: number, folderId: number, force = false): Promise<void> {
     return invoke("move_file", { entryId, folderId, force });
+  },
+
+  moveFolder(folderId: number, newParentId: number): Promise<void> {
+    return invoke("move_folder", { folderId, newParentId });
   },
 
   spot(

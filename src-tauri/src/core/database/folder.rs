@@ -21,7 +21,6 @@ pub struct Folder {
     #[serde(skip)]
     pub path: PathBuf,
 
-    #[serde(skip)]
     pub parent_id: FolderId,
 
     #[serde(serialize_with = "serialize_hashmap_with_os_string_keys")]

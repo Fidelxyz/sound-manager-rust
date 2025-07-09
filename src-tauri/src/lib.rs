@@ -570,6 +570,21 @@ async fn move_file(
 }
 
 #[tauri::command]
+async fn move_folder(
+    folder_id: FolderId,
+    new_parent_id: FolderId,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
+    trace!("move_folder: folder_id = {folder_id:?}, new_parent_id = {new_parent_id:?}");
+    get_database!(database, state.database);
+
+    database.move_folder(folder_id, new_parent_id)?;
+
+    trace!("move_folder done");
+    Ok(())
+}
+
+#[tauri::command]
 async fn spot(
     entry_id: EntryId,
     save_path: Option<&str>,
@@ -725,6 +740,7 @@ pub fn run() {
             import_file,
             delete_file,
             move_file,
+            move_folder,
             spot,
             reveal_entry,
             reveal_folder

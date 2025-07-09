@@ -69,6 +69,8 @@ pub enum Error {
     TagAlreadyExistsForEntry(TagId, EntryId),
     #[error("file already exists: {0}")]
     FileAlreadyExists(String),
+    #[error("folder already exists: {0}")]
+    FolderAlreadyExists(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("database error: {0}")]
@@ -471,8 +473,10 @@ impl DatabaseData {
 
     /// Scan a specific directory in the database.
     fn scan_dir(&mut self, path: &Path, db: &mut Connection) -> Result<()> {
+        debug_assert!(path.is_relative(), "Path must be relative");
+
         let folder_id = self.get_folder_by_path(path).map(|folder| folder.id);
-        let diff = self.read_dir(path, folder_id)?;
+        let diff = self.read_dir(&self.to_absolute_path(path), folder_id)?;
 
         self.sync_changes(diff, db)?;
 
@@ -537,7 +541,7 @@ impl DatabaseData {
                 // Add sub-folder to the result
                 match sub_folder_id {
                     Some(sub_folder_id) => existing_folders.push(sub_folder_id),
-                    None => new_folders.push(sub_folder_path.clone()),
+                    None => new_folders.push(self.to_relative_path(&sub_folder_path)),
                 }
                 // Read the sub-folder
                 match self.read_dir_folders(&sub_folder_path, sub_folder_id) {
@@ -948,6 +952,54 @@ impl DatabaseData {
         Ok(())
     }
 
+    fn move_folder_to_folder(
+        &mut self,
+        folder_id: FolderId,
+        new_parent_id: FolderId,
+        db: &mut Connection,
+    ) -> Result<()> {
+        info!("Moving folder {folder_id} to folder {folder_id}");
+
+        // check existance of entry and folders
+        let folder = self.folders.get(&folder_id).unwrap();
+        let folder_name = folder.name.clone();
+        let old_parent_id = folder.parent_id;
+
+        let new_parent_path = &self.folders.get(&new_parent_id).unwrap().path;
+        let new_path = new_parent_path.join(&folder_name);
+
+        // update entry in database
+        let tx = db.transaction()?;
+        // override the old folder in the new position
+        tx.execute(
+            "DELETE FROM folders WHERE parent = ? AND name = ?",
+            (new_parent_id, folder_name.to_string_lossy()),
+        )?;
+        tx.execute(
+            "UPDATE folders SET parent = ? WHERE id = ?",
+            (new_parent_id, folder_id),
+        )?;
+        tx.commit()?;
+
+        // remove folder from the old folder
+        let old_parent_folder = self.folders.get_mut(&old_parent_id).unwrap();
+        let removed = old_parent_folder.sub_folders.remove(&folder_name);
+        debug_assert!(removed.is_some());
+
+        // add folder to the new folder
+        let new_parent_folder = self.folders.get_mut(&new_parent_id).unwrap();
+        new_parent_folder.sub_folders.insert(folder_name, folder_id);
+
+        // update folder path and parent
+        let folder = self.folders.get_mut(&folder_id).unwrap();
+        folder.parent_id = new_parent_id;
+        folder.path = new_path;
+
+        info!("Moved folder {:?} to {}", folder, folder.path.display());
+
+        Ok(())
+    }
+
     fn update_folder_path(&mut self, folder_id: FolderId, path: &Path) {
         let folder = self.folders.get_mut(&folder_id).unwrap();
         folder.path = path.into();
@@ -1331,7 +1383,7 @@ impl DatabaseData {
         let new_folder = self.folders.get_mut(&folder_id).unwrap();
         new_folder.entries.insert(file_name, entry_id);
 
-        // update entry path and file name
+        // update entry path and folder
         let entry = self.entries.get_mut(&entry_id).unwrap();
         entry.folder_id = folder_id;
         entry.path = new_path;

@@ -34,6 +34,7 @@ enum ErrorKind {
     TagAlreadyExists(String),
     TagAlreadyExistsForEntry(String),
     FileAlreadyExists(String),
+    FolderAlreadyExists(String),
     Other(String),
 }
 
@@ -59,6 +60,9 @@ impl serde::Serialize for Error {
                 }
                 crate::core::database::Error::FileAlreadyExists(_) => {
                     ErrorKind::FileAlreadyExists(error_message)
+                }
+                crate::core::database::Error::FolderAlreadyExists(_) => {
+                    ErrorKind::FolderAlreadyExists(error_message)
                 }
                 _ => ErrorKind::Other(error_message),
             },
