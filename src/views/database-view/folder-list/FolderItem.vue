@@ -9,7 +9,7 @@ import type { Instruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-
 import { Button } from "primevue";
 import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import type { Folder } from "@/api";
-import DropIndicator from "@/components/dropindicator/DropIndicator.vue";
+import DropIndicator from "@/components/drop-indicator/DropIndicator.vue";
 import type { DropTargetData, FolderNode } from "@/types";
 
 const { folderNode, depth = 0 } = defineProps<{

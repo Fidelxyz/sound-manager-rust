@@ -13,10 +13,10 @@ import { unrefElement } from "@vueuse/core";
 import { Button, InputText } from "primevue";
 import { type Component, computed, ref, useTemplateRef, watch } from "vue";
 import { api } from "@/api";
+import DropIndicator from "@/components/drop-indicator/DropIndicator.vue";
 import type { DropTargetData, Tag, TagNode } from "@/types";
 import { useDragAndDrop } from "@/utils/drag-and-drop";
 import { error } from "@/utils/message";
-import DropIndicator from "../dropindicator/DropIndicator.vue";
 
 const { tagNode, lastInGroup } = defineProps<{
   tagNode: TagNode;

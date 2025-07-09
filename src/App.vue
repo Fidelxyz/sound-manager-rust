@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { Menu, type MenuItem, type Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
-import { onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
-
 import { ConfirmDialog, Toast } from "primevue";
-
-import DatabaseView from "./components/DatabaseView.vue";
-import Startup from "./components/startup/Startup.vue";
-
+import { onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import type { ErrorKind } from "@/api";
 import { api } from "@/api";
 import { error } from "@/utils/message";
+import DatabaseView from "./views/database-view/DatabaseView.vue";
+import Startup from "./views/startup/Startup.vue";
 
 // refs
 const databaseView = useTemplateRef("databaseView");
