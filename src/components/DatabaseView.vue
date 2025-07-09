@@ -1,22 +1,21 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
+import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { onMounted, ref, useTemplateRef } from "vue";
-
 import { Splitter, SplitterPanel, useConfirm } from "primevue";
 import type { TreeNode } from "primevue/treenode";
+import { onMounted, ref, useTemplateRef } from "vue";
+
+import type { Entry, Folder, Tag } from "@/api";
+import { api } from "@/api";
+import type { Filter, FolderNode, TagNode } from "@/types";
+import { error, info } from "@/utils/message";
 
 import AudioList from "./audio-list/AudioList.vue";
 import FolderList from "./folder-list/FolderList.vue";
 import MetadataPanel from "./metadata-panel/MetadataPanel.vue";
 import Player from "./player/Player.vue";
 import TagList from "./tag-list/TagList.vue";
-
-import type { Entry, Folder, Tag } from "@/api";
-import { api } from "@/api";
-import type { Filter, FolderNode, TagNode } from "@/types";
-import { error, info } from "@/utils/message";
-import { basename } from "@tauri-apps/api/path";
 
 // refs
 const metadataPanel = useTemplateRef("metadataPanel");
@@ -196,8 +195,7 @@ listen("files_updated", onFilesChanged);
 
             <SplitterPanel :minSize="20">
               <TagList
-                :tags="tags"
-                :tagTreeNodes="tagTreeNodes"
+                :tagTree="tagTree"
                 v-model:filter="filter"
                 @tags-changed="onTagsChanged"
               />

@@ -1,30 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
-
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import {
   Button,
   ContextMenu,
   IconField,
   InputIcon,
   InputText,
-  type TreeSelectionKeys,
   useConfirm,
 } from "primevue";
 import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
-import type { TreeNode } from "primevue/treenode";
-
-import type {
-  CleanupFn,
-  DropTargetGetFeedbackArgs,
-  ElementDragType,
-} from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
-import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-
+import { ref, useTemplateRef } from "vue";
 import type { ErrorKind, Tag } from "@/api";
 import { api } from "@/api";
-import type { DropTargetData, Filter } from "@/types";
+import type { DropTargetData, Filter, TagNode } from "@/types";
+import { useDragAndDrop } from "@/utils/drag-and-drop";
 import { error } from "@/utils/message";
-import Tree from "./tree";
+import {
+  appendChildNode,
+  insertNodeAbove,
+  insertNodeBelow,
+  takeNode,
+} from "@/utils/tag-tree";
+import TagItem from "./TagItem.vue";
 
 const emit = defineEmits<{
   "tags-changed": [];
@@ -32,38 +30,11 @@ const emit = defineEmits<{
 
 const filter = defineModel<Filter>("filter", { required: true });
 
-const { tags, tagTreeNodes } = defineProps<{
-  tags: Record<number, Tag>;
-  tagTreeNodes: TreeNode[];
+const { tagTree } = defineProps<{
+  tagTree: TagNode[];
 }>();
 
-onMounted(() => {
-  registerDraggingMonitor();
-});
-
-onUnmounted(() => {
-  if (unregisterDraggingMonitor) {
-    unregisterDraggingMonitor();
-    unregisterDraggingMonitor = null;
-  }
-});
-
-const selectedTags = computed({
-  get: () => {
-    const selectionKeys: TreeSelectionKeys = {};
-    for (const tag of filter.value.tags) {
-      selectionKeys[tag.id] = true;
-    }
-    return selectionKeys;
-  },
-  set: (selectionKeys: TreeSelectionKeys) => {
-    const selectedTags = Object.keys(selectionKeys).map(
-      (tagId) => tags[Number.parseInt(tagId)],
-    );
-    console.debug("Selected tags", selectedTags);
-    filter.value.tags = selectedTags;
-  },
-});
+// ========== New Tag ==========
 
 const editingNewTag = ref(false);
 const editingTag = ref<Tag | null>(null);
@@ -102,54 +73,58 @@ function completeEditingNewTag() {
     });
 }
 
-function completeRenameTag() {
-  if (!editingTag.value) return;
-  if (
-    editingTagName.value === "" ||
-    editingTagName.value === editingTag.value.name
-  ) {
-    editingTag.value = null;
-    return;
-  }
+// ========== Reorder Tags ==========
 
-  api
-    .renameTag(editingTag.value.id, editingTagName.value)
-    .then(() => {
-      emit("tags-changed");
-    })
-    .catch((e) => {
-      console.error(e);
-      if (e.kind === "tagAlreadyExists") {
-        error("标签已存在", "请使用其他名称");
-      } else {
-        error("重命名标签错误", e.message);
+useDragAndDrop(() =>
+  monitorForElements({
+    canMonitor: ({ source }) => source.data.type === "tag",
+    onDrop({ location, source }) {
+      if (location.current.dropTargets.length === 0) return;
+
+      const sourceData = source.data as DropTargetData;
+      const targetData = location.current.dropTargets[0].data as DropTargetData;
+      if (sourceData.type !== "tag" || targetData.type !== "tag") return;
+
+      const instruction = extractInstruction(targetData);
+
+      // take the source node from the tree
+      let sourceNode = null;
+      if (
+        instruction?.type === "reorder-above" ||
+        instruction?.type === "reorder-below" ||
+        instruction?.type === "make-child"
+      ) {
+        sourceNode = takeNode(sourceData.tagNode, tagTree);
       }
-    })
-    .finally(() => {
-      editingTag.value = null;
-    });
-}
+      if (!sourceNode) return;
 
-function reorderTags({
-  sourceKey,
-  targetParentKey,
-  targetLocation,
-}: {
-  sourceKey: string;
-  targetParentKey: string | null | undefined;
-  targetLocation: number;
-}) {
-  if (targetParentKey === undefined) {
-    console.error("targetParentKey is undefined");
-    return;
-  }
+      // insert the source node into the target node
+      let inserted;
+      switch (instruction?.type) {
+        case "reorder-above":
+          inserted = insertNodeAbove(sourceNode, targetData.tagNode, tagTree);
+          break;
+        case "reorder-below":
+          inserted = insertNodeBelow(sourceNode, targetData.tagNode, tagTree);
+          break;
+        case "make-child":
+          inserted = appendChildNode(sourceNode, targetData.tagNode, tagTree);
+          break;
+        default:
+          return;
+      }
+      if (!inserted) return;
 
-  const tagId = Number.parseInt(sourceKey);
-  const parentId =
-    targetParentKey !== null ? Number.parseInt(targetParentKey) : -1;
+      reorderTag(sourceNode, inserted.parent, inserted.location);
+    },
+  }),
+);
 
+function reorderTag(tag: TagNode, newParent: TagNode | null, newPos: number) {
+  console.debug("Reorder tag", tag, newParent, newPos);
+  const newParentId = newParent ? newParent.tag.id : -1;
   api
-    .reorderTag(tagId, parentId, targetLocation)
+    .reorderTag(tag.tag.id, newParentId, newPos)
     .then(() => {
       emit("tags-changed");
     })
@@ -173,12 +148,10 @@ function addTagToEntry(tagId: number, entryId: number) {
     });
 }
 
-// ========== Drag and Drop BEGIN ==========
+// ========== Drag and Drop ==========
 
-let unregisterDraggingMonitor: CleanupFn | null = null;
-
-function registerDraggingMonitor() {
-  unregisterDraggingMonitor = monitorForElements({
+useDragAndDrop(() =>
+  monitorForElements({
     canMonitor: ({ source }) => source.data.type === "entry",
     onDrop({ location, source }) {
       if (location.current.dropTargets.length === 0) return;
@@ -189,16 +162,14 @@ function registerDraggingMonitor() {
       if (sourceData.type !== "entry" || targetData.type !== "tag") return;
 
       const entryId = sourceData.key;
-      const tagId = Number.parseInt(targetData.key);
+      const tagId = targetData.tagNode.tag.id;
 
       addTagToEntry(tagId, entryId);
     },
-  });
-}
+  }),
+);
 
-// ========== Drag and Drop END ==========
-
-// ========== Context Menu BEGIN ==========
+// ========== Context Menu ==========
 
 const confirm = useConfirm();
 const contextMenu = useTemplateRef("contextMenu");
@@ -213,61 +184,21 @@ const contextMenuItems: MenuItem[] = [
     label: "色彩",
     icon: "pi pi-palette",
     items: [
-      {
-        label: "灰色",
-        icon: "pi pi-circle-fill tag-color-0",
-        command: setTagColor,
-        color: 0,
-      },
-      {
-        label: "红色",
-        icon: "pi pi-circle-fill tag-color-1",
-        command: setTagColor,
-        color: 1,
-      },
-      {
-        label: "橙色",
-        icon: "pi pi-circle-fill tag-color-2",
-        command: setTagColor,
-        color: 2,
-      },
-      {
-        label: "黄色",
-        icon: "pi pi-circle-fill tag-color-3",
-        command: setTagColor,
-        color: 3,
-      },
-      {
-        label: "绿色",
-        icon: "pi pi-circle-fill tag-color-4",
-        command: setTagColor,
-        color: 4,
-      },
-      {
-        label: "青色",
-        icon: "pi pi-circle-fill tag-color-5",
-        command: setTagColor,
-        color: 5,
-      },
-      {
-        label: "蓝色",
-        icon: "pi pi-circle-fill tag-color-6",
-        command: setTagColor,
-        color: 6,
-      },
-      {
-        label: "紫色",
-        icon: "pi pi-circle-fill tag-color-7",
-        command: setTagColor,
-        color: 7,
-      },
-      {
-        label: "粉色",
-        icon: "pi pi-circle-fill tag-color-8",
-        command: setTagColor,
-        color: 8,
-      },
-    ],
+      "灰色",
+      "红色",
+      "橙色",
+      "黄色",
+      "绿色",
+      "青色",
+      "蓝色",
+      "紫色",
+      "粉色",
+    ].map((color, index) => ({
+      label: color,
+      icon: `pi pi-circle-fill tag-color-${index}`,
+      command: setTagColor,
+      color: index,
+    })),
   },
   {
     label: "删除",
@@ -276,8 +207,8 @@ const contextMenuItems: MenuItem[] = [
   },
 ];
 
-function onTagRightClick(event: MouseEvent, tag: Tag) {
-  contextMenuSelectedTag.value = tag;
+function onContextmenu(event: MouseEvent, target: Tag) {
+  contextMenuSelectedTag.value = target;
   contextMenu.value?.show(event);
 }
 
@@ -286,13 +217,6 @@ function renameTag() {
   if (!tag) return;
 
   editingTag.value = tag;
-  editingTagName.value = tag.name;
-  setTimeout(() => {
-    const input = document.querySelector(".editing-input");
-    if (input) {
-      (input as HTMLElement).focus();
-    }
-  }, 0);
 }
 
 function deleteTag() {
@@ -337,8 +261,6 @@ function setTagColor(event: MenuItemCommandEvent) {
       error("设置标签颜色错误", e.message);
     });
 }
-
-// ========== Context Menu END ==========
 </script>
 
 <template>
@@ -355,45 +277,17 @@ function setTagColor(event: MenuItemCommandEvent) {
 
     <div class="flex-auto overflow-auto">
       <ContextMenu ref="contextMenu" :model="contextMenuItems" />
-      <Tree
-        class="p-0!"
-        :value="tagTreeNodes"
-        v-model:selectionKeys="selectedTags"
-        selectionMode="single"
-        draggableType="tag"
-        :canDrop="
-          ({ source }: DropTargetGetFeedbackArgs<ElementDragType>) =>
-            source.data.type === 'entry'
-        "
-        @node-reorder="reorderTags"
-        :pt="{
-          root: {
-            class: 'bg-transparent!',
-          },
-          nodeContent: ({ context }) => ({
-            onContextmenu: (event: MouseEvent) =>
-              onTagRightClick(event, context.node.data),
-            class: {
-              'py-0!': context.node.data === editingTag,
-              'hover:bg-(--p-button-text-primary-hover-background)!': true,
-            },
-          }),
-        }"
-      >
-        <template #default="{ node }">
-          <span v-if="node.data !== editingTag">
-            {{ node.label }}
-          </span>
 
-          <InputText
-            v-else
-            v-model="editingTagName"
-            class="editing-input w-full"
-            @focusout="completeRenameTag"
-            @keydown.enter="completeRenameTag"
-          />
-        </template>
-      </Tree>
+      <!-- Tag List -->
+      <TagItem
+        v-for="(tagNode, index) of tagTree"
+        :tagNode="tagNode"
+        :lastInGroup="index === tagTree.length - 1"
+        v-model:selectedTags="filter.tags"
+        v-model:editingTag="editingTag"
+        @contextmenu="(event, target) => onContextmenu(event, target)"
+        @tags-changed="emit('tags-changed')"
+      />
 
       <!-- New tag -->
       <IconField v-if="editingNewTag">
@@ -405,6 +299,7 @@ function setTagColor(event: MenuItemCommandEvent) {
           class="editing-input w-full"
           v-on:focusout="completeEditingNewTag"
           v-on:keydown.enter="completeEditingNewTag"
+          autofocus
         />
       </IconField>
     </div>

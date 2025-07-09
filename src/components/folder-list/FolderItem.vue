@@ -1,22 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
-
-import { Button } from "primevue";
-
-import type { Instruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 import {
   draggable,
   dropTargetForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
-
-import DropIndicator from "@/components/dropindicator/DropIndicator.vue";
-
+import type { Instruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
+import { Button } from "primevue";
+import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import type { Folder } from "@/api";
+import DropIndicator from "@/components/dropindicator/DropIndicator.vue";
 import type { DropTargetData, FolderNode } from "@/types";
-
-const INDENT_PX = 14;
 
 const { folderNode, depth = 0 } = defineProps<{
   folderNode: FolderNode;
@@ -104,7 +98,7 @@ function registerDragAndDrop() {
           dropTargetInstruction.value = {
             type: "make-child",
             currentLevel: depth,
-            indentPerLevel: INDENT_PX,
+            indentPerLevel: 0,
           };
         },
         onDragLeave: () => {
@@ -122,14 +116,11 @@ function registerDragAndDrop() {
 </script>
 
 <template>
-  <li ref="nodeContent" class="relative">
+  <div ref="nodeContent" class="relative">
     <Button
       variant="text"
       class="w-full justify-start!"
       :class="{ active: folder === selectedFolder, 'opacity-50': dragging }"
-      :style="{
-        paddingLeft: `calc(var(--p-button-padding-x) + ${depth * INDENT_PX}px)`,
-      }"
       :label="folder.name"
       @click.stop="onClick(folder)"
       @contextmenu="emit('contextmenu', $event, folder)"
@@ -150,15 +141,17 @@ function registerDragAndDrop() {
       v-if="dropTargetInstruction"
       :instruction="dropTargetInstruction"
     />
-  </li>
-  <FolderItem
-    v-if="!dragging"
-    v-for="subFolder in folderNode.subFolders"
-    :folderNode="subFolder"
-    :depth="depth + 1"
-    v-model:selectedFolder="selectedFolder"
-    @contextmenu="(event, folder) => emit('contextmenu', event, folder)"
-  />
+  </div>
+  <ul v-if="folderNode.subFolders.length > 0 && !dragging" class="pl-4">
+    <li v-for="subFolder in folderNode.subFolders">
+      <FolderItem
+        :folderNode="subFolder"
+        :depth="depth + 1"
+        v-model:selectedFolder="selectedFolder"
+        @contextmenu="(event, folder) => emit('contextmenu', event, folder)"
+      />
+    </li>
+  </ul>
 </template>
 
 <style scoped>

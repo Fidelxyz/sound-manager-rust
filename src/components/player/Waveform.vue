@@ -1,16 +1,15 @@
 <script setup lang="ts">
+import { $dt } from "@primeuix/themes";
 import { Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onMounted, onUnmounted, watch } from "vue";
-
-import { $dt } from "@primeuix/themes";
 import WaveSurfer from "wavesurfer.js";
 import Hover from "wavesurfer.js/dist/plugins/hover.esm.js";
 import Timer from "wavesurfer.js/dist/timer.js";
 
 import type { Entry, PlayerState } from "@/api";
 import { api } from "@/api";
-import { PlaybackTimer } from "@/utils/playbackTimer";
+import { PlaybackTimer } from "@/utils/playback-timer";
 
 const { entry } = defineProps<{
   entry: Entry | null;

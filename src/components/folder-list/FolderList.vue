@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
-
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { useConfirm, ContextMenu } from "primevue";
-
-import FolderItem from "./FolderItem.vue";
+import { ContextMenu, useConfirm } from "primevue";
+import { onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 
 import type { Entry, ErrorKind, Folder } from "@/api";
 import { api } from "@/api";
 import type { DropTargetData, Filter, FolderNode } from "@/types";
 import { error, info } from "@/utils/message";
-import { useTemplateRef } from "vue";
+import FolderItem from "./FolderItem.vue";
 
 const filter = defineModel<Filter>("filter", { required: true });
 
@@ -166,14 +163,12 @@ function onContextmenu(event: MouseEvent, folder: Folder) {
   <div class="bg-surface-800 flex h-full w-full flex-col px-8 pt-8">
     <div class="p-2 font-bold">文件夹</div>
     <div>
-      <ul class="flex-auto overflow-auto">
-        <FolderItem
-          v-if="folderTree"
-          :folderNode="folderTree"
-          v-model:selectedFolder="selectedFolder"
-          @contextmenu="(event, folder) => onContextmenu(event, folder)"
-        />
-      </ul>
+      <FolderItem
+        v-if="folderTree"
+        :folderNode="folderTree"
+        v-model:selectedFolder="selectedFolder"
+        @contextmenu="(event, folder) => onContextmenu(event, folder)"
+      />
       <ContextMenu ref="contextMenu" :model="contextMenuItems" />
     </div>
   </div>

@@ -1,5 +1,7 @@
 import type { Entry, Folder, Tag } from "@/api";
 
+export type { Entry, Folder, Tag };
+
 export type FolderNode = {
   folder: Folder;
   subFolders: FolderNode[];
@@ -13,7 +15,7 @@ export type TagNode = {
 export type DropTargetData =
   | {
       type: "tag";
-      key: string;
+      tagNode: TagNode;
     }
   | {
       type: "entry";
