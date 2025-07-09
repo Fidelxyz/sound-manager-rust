@@ -13,6 +13,7 @@ import { unrefElement } from "@vueuse/core";
 import { Button, InputText } from "primevue";
 import { type Component, computed, ref, useTemplateRef, watch } from "vue";
 import { api } from "@/api";
+import CollapseHandler from "@/components/CollapseHandler.vue";
 import DropIndicator from "@/components/drop-indicator/DropIndicator.vue";
 import type { DropTargetData, Tag, TagNode } from "@/types";
 import { useDragAndDrop } from "@/utils/drag-and-drop";
@@ -22,9 +23,6 @@ const { tagNode, lastInGroup } = defineProps<{
   tagNode: TagNode;
   lastInGroup: boolean;
 }>();
-const selectedTags = defineModel<Tag[]>("selectedTags", {
-  required: true,
-});
 const emit = defineEmits<{
   contextmenu: [event: MouseEvent, target: Tag];
   "tags-changed": [];
@@ -32,12 +30,24 @@ const emit = defineEmits<{
 
 const tag = computed(() => tagNode.tag);
 
-// ========== Expansion ==========
-
 const expanded = ref(true);
 
-function toggle() {
-  expanded.value = !expanded.value;
+// ========== Selection ==========
+
+const selectedTags = defineModel<Tag[]>("selectedTags", {
+  required: true,
+});
+
+const selected = computed(() => {
+  return selectedTags.value.includes(tag.value);
+});
+
+function onClick() {
+  if (selected.value) {
+    selectedTags.value = [];
+  } else {
+    selectedTags.value = [tag.value];
+  }
 }
 
 // ========== Editing ==========
@@ -88,7 +98,7 @@ const dragging = ref(false);
 const dropTargetInstruction = ref<Instruction | null>(null);
 
 useDragAndDrop(() => {
-  if (!nodeContent.value) return () => {};
+  if (!nodeContent.value) return null;
   return combine(
     draggable({
       element: nodeContent.value,
@@ -168,22 +178,19 @@ useDragAndDrop(() => {
       variant="text"
       class="w-full justify-start!"
       :class="{
-        active: selectedTags.includes(tag),
+        active: selected,
         'opacity-50': dragging,
         'py-0! pr-0!': editing,
       }"
+      @click.stop="onClick"
       @contextmenu="emit('contextmenu', $event, tag)"
     >
       <!-- Toggle Button -->
-      <button
-        type="button"
-        class="flex cursor-pointer items-center"
-        :class="{ invisible: tagNode.children.length === 0 }"
-        @click="toggle"
-      >
-        <i v-if="expanded" class="pi pi-chevron-down" />
-        <i v-else class="pi pi-chevron-right" />
-      </button>
+      <CollapseHandler
+        class="flex items-center"
+        v-model="expanded"
+        :hidden="tagNode.children.length === 0"
+      />
 
       <!-- Tag Icon -->
       <i class="pi pi-tag" :class="`tag-color-${tag.color}`" />
@@ -224,3 +231,9 @@ useDragAndDrop(() => {
     </li>
   </ul>
 </template>
+
+<style scoped>
+.active {
+  background: var(--p-button-text-primary-active-background) !important;
+}
+</style>
