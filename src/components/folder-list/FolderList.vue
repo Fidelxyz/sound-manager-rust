@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import type { CleanupFn } from "@atlaskit/pragmatic-drag-and-drop/dist/types/internal-types";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { useConfirm } from "primevue";
+import { useConfirm, ContextMenu } from "primevue";
 
 import FolderItem from "./FolderItem.vue";
 
@@ -11,6 +11,7 @@ import type { Entry, ErrorKind, Folder } from "@/api";
 import { api } from "@/api";
 import type { DropTargetData, Filter, FolderNode } from "@/types";
 import { error, info } from "@/utils/message";
+import { useTemplateRef } from "vue";
 
 const filter = defineModel<Filter>("filter", { required: true });
 
@@ -112,18 +113,47 @@ function registerDraggingMonitor() {
 }
 
 // ========== Drag and Drop END ==========
+
+// ========== Context Menu BEGIN ==========
+
+const contextMenu = useTemplateRef("contextMenu");
+const contextMenuSelection = ref<Folder | null>(null);
+const contextMenuItems = ref([
+  {
+    label: "在文件管理器中显示",
+    icon: "pi pi-folder-open",
+    command: () => {
+      if (contextMenuSelection.value) {
+        api.revealFolder(contextMenuSelection.value.id);
+      }
+    },
+  },
+]);
+
+function onContextmenu(event: MouseEvent, folder: Folder) {
+  if (contextMenu.value) {
+    contextMenuSelection.value = folder;
+    contextMenu.value.show(event);
+  }
+}
+
+// ========== Context Menu END ==========
 </script>
 
 <template>
   <div class="bg-surface-800 flex h-full w-full flex-col px-8 pt-8">
     <div class="p-2 font-bold">文件夹</div>
-    <ul class="flex-auto overflow-auto">
-      <FolderItem
-        v-if="folderTree"
-        :folderNode="folderTree"
-        v-model:selectedFolder="selectedFolder"
-      />
-    </ul>
+    <div>
+      <ul class="flex-auto overflow-auto">
+        <FolderItem
+          v-if="folderTree"
+          :folderNode="folderTree"
+          v-model:selectedFolder="selectedFolder"
+          @contextmenu="(event, folder) => onContextmenu(event, folder)"
+        />
+      </ul>
+      <ContextMenu ref="contextMenu" :model="contextMenuItems" />
+    </div>
   </div>
 </template>
 

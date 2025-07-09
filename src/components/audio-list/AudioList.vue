@@ -104,6 +104,15 @@ const contextMenuItems: MenuItem[] = [
       }
     },
   },
+  {
+    label: "在文件管理器中显示",
+    icon: "pi pi-folder-open",
+    command: () => {
+      if (contextMenuSelection.value) {
+        api.revealEntry(contextMenuSelection.value.id);
+      }
+    },
+  },
 ];
 function onRowContextMenu(event: DataTableRowContextMenuEvent) {
   contextMenu.value?.show(event.originalEvent);

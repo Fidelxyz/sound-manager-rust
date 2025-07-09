@@ -18,6 +18,7 @@ use tauri::ipc::{Channel, InvokeResponseBody, Response};
 use tauri::{
     App, AppHandle, Emitter, Manager, State, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 struct AppData {
@@ -592,6 +593,44 @@ async fn spot(
     Ok(())
 }
 
+#[tauri::command]
+async fn reveal_entry(
+    entry_id: EntryId,
+    app: AppHandle,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
+    trace!("reveal_entry: {entry_id:?}");
+
+    get_database!(database, state.database);
+    get_data!(data, database);
+
+    let path = data.get_entry_path(entry_id).unwrap();
+    app.opener().reveal_item_in_dir(&path)?;
+
+    trace!("reveal_entry done");
+    Ok(())
+}
+
+#[tauri::command]
+async fn reveal_folder(
+    folder_id: FolderId,
+    app: AppHandle,
+    state: State<'_, AppData>,
+) -> Result<(), Error> {
+    trace!("reveal_folder: {folder_id:?}");
+
+    get_database!(database, state.database);
+    get_data!(data, database);
+
+    let path = data.get_folder_path(folder_id).unwrap();
+    app.opener().reveal_item_in_dir(path)?;
+
+    trace!("reveal_folder done");
+    Ok(())
+}
+
+// ========== Files ==========
+
 fn setup_state(app: &App) {
     let emitter = AppEmitter::new(app.handle().clone());
     app.manage(AppData {
@@ -650,6 +689,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             setup_window(app);
             setup_state(app);
@@ -685,7 +725,9 @@ pub fn run() {
             import_file,
             delete_file,
             move_file,
-            spot
+            spot,
+            reveal_entry,
+            reveal_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

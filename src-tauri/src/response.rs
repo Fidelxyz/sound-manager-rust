@@ -21,6 +21,8 @@ pub enum Error {
     Waveform(#[from] crate::core::waveform::Error),
     #[error("migrator error: {0}")]
     Migrator(#[from] crate::core::migrator::Error),
+    #[error("opener error: {0}")]
+    Opener(#[from] tauri_plugin_opener::Error),
 }
 
 #[derive(serde::Serialize)]

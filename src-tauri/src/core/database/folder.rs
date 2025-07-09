@@ -13,15 +13,20 @@ pub type FolderId = i32;
 #[serde(rename_all = "camelCase")]
 pub struct Folder {
     pub id: FolderId,
+
     #[serde(serialize_with = "serialize_os_string")]
     pub name: OsString,
+
+    /// Relative path to the folder
     #[serde(skip)]
     pub path: PathBuf,
+
     #[serde(skip)]
     pub parent_id: FolderId,
-    /// Relative path to the folder
+
     #[serde(serialize_with = "serialize_hashmap_with_os_string_keys")]
     pub sub_folders: HashMap<OsString, FolderId>,
+
     #[serde(skip)]
     pub entries: HashMap<OsString, EntryId>,
 }

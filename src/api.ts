@@ -202,4 +202,12 @@ export const api = {
       force,
     });
   },
+
+  revealEntry(entryId: number): Promise<void> {
+    return invoke("reveal_entry", { entryId });
+  },
+
+  revealFolder(folderId: number): Promise<void> {
+    return invoke("reveal_folder", { folderId });
+  },
 };

@@ -23,6 +23,10 @@ const selectedFolder = defineModel<Folder | null>("selectedFolder", {
   default: null,
 });
 
+const emit = defineEmits<{
+  contextmenu: [event: MouseEvent, folder: Folder];
+}>();
+
 const nodeContent = useTemplateRef("nodeContent");
 
 const folder = computed(() => folderNode.folder);
@@ -101,6 +105,7 @@ function unregisterDragAndDrop() {
       }"
       :label="folder.name"
       @click.stop="onClick(folder)"
+      @contextmenu="emit('contextmenu', $event, folder)"
       :dt="{
         label: {
           font: {
@@ -124,6 +129,7 @@ function unregisterDragAndDrop() {
     :folderNode="subFolder"
     :depth="depth + 1"
     v-model:selectedFolder="selectedFolder"
+    @contextmenu="(event, folder) => emit('contextmenu', event, folder)"
   />
 </template>
 

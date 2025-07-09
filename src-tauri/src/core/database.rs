@@ -656,6 +656,13 @@ impl DatabaseData {
         folder
     }
 
+    /// Get the absolute path of a folder by `folder_id`.
+    pub fn get_folder_path(&self, folder_id: FolderId) -> Option<PathBuf> {
+        self.folders
+            .get(&folder_id)
+            .map(|folder| self.to_absolute_path(&folder.path))
+    }
+
     fn add_folders(&mut self, paths: &[PathBuf], db: &Connection) -> Result<()> {
         info!("Adding folders: {paths:#?}");
 
@@ -976,6 +983,7 @@ impl DatabaseData {
             .and_then(|folder| folder.entries.get(path.file_name().unwrap()).copied())
     }
 
+    /// Get the absolute path of an entry by `entry_id`.
     pub fn get_entry_path(&self, entry_id: EntryId) -> Option<PathBuf> {
         self.entries
             .get(&entry_id)
