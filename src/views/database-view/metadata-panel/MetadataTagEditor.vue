@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, useTemplateRef, watch } from "vue";
-
 import { Button, Popover, Tree, type TreeSelectionKeys } from "primevue";
 import type { TreeNode } from "primevue/treenode";
-
-import type { Entry, ErrorKind, Tag } from "@/api";
-import { api } from "@/api";
+import { onMounted, ref, useTemplateRef, watch } from "vue";
+import { api, type ErrorKind } from "@/api";
+import type { Entry, Tag } from "@/types";
 import { error } from "@/utils/message";
 
 const { entry, allTags } = defineProps<{

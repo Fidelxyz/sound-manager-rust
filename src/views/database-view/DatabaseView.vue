@@ -5,12 +5,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Splitter, SplitterPanel, useConfirm } from "primevue";
 import type { TreeNode } from "primevue/treenode";
 import { onMounted, ref, useTemplateRef } from "vue";
-
-import type { Entry, Folder, Tag } from "@/api";
 import { api } from "@/api";
-import type { Filter, FolderNode, TagNode } from "@/types";
+import type { Entry, Filter, Folder, FolderNode, Tag, TagNode } from "@/types";
 import { error, info } from "@/utils/message";
-
 import AudioList from "./audio-list/AudioList.vue";
 import FolderList from "./folder-list/FolderList.vue";
 import MetadataPanel from "./metadata-panel/MetadataPanel.vue";

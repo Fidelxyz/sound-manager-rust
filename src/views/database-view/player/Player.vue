@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { listen } from "@tauri-apps/api/event";
-import { onUnmounted, ref, watch, useTemplateRef } from "vue";
-
 import { Button, Slider, ToggleSwitch } from "primevue";
+import { onUnmounted, ref, useTemplateRef, watch } from "vue";
+import { api, type PlayerState } from "@/api";
+import { useConfig } from "@/config";
+import type { Entry } from "@/types";
+import { error } from "@/utils/message";
 import Spotter from "./Spotter.vue";
 import Waveform from "./Waveform.vue";
-
-import type { Entry, PlayerState } from "@/api";
-import { api } from "@/api";
-import { useConfig } from "@/config";
-import { error } from "@/utils/message";
 
 const STEP_SECONDS = 5;
 

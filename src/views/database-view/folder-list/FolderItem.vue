@@ -8,10 +8,9 @@ import type { Instruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-
 import { $dt } from "@primeuix/themes";
 import { Button } from "primevue";
 import { computed, ref, useTemplateRef } from "vue";
-import type { Folder } from "@/api";
 import CollapseHandler from "@/components/CollapseHandler.vue";
 import DropIndicator from "@/components/drop-indicator/DropIndicator.vue";
-import type { DropTargetData, FolderNode } from "@/types";
+import type { DropTargetData, Folder, FolderNode } from "@/types";
 import { useDragAndDrop } from "@/utils/drag-and-drop";
 
 const { folderNode, depth = 0 } = defineProps<{

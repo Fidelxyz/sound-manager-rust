@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { computed, ref, watch } from "vue";
-
 import {
   Button,
   ButtonGroup,
@@ -12,10 +10,10 @@ import {
   ToggleSwitch,
   useConfirm,
 } from "primevue";
-
-import type { Entry, ErrorKind } from "@/api";
-import { api } from "@/api";
+import { computed, ref, watch } from "vue";
+import { api, type ErrorKind } from "@/api";
 import { useConfig } from "@/config";
+import type { Entry } from "@/types";
 import { error, info } from "@/utils/message";
 
 const { entry } = defineProps<{

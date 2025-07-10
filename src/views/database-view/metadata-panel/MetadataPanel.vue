@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { useTemplateRef } from "vue";
-
 import { InputText } from "primevue";
 import type { TreeNode } from "primevue/treenode";
-
-import type { Entry } from "@/api";
+import { useTemplateRef } from "vue";
+import type { Entry } from "@/types";
 import { formatDuration } from "@/utils/utils";
 import MetadataTagEditor from "./MetadataTagEditor.vue";
 

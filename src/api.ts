@@ -20,7 +20,6 @@ export type Entry = {
   artist?: string;
   album?: string;
   duration?: number;
-  viewed?: boolean;
 };
 
 export type Folder = {

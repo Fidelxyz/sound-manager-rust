@@ -12,9 +12,8 @@ import {
 } from "primevue";
 import type { MenuItem, MenuItemCommandEvent } from "primevue/menuitem";
 import { ref, useTemplateRef } from "vue";
-import type { ErrorKind, Tag } from "@/api";
-import { api } from "@/api";
-import type { DropTargetData, Filter, TagNode } from "@/types";
+import { api, type ErrorKind } from "@/api";
+import type { DropTargetData, Filter, Tag, TagNode } from "@/types";
 import { useDragAndDrop } from "@/utils/drag-and-drop";
 import { error } from "@/utils/message";
 import {

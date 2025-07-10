@@ -1,6 +1,10 @@
-import type { Entry, Folder, Tag } from "@/api";
+import type { Folder, Entry as RawEntry, Tag } from "@/api";
 
-export type { Entry, Folder, Tag };
+export type { Folder, Tag };
+
+export type Entry = RawEntry & {
+  viewed?: boolean;
+};
 
 export type FolderNode = {
   folder: Folder;

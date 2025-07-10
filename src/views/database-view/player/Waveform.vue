@@ -6,9 +6,8 @@ import { onMounted, onUnmounted, watch } from "vue";
 import WaveSurfer from "wavesurfer.js";
 import Hover from "wavesurfer.js/dist/plugins/hover.esm.js";
 import Timer from "wavesurfer.js/dist/timer.js";
-
-import type { Entry, PlayerState } from "@/api";
-import { api } from "@/api";
+import { api, type PlayerState } from "@/api";
+import type { Entry } from "@/types";
 import { PlaybackTimer } from "@/utils/playback-timer";
 
 const { entry } = defineProps<{

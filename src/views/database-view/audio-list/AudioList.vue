@@ -13,9 +13,8 @@ import {
 import type { MenuItem } from "primevue/menuitem";
 import type { TreeNode } from "primevue/treenode";
 import { ref, useTemplateRef, watch } from "vue";
-import type { Entry, FilterArg, Tag } from "@/api";
-import { api } from "@/api";
-import type { Filter, FolderNode } from "@/types";
+import { api, type FilterArg } from "@/api";
+import type { Entry, Filter, FolderNode, Tag } from "@/types";
 import { info } from "@/utils/message";
 import { formatDuration } from "@/utils/utils";
 import DataTable from "./datatable";
@@ -30,7 +29,6 @@ const { entries, folderTree, tags, tagTreeNodes } = defineProps<{
   tagTreeNodes: TreeNode[];
 }>();
 
-const filter = defineModel<Filter>("filter", { required: true });
 const activeEntry = defineModel<Entry | null>("activeEntry", { default: null });
 
 defineExpose({
@@ -54,7 +52,9 @@ function onEntrySelected(event: DataTableRowSelectEvent) {
   entry.viewed = true;
 }
 
-// ========== Filter BEGIN ==========
+// ========== Filter ==========
+
+const filter = defineModel<Filter>("filter", { required: true });
 
 const tableFilters = ref<DataTableFilterMeta>({
   id: { value: undefined, matchMode: FilterMatchMode.IN },
@@ -86,9 +86,7 @@ watch(
   { deep: true },
 );
 
-// ========== Filter END ==========
-
-// ========== Context Menu BEGIN ==========
+// ========== Context Menu ==========
 
 const contextMenu = useTemplateRef("contextMenu");
 const contextMenuSelection = ref<Entry | null>(null);
@@ -144,7 +142,7 @@ function confirmDeleteEntry(entry: Entry) {
     });
 }
 
-// ========== Context Menu END ==========
+// ========== Styling ==========
 
 function rowStyle(data: Entry) {
   if (data.viewed) {

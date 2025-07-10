@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-
 import { faShuffle } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import {
@@ -12,12 +10,11 @@ import {
   type TreeSelectionKeys,
 } from "primevue";
 import type { TreeNode } from "primevue/treenode";
-import TreeSelect from "./treeselect";
-
-import type { Entry, Tag } from "@/api";
+import { computed, ref } from "vue";
 import { api } from "@/api";
-import type { Filter, FolderNode } from "@/types";
+import type { Entry, Filter, FolderNode, Tag } from "@/types";
 import { error } from "@/utils/message";
+import TreeSelect from "./treeselect";
 
 const filter = defineModel<Filter>({ required: true });
 
