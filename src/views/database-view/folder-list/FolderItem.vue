@@ -5,6 +5,7 @@ import {
   dropTargetForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import type { Instruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
+import { $dt } from "@primeuix/themes";
 import { Button } from "primevue";
 import { computed, ref, useTemplateRef } from "vue";
 import type { Folder } from "@/api";
@@ -46,7 +47,7 @@ function onClick() {
   }
 }
 
-// ========== Drag and Drop BEGIN ==========
+// ========== Drag and Drop ==========
 
 const dragging = ref(false);
 
@@ -111,15 +112,25 @@ useDragAndDrop(() => {
   );
 });
 
-// ========== Drag and Drop END ==========
+// ========== Styling ==========
+
+const buttonStyle = computed(() => {
+  if (selected.value) {
+    return {
+      background: `${$dt("button.text.primary.active.background").value.dark.value} !important`,
+    };
+  }
+});
 </script>
 
 <template>
+  <!-- Node Content -->
   <div ref="nodeContent" class="relative">
     <Button
       variant="text"
       class="w-full justify-start!"
-      :class="{ active: folder === selectedFolder, 'opacity-50': dragging }"
+      :class="{ 'opacity-50': dragging }"
+      :style="buttonStyle"
       @click.stop="onClick"
       @contextmenu="emit('contextmenu', $event, folder)"
     >
@@ -138,9 +149,16 @@ useDragAndDrop(() => {
       :instruction="dropTargetInstruction"
     />
   </div>
+
+  <!-- Chilren -->
   <ul
     v-if="folderNode.subFolders.length > 0 && expanded && !dragging"
-    class="pl-4"
+    class="flex flex-col"
+    :style="{
+      'padding-block-start': $dt('tree.gap').value,
+      'padding-inline-start': $dt('tree.indent').value,
+      gap: $dt('tree.gap').value,
+    }"
   >
     <li v-for="subFolder in folderNode.subFolders">
       <FolderItem
@@ -152,9 +170,3 @@ useDragAndDrop(() => {
     </li>
   </ul>
 </template>
-
-<style scoped>
-.active {
-  background: var(--p-button-text-primary-active-background) !important;
-}
-</style>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, useTemplateRef, watch } from "vue";
-
+import { $dt } from "@primeuix/themes";
 import { FilterMatchMode } from "@primevue/core/api";
 import {
   Column,
@@ -13,15 +12,14 @@ import {
 } from "primevue";
 import type { MenuItem } from "primevue/menuitem";
 import type { TreeNode } from "primevue/treenode";
-import DataTable from "./datatable";
-
-import FilterPanel from "./FilterPanel.vue";
-
+import { ref, useTemplateRef, watch } from "vue";
 import type { Entry, FilterArg, Tag } from "@/api";
 import { api } from "@/api";
 import type { Filter, FolderNode } from "@/types";
 import { info } from "@/utils/message";
 import { formatDuration } from "@/utils/utils";
+import DataTable from "./datatable";
+import FilterPanel from "./FilterPanel.vue";
 
 const confirm = useConfirm();
 
@@ -147,6 +145,12 @@ function confirmDeleteEntry(entry: Entry) {
 }
 
 // ========== Context Menu END ==========
+
+function rowStyle(data: Entry) {
+  if (data.viewed) {
+    return { color: $dt("surface.300").value.dark.value };
+  }
+}
 </script>
 
 <template>
@@ -170,7 +174,6 @@ function confirmDeleteEntry(entry: Entry) {
         dataKey="id"
         dragPreviewKey="fileName"
         draggableType="entry"
-        :rowClass="(data: Entry) => [{ viewed: data?.viewed }]"
         scrollable
         scrollHeight="flex"
         resizableColumns
@@ -180,6 +183,7 @@ function confirmDeleteEntry(entry: Entry) {
         :metaKeySelection="true"
         @rowSelect="onEntrySelected"
         @rowContextmenu="onRowContextMenu"
+        :rowStyle="rowStyle"
         :pt="{
           tableContainer: {
             style: 'overflow-x: hidden !important',
@@ -191,8 +195,8 @@ function confirmDeleteEntry(entry: Entry) {
             <span>{{ slotProps.data.title || slotProps.data.fileName }}</span>
           </template>
         </Column>
-        <Column class="w-1/6" field="artist" header="艺术家" sortable></Column>
-        <Column class="w-1/3" field="album" header="专辑" sortable></Column>
+        <Column class="w-1/6" field="artist" header="艺术家" sortable />
+        <Column class="w-1/3" field="album" header="专辑" sortable />
         <Column class="w-1/6" field="duration" header="时长" sortable>
           <template #body="slotProps">
             <span>{{
@@ -206,9 +210,3 @@ function confirmDeleteEntry(entry: Entry) {
     </div>
   </div>
 </template>
-
-<style scoped>
-:deep(.viewed) {
-  color: var(--p-surface-300);
-}
-</style>

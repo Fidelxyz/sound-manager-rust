@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
+import { $dt } from "@primeuix/themes";
 import {
   Button,
   ContextMenu,
@@ -275,19 +276,27 @@ function setTagColor(event: MenuItemCommandEvent) {
       />
     </div>
 
-    <div class="flex-auto overflow-auto">
+    <div class="overflow-auto">
       <ContextMenu ref="contextMenu" :model="contextMenuItems" />
 
       <!-- Tag List -->
-      <TagItem
-        v-for="(tagNode, index) of tagTree"
-        :tagNode="tagNode"
-        :lastInGroup="index === tagTree.length - 1"
-        v-model:selectedTags="filter.tags"
-        v-model:editingTag="editingTag"
-        @contextmenu="(event, target) => onContextmenu(event, target)"
-        @tags-changed="emit('tags-changed')"
-      />
+      <ul
+        class="flex flex-col"
+        :style="{
+          gap: $dt('tree.gap').value,
+        }"
+      >
+        <li v-for="(tagNode, index) of tagTree">
+          <TagItem
+            :tagNode="tagNode"
+            :lastInGroup="index === tagTree.length - 1"
+            v-model:selectedTags="filter.tags"
+            v-model:editingTag="editingTag"
+            @contextmenu="(event, target) => onContextmenu(event, target)"
+            @tags-changed="emit('tags-changed')"
+          />
+        </li>
+      </ul>
 
       <!-- New tag -->
       <IconField v-if="editingNewTag">

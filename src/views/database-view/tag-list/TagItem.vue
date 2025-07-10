@@ -9,6 +9,7 @@ import {
   extractInstruction,
   Instruction,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
+import { $dt } from "@primeuix/themes";
 import { unrefElement } from "@vueuse/core";
 import { Button, InputText } from "primevue";
 import { type Component, computed, ref, useTemplateRef, watch } from "vue";
@@ -169,6 +170,16 @@ useDragAndDrop(() => {
     }),
   );
 });
+
+// ========== Styling ==========
+
+const buttonStyle = computed(() => {
+  if (selected.value) {
+    return {
+      background: `${$dt("button.text.primary.active.background").value.dark.value} !important`,
+    };
+  }
+});
 </script>
 
 <template>
@@ -178,10 +189,10 @@ useDragAndDrop(() => {
       variant="text"
       class="w-full justify-start!"
       :class="{
-        active: selected,
         'opacity-50': dragging,
         'py-0! pr-0!': editing,
       }"
+      :style="buttonStyle"
       @click.stop="onClick"
       @contextmenu="emit('contextmenu', $event, tag)"
     >
@@ -199,10 +210,10 @@ useDragAndDrop(() => {
         ref="editingInput"
         v-if="editing"
         class="input-text w-full"
-        style="
-          padding-inline: calc(var(--p-inputtext-padding-x) - 1px);
-          padding-block: calc(var(--p-inputtext-padding-y) - 1px);
-        "
+        :style="{
+          'padding-inline': `calc(${$dt('inputtext.padding.x').value} - 1px)`,
+          'padding-block': `calc(${$dt('inputtext.padding.y').value} - 1px)`,
+        }"
         v-model="editingName"
         @focusout="renameTag"
         @keydown.enter="renameTag"
@@ -217,10 +228,17 @@ useDragAndDrop(() => {
   </div>
 
   <!-- Children -->
-  <ul v-if="tagNode.children && expanded && !dragging" class="pl-4">
-    <li>
+  <ul
+    v-if="tagNode.children.length > 0 && expanded && !dragging"
+    class="flex flex-col"
+    :style="{
+      'padding-block-start': $dt('tree.gap').value,
+      'padding-inline-start': $dt('tree.indent').value,
+      gap: $dt('tree.gap').value,
+    }"
+  >
+    <li v-for="(child, index) in tagNode.children">
       <TagItem
-        v-for="(child, index) in tagNode.children"
         :tagNode="child"
         :lastInGroup="index === tagNode.children.length - 1"
         v-model:selectedTags="selectedTags"
@@ -231,9 +249,3 @@ useDragAndDrop(() => {
     </li>
   </ul>
 </template>
-
-<style scoped>
-.active {
-  background: var(--p-button-text-primary-active-background) !important;
-}
-</style>
