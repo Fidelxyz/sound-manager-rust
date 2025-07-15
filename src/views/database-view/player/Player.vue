@@ -158,7 +158,7 @@ listen<PlayerState>("player_state_updated", (event) => {
 </script>
 
 <template>
-  <div class="px-8 py-4">
+  <div class="bg-surface-900 px-8 py-4">
     <Waveform :entry="activeEntry" @seek="seek" />
 
     <div class="flex">

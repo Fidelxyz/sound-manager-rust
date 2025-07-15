@@ -7,13 +7,16 @@
     "windows",
     "linux"
   ],
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:allow-open",
     "store:allow-load",
     "store:allow-get",
     "store:allow-set",
-    "window-state:allow-save-window-state"
+    "window-state:allow-save-window-state",
+    "os:allow-platform"
   ]
 }

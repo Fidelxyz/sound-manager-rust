@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Menu, type MenuItem, type Submenu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
+import { platform } from "@tauri-apps/plugin-os";
 import { ConfirmDialog, Toast } from "primevue";
 import { onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import type { ErrorKind } from "@/api";
@@ -18,154 +19,161 @@ const databaseOpen = ref(false);
 /// ========== Menu BEGIN ==========
 
 async function setupMenu() {
-  const menu = await Menu.new({
-    items: [
-      {
-        // ===== Application menu =====
-        id: "app",
-        text: "Sound Manager",
-        items: [
-          {
-            text: "服务",
-            item: "Services",
-          },
-          { item: "Separator" },
-          {
-            text: "隐藏 Sound Manager",
-            item: "Hide",
-          },
-          {
-            text: "隐藏其他",
-            item: "HideOthers",
-          },
-          {
-            text: "全部显示",
-            item: "ShowAll",
-          },
-          { item: "Separator" },
-          {
-            text: "退出 Sound Manager",
-            item: "Quit",
-          },
-        ],
-      },
-      {
-        // ===== File menu =====
-        id: "file",
-        text: "文件",
-        items: [
-          {
-            text: "打开数据库",
-            action: openDatabase,
-            accelerator: "Cmd+O",
-          },
-          {
-            text: "创建数据库",
-            action: createDatabase,
-            accelerator: "Cmd+N",
-          },
-          { item: "Separator" },
-          {
-            id: "refresh",
-            text: "刷新",
-            action: refresh,
-            accelerator: "Cmd+R",
-            enabled: databaseOpen.value,
-          },
-          {
-            id: "import",
-            text: "导入…",
-            action: () => databaseView.value?.importFiles(),
-            accelerator: "Cmd+I",
-            enabled: databaseOpen.value,
-          },
-        ],
-      },
-      {
-        // ===== Edit menu =====
-        id: "edit",
-        text: "编辑",
-        items: [
-          {
-            text: "撤销",
-            item: "Undo",
-          },
-          {
-            text: "重做",
-            item: "Redo",
-          },
-          { item: "Separator" },
-          {
-            text: "剪切",
-            item: "Cut",
-          },
-          {
-            text: "复制",
-            item: "Copy",
-          },
-          {
-            text: "粘贴",
-            item: "Paste",
-          },
-          {
-            text: "全选",
-            item: "SelectAll",
-          },
-        ],
-      },
-      {
-        // ===== Select menu =====
-        id: "control",
-        text: "控制",
-        items: [
-          {
-            id: "previous",
-            text: "上一个",
-            action: () => databaseView.value?.audioList?.selectPrev(),
-            accelerator: "ArrowUp",
-            enabled: databaseOpen.value,
-          },
-          {
-            id: "next",
-            text: "下一个",
-            action: () => databaseView.value?.audioList?.selectNext(),
-            accelerator: "ArrowDown",
-            enabled: databaseOpen.value,
-          },
-          { item: "Separator" },
-          {
-            id: "playPause",
-            text: "播放/暂停",
-            action: () => databaseView.value?.player?.togglePlayPause(),
-            accelerator: "Space",
-            enabled: false,
-          },
-          {
-            id: "stepForward",
-            text: "前进",
-            action: () => databaseView.value?.player?.stepForward(),
-            accelerator: "ArrowRight",
-            enabled: false,
-          },
-          {
-            id: "stepBackward",
-            text: "后退",
-            action: () => databaseView.value?.player?.stepBackward(),
-            accelerator: "ArrowLeft",
-            enabled: false,
-          },
-          { item: "Separator" },
-          {
-            id: "spot",
-            text: "发送至…",
-            action: () => databaseView.value?.player?.spotter?.spot(),
-            accelerator: "S",
-            enabled: false,
-          },
-        ],
-      },
-    ],
-  });
+  const ctrlKey = platform() === "macos" ? "Cmd" : "Ctrl";
+
+  const items = [];
+
+  if (platform() == "macos") {
+    items.push({
+      // ===== Application menu =====
+      id: "app",
+      text: "Sound Manager",
+      items: [
+        {
+          text: "服务",
+          item: "Services",
+        },
+        { item: "Separator" },
+        {
+          text: "隐藏 Sound Manager",
+          item: "Hide",
+        },
+        {
+          text: "隐藏其他",
+          item: "HideOthers",
+        },
+        {
+          text: "全部显示",
+          item: "ShowAll",
+        },
+        { item: "Separator" },
+        {
+          text: "退出 Sound Manager",
+          item: "Quit",
+        },
+      ],
+    });
+  }
+
+  items.push(
+    {
+      // ===== File menu =====
+      id: "file",
+      text: "文件",
+      items: [
+        {
+          text: "打开数据库",
+          action: openDatabase,
+          accelerator: `${ctrlKey}+O`,
+        },
+        {
+          text: "创建数据库",
+          action: createDatabase,
+          accelerator: `${ctrlKey}+N`,
+        },
+        { item: "Separator" },
+        {
+          id: "refresh",
+          text: "刷新",
+          action: refresh,
+          accelerator: `${ctrlKey}+R`,
+          enabled: databaseOpen.value,
+        },
+        {
+          id: "import",
+          text: "导入…",
+          action: () => databaseView.value?.importFiles(),
+          accelerator: `${ctrlKey}+I`,
+          enabled: databaseOpen.value,
+        },
+      ],
+    },
+    {
+      // ===== Edit menu =====
+      id: "edit",
+      text: "编辑",
+      items: [
+        {
+          text: "撤销",
+          item: "Undo",
+        },
+        {
+          text: "重做",
+          item: "Redo",
+        },
+        { item: "Separator" },
+        {
+          text: "剪切",
+          item: "Cut",
+        },
+        {
+          text: "复制",
+          item: "Copy",
+        },
+        {
+          text: "粘贴",
+          item: "Paste",
+        },
+        {
+          text: "全选",
+          item: "SelectAll",
+        },
+      ],
+    },
+    {
+      // ===== Select menu =====
+      id: "control",
+      text: "控制",
+      items: [
+        {
+          id: "previous",
+          text: "上一个",
+          action: () => databaseView.value?.audioList?.selectPrev(),
+          accelerator: "ArrowUp",
+          enabled: databaseOpen.value,
+        },
+        {
+          id: "next",
+          text: "下一个",
+          action: () => databaseView.value?.audioList?.selectNext(),
+          accelerator: "ArrowDown",
+          enabled: databaseOpen.value,
+        },
+        { item: "Separator" },
+        {
+          id: "playPause",
+          text: "播放/暂停",
+          action: () => databaseView.value?.player?.togglePlayPause(),
+          accelerator: "Space",
+          enabled: false,
+        },
+        {
+          id: "stepForward",
+          text: "前进",
+          action: () => databaseView.value?.player?.stepForward(),
+          accelerator: "ArrowRight",
+          enabled: false,
+        },
+        {
+          id: "stepBackward",
+          text: "后退",
+          action: () => databaseView.value?.player?.stepBackward(),
+          accelerator: "ArrowLeft",
+          enabled: false,
+        },
+        { item: "Separator" },
+        {
+          id: "spot",
+          text: "发送至…",
+          action: () => databaseView.value?.player?.spotter?.spot(),
+          accelerator: "S",
+          enabled: false,
+        },
+      ],
+    },
+  );
+
+  const menu = await Menu.new({ items });
   menu.setAsAppMenu();
   return menu;
 }

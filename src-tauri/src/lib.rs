@@ -15,11 +15,12 @@ use std::time::Duration;
 
 use log::{debug, trace, warn};
 use tauri::ipc::{Channel, InvokeResponseBody, Response};
-use tauri::{
-    App, AppHandle, Emitter, Manager, State, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
-};
+use tauri::{App, AppHandle, Emitter, Manager, State, Theme, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 
 struct AppData {
     database: RwLock<Option<Arc<Database<AppEmitter>>>>,
@@ -667,6 +668,7 @@ fn setup_window(app: &App) {
     #[cfg(target_os = "macos")]
     let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
 
+    #[allow(unused_variables)]
     let window = win_builder.build().unwrap();
 
     // set background color only when building for macOS
@@ -705,6 +707,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_os::init())
         .setup(|app| {
             setup_window(app);
             setup_state(app);
