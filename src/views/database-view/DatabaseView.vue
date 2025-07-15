@@ -10,6 +10,7 @@ import type { Entry, Filter, Folder, FolderNode, Tag, TagNode } from "@/types";
 import { error, info } from "@/utils/message";
 import AudioList from "./audio-list/AudioList.vue";
 import FolderList from "./folder-list/FolderList.vue";
+import MenuBar from "./MenuBar.vue";
 import MetadataPanel from "./metadata-panel/MetadataPanel.vue";
 import Player from "./player/Player.vue";
 import TagList from "./tag-list/TagList.vue";
@@ -184,7 +185,9 @@ listen("files_updated", onFilesChanged);
   <div class="flex h-full flex-col">
     <div class="min-h-0 flex-auto">
       <Splitter class="h-full rounded-none!" :gutterSize="2">
-        <SplitterPanel class="min-w-2xs" :size="15">
+        <SplitterPanel class="flex min-w-2xs flex-col" :size="15">
+          <MenuBar />
+
           <Splitter layout="vertical" class="h-full" :gutterSize="2">
             <SplitterPanel :minSize="20">
               <FolderList :folderTree="folderTree" v-model:filter="filter" />

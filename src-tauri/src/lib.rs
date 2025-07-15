@@ -20,7 +20,7 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[cfg(target_os = "macos")]
-use tauri::TitleBarStyle;
+use tauri::{LogicalPosition, TitleBarStyle};
 
 struct AppData {
     database: RwLock<Option<Arc<Database<AppEmitter>>>>,
@@ -659,30 +659,20 @@ fn setup_state(app: &App) {
 
 fn setup_window(app: &App) {
     let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-        .title("Sound Manager")
+        .title("")
         .inner_size(1600.0, 1000.0)
         .theme(Some(Theme::Dark))
         .disable_drag_drop_handler();
 
-    // set transparent title bar only when building for macOS
     #[cfg(target_os = "macos")]
-    let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
+    let win_builder = win_builder
+        .title_bar_style(TitleBarStyle::Overlay)
+        .traffic_light_position(LogicalPosition::new(20.0, 25.0));
 
-    #[allow(unused_variables)]
-    let window = win_builder.build().unwrap();
+    #[cfg(target_os = "windows")]
+    let win_builder = win_builder.decorations(false).shadow(true);
 
-    // set background color only when building for macOS
-    #[cfg(target_os = "macos")]
-    {
-        use cocoa::appkit::{NSColor, NSWindow};
-        use cocoa::base::{id, nil};
-
-        let ns_window = window.ns_window().unwrap() as id;
-        unsafe {
-            let bg_color = NSColor::colorWithRed_green_blue_alpha_(nil, 0.12, 0.12, 0.12, 1.0);
-            ns_window.setBackgroundColor_(bg_color);
-        }
-    }
+    win_builder.build().unwrap();
 
     // persistant window state
     app.handle()

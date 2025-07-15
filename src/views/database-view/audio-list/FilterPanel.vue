@@ -14,6 +14,7 @@ import { computed, ref } from "vue";
 import { api } from "@/api";
 import type { Entry, Filter, FolderNode, Tag } from "@/types";
 import { error } from "@/utils/message";
+import { useWindowDragRegion } from "@/utils/window-drag-region";
 import TreeSelect from "./treeselect";
 
 const filter = defineModel<Filter>({ required: true });
@@ -135,6 +136,8 @@ function refresh() {
       refreshing.value = false;
     });
 }
+
+useWindowDragRegion("input, a, button, .p-inputwrapper");
 </script>
 
 <template>

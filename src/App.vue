@@ -356,4 +356,8 @@ body {
 .p-splitterpanel {
   outline: none;
 }
+
+*[data-tauri-drag-region] {
+  app-region: drag;
+}
 </style>
