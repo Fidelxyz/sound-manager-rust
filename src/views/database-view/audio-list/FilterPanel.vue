@@ -142,7 +142,7 @@ useWindowDragRegion("input, a, button, .p-inputwrapper");
 
 <template>
   <div class="flex gap-4 p-4">
-    <div class="flex items-center gap-4">
+    <div class="flex w-full items-center gap-4 text-nowrap">
       <div class="flex items-center gap-2">
         <h2 class="font-semibold">
           {{ filter.folder?.name ?? folderTree?.folder.name }}
@@ -160,21 +160,21 @@ useWindowDragRegion("input, a, button, .p-inputwrapper");
         />
       </div>
 
-      <FloatLabel variant="on">
+      <FloatLabel variant="on" class="w-full max-w-64 min-w-24">
         <InputText
           id="filter-search"
           v-model="filter.search"
           autocapitalize="off"
-          class="w-64"
+          class="w-full"
         />
         <label for="filter-search">搜索</label>
       </FloatLabel>
 
-      <div class="flex items-center gap-2">
-        <FloatLabel variant="on">
+      <div class="flex w-full max-w-96 items-center gap-2">
+        <FloatLabel variant="on" class="w-full">
           <TreeSelect
             id="filter-tags"
-            class="w-48"
+            class="w-full"
             v-model="selectedTags"
             :options="tagTreeNodes"
             selectionMode="checkbox"
